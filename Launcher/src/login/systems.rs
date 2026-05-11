@@ -8,7 +8,7 @@ is complete.
 
 
 use bevy::prelude::*;
-use bevy_egui::{egui, EguiContexts};
+use bevy_egui::{egui, EguiContexts, EguiPrimaryContextPass};
 use tokio::sync::oneshot;
 
 use crate::login::network::login_to_gatekeeper;
@@ -26,7 +26,9 @@ pub struct LoginSystemsPlugin;
 
 impl Plugin for LoginSystemsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (draw_login_ui, poll_login_task));
+        app
+            .add_systems(EguiPrimaryContextPass, draw_login_ui)
+            .add_systems(Update, poll_login_task);
     }
 }
 
@@ -37,7 +39,10 @@ fn draw_login_ui(
     mut login_task: ResMut<LoginTask>,
     tokio_runtime: Res<TokioRuntimeResource>,
 ) {
-    egui::CentralPanel::default().show(contexts.ctx_mut().expect("REASON"), |ui| {
+    let Ok(ctx) = contexts.ctx_mut() else {
+        return;
+    };
+    egui::CentralPanel::default().show(ctx, |ui| {
         ui.vertical_centered(|ui| {
             ui.heading("MMORPG Launcher");
             ui.add_space(24.0);
