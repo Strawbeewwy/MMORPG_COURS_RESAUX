@@ -1,3 +1,12 @@
+/**
+systems.rs contains the systems that are used to draw the
+login UI.
+It also polls the login task to check if the login process
+is complete.
+**/
+
+
+
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
 use tokio::sync::oneshot;
@@ -8,6 +17,11 @@ use crate::login::resources::{
 };
 use crate::protocol::LoginResponse;
 
+
+/**
+This plugin adds the systems as update so that they are run
+each frame.
+**/
 pub struct LoginSystemsPlugin;
 
 impl Plugin for LoginSystemsPlugin {

@@ -1,3 +1,9 @@
+/**
+network.rs contains the logic for the QUIC connection to the
+gatekeeper.
+**/
+
+
 use anyhow::{anyhow, Context, Result};
 use quinn::{ClientConfig, Endpoint};
 use rustls::client::danger::{
@@ -14,34 +20,54 @@ use crate::config::{
 };
 use crate::protocol::{LoginRequest, LoginResponse};
 
+
+
+/**
+This function sends a login request to the gatekeeper and
+waits for the response. It first creates a client endpoint,
+then connects to the gatekeeper, then opens a bidirectional
+stream, then sends the login request, then reads the response,
+and finally closes the connection.
+**/
 pub async fn login_to_gatekeeper(
     username: &str,
     password: &str,
 ) -> Result<LoginResponse> {
+
+    // bind to a random port
     let client_address: SocketAddr = "0.0.0.0:0"
         .parse()
         .context("invalid client bind address")?;
 
+    //convert the address in config.rs to a SocketAddr
     let gatekeeper_address: SocketAddr = GATEKEEPER_ADDRESS
         .parse()
         .context("invalid gatekeeper address")?;
 
+    // create a client endpoint
     let mut endpoint = Endpoint::client(client_address)
         .context("failed to create QUIC client endpoint")?;
 
+    // set the default client config
+    // right now for a local development the certification
+    // is not checked, so we use the insecure_client_config
     endpoint.set_default_client_config(create_insecure_client_config()?);
 
+
+    // connect to the gatekeeper then wait for the handshake with await
     let connection = endpoint
         .connect(gatekeeper_address, GATEKEEPER_SERVER_NAME)
         .context("failed to start QUIC connection")?
         .await
         .context("failed to connect to GateKeeper")?;
 
+    //opens a bidirectional stream
     let (mut send_stream, mut receive_stream) = connection
         .open_bi()
         .await
         .context("failed to open bidirectional QUIC stream")?;
 
+    //create a login request
     let login_request = LoginRequest {
         message_type: "login".to_string(),
         username: username.to_string(),
@@ -49,18 +75,22 @@ pub async fn login_to_gatekeeper(
         launcher_version: LAUNCHER_VERSION.to_string(),
     };
 
+    //serialize the login request
     let request_body = serde_json::to_vec(&login_request)
         .context("failed to serialize login request")?;
 
+    //send the login request
     send_stream
         .write_all(&request_body)
         .await
         .context("failed to send login request")?;
 
+    // finish the stream so the server knows we are done sending
     send_stream
         .finish()
         .context("failed to finish login request stream")?;
 
+    // read the response
     let response_body = receive_stream
         .read_to_end(LOGIN_RESPONSE_SIZE_LIMIT)
         .await
@@ -69,12 +99,13 @@ pub async fn login_to_gatekeeper(
     if response_body.is_empty() {
         return Err(anyhow!("empty response received from GateKeeper"));
     }
-
+    // deserialize the response
     let login_response = serde_json::from_slice(&response_body)
         .context("failed to parse login response")?;
 
     connection.close(0u32.into(), b"login complete");
 
+    // return the response
     Ok(login_response)
 }
 
@@ -91,6 +122,12 @@ fn create_insecure_client_config() -> Result<ClientConfig> {
     )))
 }
 
+
+/**
+This struct is used to skip the server certificate verification.
+We don't need to verify the server certificate since we are
+connecting to a local server.
+**/
 #[derive(Debug)]
 struct SkipServerVerification;
 
