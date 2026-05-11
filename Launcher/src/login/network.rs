@@ -110,7 +110,10 @@ pub async fn login_to_gatekeeper(
 }
 
 fn create_insecure_client_config() -> Result<ClientConfig> {
-    let mut crypto = rustls::ClientConfig::builder()
+    let provider = rustls::crypto::aws_lc_rs::default_provider();
+
+    let mut crypto = rustls::ClientConfig::builder_with_provider(provider.into())
+        .with_protocol_versions(&[&rustls::version::TLS13])?
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(SkipServerVerification))
         .with_no_client_auth();

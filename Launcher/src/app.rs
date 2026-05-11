@@ -26,6 +26,11 @@ pub fn run() {
             ..default()
         }))
         .add_plugins(EguiPlugin::default())
+        .add_systems(Startup, setup_camera)
         .add_plugins(LoginPlugin)
         .run();
+}
+
+fn setup_camera(mut commands: Commands) {
+    commands.spawn(Camera2d);
 }
