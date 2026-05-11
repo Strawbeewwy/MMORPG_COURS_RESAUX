@@ -1,3 +1,14 @@
+/**
+This file is the entry point of the bevy app.
+It initializes the app and adds all plugins.
+We use the bevy_egui plugin to add a GUI.
+The LoginPlugin is responsible for the login authentication
+with the gatekeeper server.
+We also use the default plugins, but we could selectively
+disable some of them since we just need a GUI.
+**/
+
+
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
 
