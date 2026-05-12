@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "GateKeeper",
+    "Launcher",
+]
+resolver = "2"
