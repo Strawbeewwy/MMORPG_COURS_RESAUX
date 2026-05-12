@@ -10,8 +10,6 @@ disable some of them since we just need a GUI.
 
 
 use bevy::prelude::*;
-use bevy_egui::EguiPlugin;
-
 use crate::systems::SystemLoaderPlugin;
 use crate::resources::ResourceLoaderPlugin;
 
@@ -26,7 +24,6 @@ pub fn run() {
             }),
             ..default()
         }))
-        .add_plugins(EguiPlugin::default())
         .add_systems(Startup, setup_camera)
         .add_plugins(SystemLoaderPlugin)
         .add_plugins(ResourceLoaderPlugin)

@@ -76,12 +76,19 @@ pub struct LoginTask {
     pub receiver: Option<oneshot::Receiver<anyhow::Result<LoginResponse>>>,
 }
 
+#[derive(Message, Debug, Clone)]
+pub struct LoginRequestMessage {
+    pub username: String,
+    pub password: String,
+}
+
 pub struct NetworkingResources;
 impl Plugin for NetworkingResources {
     fn build(&self, app: &mut App) {
         app.insert_resource(TokioRuntimeResource::new())
             .init_resource::<LoginForm>()
             .init_resource::<LoginStatus>()
-            .init_resource::<LoginTask>();
+            .init_resource::<LoginTask>()
+            .add_message::<LoginRequestMessage>();
     }
 }
