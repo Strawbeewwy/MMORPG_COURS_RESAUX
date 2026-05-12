@@ -1,13 +1,3 @@
-/**
-resources.rs contains the logic for the async login process.
-Since the login process is asynchronous, we need to use a
-Tokio runtime. Bevy doesn't have async resources yet, so we
-have to create our own.
-
-It also stores the login form and login status so they can
-be persistent across frames.
-**/
-
 
 use bevy::prelude::*;
 use tokio::runtime::Runtime;
@@ -36,7 +26,7 @@ impl TokioRuntimeResource {
 }
 
 /**
-This declares a login form resource so that the login
+This declares a systems form resource so that the systems
 information is persistent across frames.
 **/
 #[derive(Resource, Default)]
@@ -46,7 +36,7 @@ pub struct LoginForm {
 }
 
 /**
-This declares a login status resource so that the login
+This declares a systems status resource so that the systems
 status information is persistent across frames.
 **/
 #[derive(Resource, Debug, Clone)]
@@ -78,7 +68,7 @@ impl Default for LoginStatus {
 
 /**
 This resource is used to store the oneshot channel that awaits
-the result of the login process. The bevy app is the receiver,
+the result of the systems process. The bevy app is the receiver,
 while the sender is the gatekeeper.
 **/
 #[derive(Resource, Default)]
@@ -86,13 +76,8 @@ pub struct LoginTask {
     pub receiver: Option<oneshot::Receiver<anyhow::Result<LoginResponse>>>,
 }
 
-/**
-This plugin initializes the resources described above.
-It is the plugin added to the app in the LoginPlugin.
-**/
-pub struct LoginResourcesPlugin;
-
-impl Plugin for LoginResourcesPlugin {
+pub struct NetworkingResources;
+impl Plugin for NetworkingResources {
     fn build(&self, app: &mut App) {
         app.insert_resource(TokioRuntimeResource::new())
             .init_resource::<LoginForm>()

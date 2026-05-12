@@ -1,7 +1,7 @@
 /**
-systems.rs contains the systems that are used to draw the
-login UI.
-It also polls the login task to check if the login process
+login_system contains the systems that are used to draw the
+systems UI.
+It also polls the systems task to check if the systems process
 is complete.
 **/
 
@@ -11,8 +11,8 @@ use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts, EguiPrimaryContextPass};
 use tokio::sync::oneshot;
 
-use crate::login::network::login_to_gatekeeper;
-use crate::login::resources::{
+use crate::systems::network::login_to_gatekeeper;
+use crate::resources::network_resources::{
     LoginForm, LoginStatus, LoginTask, TokioRuntimeResource,
 };
 use crate::protocol::LoginResponse;
@@ -22,9 +22,9 @@ use crate::protocol::LoginResponse;
 This plugin adds the systems as update so that they are run
 each frame.
 **/
-pub struct LoginSystemsPlugin;
+pub struct LoginSystemPlugin;
 
-impl Plugin for LoginSystemsPlugin {
+impl Plugin for LoginSystemPlugin {
     fn build(&self, app: &mut App) {
         app
             .add_systems(EguiPrimaryContextPass, draw_login_ui)
