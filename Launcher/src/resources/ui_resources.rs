@@ -13,8 +13,8 @@ pub enum ActiveLoginField {
     Password,
 }
 
-pub struct UIResources;
-impl Plugin for UIResources {
+pub struct UIResourcesPlugin;
+impl Plugin for UIResourcesPlugin {
     fn build(&self, app: &mut App) {
         app
             .init_resource::<LoginForm>()

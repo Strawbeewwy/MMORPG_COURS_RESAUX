@@ -25,15 +25,6 @@ impl TokioRuntimeResource {
     }
 }
 
-/**
-This declares a login form resource so that the login
-information is persistent across frames.
-**/
-#[derive(Resource, Default)]
-pub struct LoginForm {
-    pub username: String,
-    pub password: String,
-}
 
 /**
 This declares a login status resource so that the login
@@ -89,11 +80,10 @@ pub struct LoginRequestMessage {
     pub password: String,
 }
 
-pub struct NetworkingResources;
-impl Plugin for NetworkingResources {
+pub struct NetworkingResourcesPlugin;
+impl Plugin for NetworkingResourcesPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(TokioRuntimeResource::new())
-            .init_resource::<LoginForm>()
             .init_resource::<LoginStatus>()
             .init_resource::<LoginTask>()
             .add_message::<LoginRequestMessage>();

@@ -6,13 +6,14 @@ is complete.
 **/
 
 
-
 use bevy::prelude::*;
 use tokio::sync::oneshot;
 
-use crate::systems::network::login_to_gatekeeper;
-use crate::resources::network_resources::{LoginRequestMessage, LoginStatus, LoginTask, TokioRuntimeResource};
+use crate::net::gatekeeper::login_to_gatekeeper;
 use crate::protocol::LoginResponse;
+use crate::resources::network_resources::{
+    LoginRequestMessage, LoginStatus, LoginTask, TokioRuntimeResource,
+};
 
 
 /**
