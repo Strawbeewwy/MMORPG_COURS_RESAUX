@@ -26,7 +26,7 @@ impl TokioRuntimeResource {
 }
 
 /**
-This declares a systems form resource so that the systems
+This declares a login form resource so that the login
 information is persistent across frames.
 **/
 #[derive(Resource, Default)]
@@ -36,7 +36,7 @@ pub struct LoginForm {
 }
 
 /**
-This declares a systems status resource so that the systems
+This declares a login status resource so that the login
 status information is persistent across frames.
 **/
 #[derive(Resource, Debug, Clone)]
@@ -76,6 +76,13 @@ pub struct LoginTask {
     pub receiver: Option<oneshot::Receiver<anyhow::Result<LoginResponse>>>,
 }
 
+/**
+This declares a message sent to the login system so it 
+what the username and password to login with. Since the login form 
+is a ressouce and can be modified whenever, we make sure to send 
+this message so that the login system uses the latest information
+and not a resource that might be outdated.
+**/
 #[derive(Message, Debug, Clone)]
 pub struct LoginRequestMessage {
     pub username: String,

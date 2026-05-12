@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use crate::config::{
     ACCEPTED_PASSWORD, ACCEPTED_USERNAME, ALPN_PROTOCOL, GAME_SERVER_ADDRESS,
-    GATEKEEPER_BIND_ADDRESS, LOGIN_REQUEST_SIZE_LIMIT,
+    GATEKEEPER_BIND_ADDRESS, LOGIN_REQUEST_SIZE_LIMIT,LAUNCHER_VERSION,
 };
 use crate::protocol::{LoginRequest, LoginResponse};
 
@@ -88,22 +88,33 @@ async fn handle_login_stream(
 }
 
 fn authenticate(login_request: LoginRequest) -> LoginResponse {
-    if login_request.message_type != "login" {
-        return LoginResponse::Failed {
-            reason: "Invalid request type".to_string(),
-        };
-    }
+    match login_request {
+        // Rust extracts the fields directly from the enum variant
+        LoginRequest::Login { username, password, launcher_version } => {
 
-    if login_request.username == ACCEPTED_USERNAME
-        && login_request.password == ACCEPTED_PASSWORD
-    {
-        LoginResponse::Success {
-            session_token: create_fake_session_token(&login_request.username),
-            game_server_address: GAME_SERVER_ADDRESS.to_string(),
-        }
-    } else {
-        LoginResponse::Failed {
-            reason: "Invalid username or password".to_string(),
+            // Optional: check launcher version first
+            if launcher_version != LAUNCHER_VERSION {
+                return LoginResponse::Failed {
+                    reason: "Outdated launcher. Please update.".to_string(),
+                };
+            }
+
+            if username == ACCEPTED_USERNAME && password == ACCEPTED_PASSWORD {
+                LoginResponse::Success {
+                    session_token: create_fake_session_token(&username),
+                    game_server_address: GAME_SERVER_ADDRESS.to_string(),
+                }
+            } else {
+                LoginResponse::Failed {
+                    reason: "Invalid username or password".to_string(),
+                }
+            }
+        },
+        LoginRequest::Logout => {
+            LoginResponse::Failed { reason: "Already logged out".to_string() }
+        },
+        LoginRequest::Heartbeat => {
+            LoginResponse::Failed { reason: "Heartbeat not expected here".to_string() }
         }
     }
 }

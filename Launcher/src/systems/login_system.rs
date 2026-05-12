@@ -32,12 +32,11 @@ impl Plugin for LoginSystemPlugin {
 
 
 pub fn login_trigger_system(
-    mut messages: MessageReader<LoginRequestMessage>, // Swapped to MessageReader
+    mut messages: MessageReader<LoginRequestMessage>,
     mut login_status: ResMut<LoginStatus>,
     mut login_task: ResMut<LoginTask>,
     tokio_runtime: Res<TokioRuntimeResource>,
 ) {
-    // In 0.18.1, .read() is the standard for messages
     for message in messages.read() {
         start_login(
             &message.username,
@@ -97,18 +96,21 @@ fn poll_login_task(
             login_task.receiver = None;
 
             match result {
-                Ok(LoginResponse::Success {
-                       session_token,
-                       game_server_address,
-                   }) => {
-                    *login_status = LoginStatus::Success {
-                        session_token,
-                        game_server_address,
-                    };
-                }
-                Ok(LoginResponse::Failed { reason }) => {
-                    *login_status = LoginStatus::Failed { reason };
-                }
+                Ok(response) => match response {
+                    LoginResponse::Success { session_token, game_server_address } => {
+                        *login_status = LoginStatus::Success {
+                            session_token,
+                            game_server_address,
+                        };
+                    }
+                    LoginResponse::Failed { reason } => {
+                        *login_status = LoginStatus::Failed { reason };
+                    }
+                    LoginResponse::ServerFull { queue_position } => {
+                        let reason = format!("Server is full. Please try again later. Queue position: {}", queue_position);
+                        *login_status = LoginStatus::Failed { reason };
+                    }
+                },
                 Err(error) => {
                     *login_status = LoginStatus::Error {
                         message: error.to_string(),

@@ -67,19 +67,18 @@ pub async fn login_to_gatekeeper(
         .await
         .context("failed to open bidirectional QUIC stream")?;
 
-    //create a systems request
-    let login_request = LoginRequest {
-        message_type: "systems".to_string(),
+    //create a Login Request
+    let login_request = LoginRequest::Login {
         username: username.to_string(),
         password: password.to_string(),
         launcher_version: LAUNCHER_VERSION.to_string(),
-    };
+        };
 
-    //serialize the systems request
+    //serialize the Login request
     let request_body = serde_json::to_vec(&login_request)
         .context("failed to serialize systems request")?;
 
-    //send the systems request
+    //send the Login request
     send_stream
         .write_all(&request_body)
         .await

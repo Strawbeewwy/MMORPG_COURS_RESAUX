@@ -248,7 +248,7 @@ fn handle_login_text_input(
 fn handle_login_button(
     mut button_query: Query<&Interaction, (Changed<Interaction>, With<LoginButton>)>,
     login_form: Res<LoginForm>,
-    mut login_messages: MessageWriter<LoginRequestMessage>, // Swapped to MessageWriter
+    mut login_messages: MessageWriter<LoginRequestMessage>,
 ) {
     for interaction in &mut button_query {
         if *interaction == Interaction::Pressed {

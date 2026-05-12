@@ -10,18 +10,22 @@ response are not sent frequently. We still have to think that
 **/
 
 use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Serialize)]
-pub struct LoginRequest {
-    #[serde(rename = "type")]
-    pub message_type: String,
-    pub username: String,
-    pub password: String,
-    pub launcher_version: String,
+/// Messages sent from the Client to the Gatekeeper
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum LoginRequest {
+    Login {
+        username: String,
+        password: String,
+        launcher_version: String,
+    },
+    Logout,
+    Heartbeat,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type")]
+/// Messages sent from the Gatekeeper to the Client
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum LoginResponse {
     #[serde(rename = "login_success")]
     Success {
@@ -31,5 +35,8 @@ pub enum LoginResponse {
     #[serde(rename = "login_failed")]
     Failed {
         reason: String,
+    },
+    ServerFull {
+        queue_position: u32,
     },
 }
