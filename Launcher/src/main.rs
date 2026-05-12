@@ -11,9 +11,10 @@ is started.
 
 mod app;
 mod config;
-mod systems;
+mod net;
 mod protocol;
 mod resources;
+mod systems;
 
 fn main() {
     app::run();
