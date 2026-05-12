@@ -5,6 +5,7 @@ login UI.
 
 use bevy::prelude::*;
 
+
 use bevy::input::keyboard::KeyboardInput;
 
 
@@ -56,81 +57,229 @@ impl Plugin for UISystemPlugin {
             );
     }
 }
-
 fn spawn_login_ui(mut commands: Commands) {
     commands
         .spawn((
             Node {
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
+                padding: UiRect::all(Val::Px(28.0)),
+                flex_direction: FlexDirection::Column,
+                justify_content: JustifyContent::SpaceBetween,
+                align_items: AlignItems::Stretch,
                 ..default()
             },
-            BackgroundColor(Color::srgb(0.03, 0.035, 0.05)),
+            BackgroundColor(Color::srgb(0.025, 0.022, 0.02)),
         ))
-        .with_children(|parent| {
-            parent
-                .spawn((
-                    Node {
-                        width: Val::Px(420.0),
-                        padding: UiRect::all(Val::Px(32.0)),
-                        flex_direction: FlexDirection::Column,
-                        row_gap: Val::Px(14.0),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Stretch,
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.08, 0.09, 0.13)),
-                ))
-                .with_children(|panel| {
-                    panel.spawn((
-                        Text::new("MMORPG Launcher"),
+        .with_children(|root| {
+            root.spawn((
+                Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Px(72.0),
+                    justify_content: JustifyContent::SpaceBetween,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+            ))
+                .with_children(|header| {
+                    header.spawn((
+                        Text::new("MMORPG"),
                         TextFont {
-                            font_size: 32.0,
+                            font_size: 42.0,
                             ..default()
                         },
-                        TextColor(Color::WHITE),
+                        TextColor(Color::srgb(0.95, 0.82, 0.48)),
                     ));
 
-                    spawn_label(panel, "Username");
-                    spawn_input_field(panel, UsernameFieldButton, UsernameFieldText, "");
+                    header.spawn((
+                        Text::new("Launcher"),
+                        TextFont {
+                            font_size: 18.0,
+                            ..default()
+                        },
+                        TextColor(Color::srgb(0.72, 0.68, 0.58)),
+                    ));
+                });
 
-                    spawn_label(panel, "Password");
-                    spawn_input_field(panel, PasswordFieldButton, PasswordFieldText, "");
-
-                    panel
-                        .spawn((
-                            Button,
-                            LoginButton,
-                            Node {
-                                height: Val::Px(44.0),
-                                margin: UiRect::top(Val::Px(8.0)),
-                                justify_content: JustifyContent::Center,
-                                align_items: AlignItems::Center,
-                                ..default()
-                            },
-                            BackgroundColor(Color::srgb(0.18, 0.35, 0.85)),
-                        ))
-                        .with_children(|button| {
-                            button.spawn((
-                                Text::new("Login"),
+            root.spawn((
+                Node {
+                    width: Val::Percent(100.0),
+                    flex_grow: 1.0,
+                    column_gap: Val::Px(28.0),
+                    justify_content: JustifyContent::SpaceBetween,
+                    align_items: AlignItems::Stretch,
+                    ..default()
+                },
+            ))
+                .with_children(|content| {
+                    content.spawn((
+                        Node {
+                            flex_grow: 1.0,
+                            padding: UiRect::all(Val::Px(30.0)),
+                            flex_direction: FlexDirection::Column,
+                            justify_content: JustifyContent::FlexEnd,
+                            align_items: AlignItems::FlexStart,
+                            border: UiRect::all(Val::Px(1.0)),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0.075, 0.055, 0.045)),
+                        BorderColor::from(Color::srgba(0.95, 0.62, 0.22, 0.22)),
+                    ))
+                        .with_children(|hero| {
+                            hero.spawn((
+                                Text::new("Welcome back, adventurer"),
                                 TextFont {
-                                    font_size: 20.0,
+                                    font_size: 34.0,
                                     ..default()
                                 },
-                                TextColor(Color::WHITE),
+                                TextColor(Color::srgb(0.96, 0.9, 0.78)),
+                            ));
+
+                            hero.spawn((
+                                Text::new("Prepare your account, enter the realm, and continue your journey."),
+                                TextFont {
+                                    font_size: 17.0,
+                                    ..default()
+                                },
+                                TextColor(Color::srgb(0.68, 0.64, 0.56)),
+                            ));
+
+                            hero.spawn((
+                                Node {
+                                    height: Val::Px(18.0),
+                                    ..default()
+                                },
+                            ));
+
+                            hero.spawn((
+                                Text::new("NEWS"),
+                                TextFont {
+                                    font_size: 14.0,
+                                    ..default()
+                                },
+                                TextColor(Color::srgb(0.95, 0.68, 0.32)),
+                            ));
+
+                            hero.spawn((
+                                Text::new("• GateKeeper authentication online\n• Network systems enabled\n• Game server routing available"),
+                                TextFont {
+                                    font_size: 15.0,
+                                    ..default()
+                                },
+                                TextColor(Color::srgb(0.78, 0.75, 0.68)),
                             ));
                         });
 
-                    panel.spawn((
-                        Text::new("Enter your credentials to log in."),
-                        LoginStatusText,
-                        TextFont {
-                            font_size: 16.0,
+                    content.spawn((
+                        Node {
+                            width: Val::Px(390.0),
+                            padding: UiRect::all(Val::Px(26.0)),
+                            flex_direction: FlexDirection::Column,
+                            row_gap: Val::Px(13.0),
+                            justify_content: JustifyContent::FlexStart,
+                            align_items: AlignItems::Stretch,
+                            border: UiRect::all(Val::Px(1.0)),
                             ..default()
                         },
-                        TextColor(Color::srgb(0.8, 0.82, 0.9)),
+                        BackgroundColor(Color::srgba(0.055, 0.048, 0.043, 0.96)),
+                        BorderColor::from(Color::srgba(0.95, 0.62, 0.22, 0.32)),
+                    ))
+                        .with_children(|panel| {
+                            panel.spawn((
+                                Text::new("Account Login"),
+                                TextFont {
+                                    font_size: 28.0,
+                                    ..default()
+                                },
+                                TextColor(Color::srgb(0.95, 0.86, 0.66)),
+                            ));
+
+                            panel.spawn((
+                                Text::new("Sign in to connect to the realm."),
+                                TextFont {
+                                    font_size: 14.0,
+                                    ..default()
+                                },
+                                TextColor(Color::srgb(0.62, 0.58, 0.52)),
+                            ));
+
+                            panel.spawn((
+                                Node {
+                                    height: Val::Px(8.0),
+                                    ..default()
+                                },
+                            ));
+
+                            spawn_label(panel, "ACCOUNT NAME");
+                            spawn_input_field(panel, UsernameFieldButton, UsernameFieldText, "");
+
+                            spawn_label(panel, "PASSWORD");
+                            spawn_input_field(panel, PasswordFieldButton, PasswordFieldText, "");
+
+                            panel
+                                .spawn((
+                                    Button,
+                                    LoginButton,
+                                    Node {
+                                        height: Val::Px(48.0),
+                                        margin: UiRect::top(Val::Px(10.0)),
+                                        justify_content: JustifyContent::Center,
+                                        align_items: AlignItems::Center,
+                                        border: UiRect::all(Val::Px(1.0)),
+                                        ..default()
+                                    },
+                                    BackgroundColor(Color::srgb(0.58, 0.29, 0.09)),
+                                    BorderColor::from(Color::srgb(0.98, 0.65, 0.28)),
+                                ))
+                                .with_children(|button| {
+                                    button.spawn((
+                                        Text::new("LOG IN"),
+                                        TextFont {
+                                            font_size: 19.0,
+                                            ..default()
+                                        },
+                                        TextColor(Color::srgb(1.0, 0.92, 0.78)),
+                                    ));
+                                });
+
+                            panel.spawn((
+                                Text::new("Enter your credentials to log in."),
+                                LoginStatusText,
+                                TextFont {
+                                    font_size: 14.0,
+                                    ..default()
+                                },
+                                TextColor(Color::srgb(0.76, 0.72, 0.65)),
+                            ));
+                        });
+                });
+
+            root.spawn((
+                Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Px(34.0),
+                    justify_content: JustifyContent::SpaceBetween,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+            ))
+                .with_children(|footer| {
+                    footer.spawn((
+                        Text::new("Version 0.1.0"),
+                        TextFont {
+                            font_size: 13.0,
+                            ..default()
+                        },
+                        TextColor(Color::srgb(0.48, 0.45, 0.4)),
+                    ));
+
+                    footer.spawn((
+                        Text::new("GateKeeper Network"),
+                        TextFont {
+                            font_size: 13.0,
+                            ..default()
+                        },
+                        TextColor(Color::srgb(0.48, 0.45, 0.4)),
                     ));
                 });
         });
@@ -140,10 +289,10 @@ fn spawn_label(parent: &mut ChildSpawnerCommands, label: &str) {
     parent.spawn((
         Text::new(label),
         TextFont {
-            font_size: 15.0,
+            font_size: 12.0,
             ..default()
         },
-        TextColor(Color::srgb(0.75, 0.78, 0.9)),
+        TextColor(Color::srgb(0.82, 0.62, 0.34)),
     ));
 }
 
@@ -161,25 +310,50 @@ fn spawn_input_field<TButton, TText>(
             Button,
             button_marker,
             Node {
-                height: Val::Px(42.0),
+                height: Val::Px(44.0),
                 padding: UiRect::horizontal(Val::Px(12.0)),
                 justify_content: JustifyContent::FlexStart,
                 align_items: AlignItems::Center,
+                border: UiRect::all(Val::Px(1.0)),
                 ..default()
             },
-            BackgroundColor(Color::srgb(0.12, 0.13, 0.18)),
+            BackgroundColor(Color::srgb(0.032, 0.03, 0.028)),
+            BorderColor::from(Color::srgb(0.28, 0.22, 0.16)),
         ))
         .with_children(|field| {
             field.spawn((
                 Text::new(initial_text),
                 text_marker,
                 TextFont {
-                    font_size: 18.0,
+                    font_size: 17.0,
                     ..default()
                 },
-                TextColor(Color::WHITE),
+                TextColor(Color::srgb(0.93, 0.88, 0.78)),
             ));
         });
+}
+
+
+fn update_login_button_style(
+    login_status: Res<LoginStatus>,
+    mut query: Query<
+        (&Interaction, &mut BackgroundColor),
+        (With<LoginButton>, Changed<Interaction>),
+    >,
+) {
+    let is_logging_in = matches!(*login_status, LoginStatus::LoggingIn);
+
+    for (interaction, mut background_color) in &mut query {
+        background_color.0 = if is_logging_in {
+            Color::srgb(0.18, 0.16, 0.14)
+        } else {
+            match *interaction {
+                Interaction::Pressed => Color::srgb(0.42, 0.18, 0.05),
+                Interaction::Hovered => Color::srgb(0.78, 0.39, 0.12),
+                Interaction::None => Color::srgb(0.58, 0.29, 0.09),
+            }
+        };
+    }
 }
 
 fn handle_login_field_clicks(
@@ -298,37 +472,15 @@ fn update_login_status_text(
     }
 }
 
-fn update_login_button_style(
-    login_status: Res<LoginStatus>,
-    mut query: Query<
-        (&Interaction, &mut BackgroundColor),
-        (With<LoginButton>, Changed<Interaction>),
-    >,
-) {
-    let is_logging_in = matches!(*login_status, LoginStatus::LoggingIn);
-
-    for (interaction, mut background_color) in &mut query {
-        background_color.0 = if is_logging_in {
-            Color::srgb(0.2, 0.2, 0.25)
-        } else {
-            match *interaction {
-                Interaction::Pressed => Color::srgb(0.12, 0.25, 0.65),
-                Interaction::Hovered => Color::srgb(0.24, 0.43, 1.0),
-                Interaction::None => Color::srgb(0.18, 0.35, 0.85),
-            }
-        };
-    }
-}
-
 fn login_status_message_and_color(login_status: &LoginStatus) -> (String, Color) {
     match login_status {
         LoginStatus::Idle => (
             "Enter your credentials to log in.".to_string(),
-            Color::srgb(0.8, 0.82, 0.9),
+            Color::srgb(0.76, 0.72, 0.65),
         ),
         LoginStatus::LoggingIn => (
             "Contacting GateKeeper...".to_string(),
-            Color::srgb(0.8, 0.82, 0.9),
+            Color::srgb(0.95, 0.72, 0.38),
         ),
         LoginStatus::Success {
             session_token,
@@ -337,15 +489,15 @@ fn login_status_message_and_color(login_status: &LoginStatus) -> (String, Color)
             format!(
                 "Login accepted.\nSession token: {session_token}\nGame server: {game_server_address}"
             ),
-            Color::srgb(0.35, 1.0, 0.45),
+            Color::srgb(0.42, 1.0, 0.55),
         ),
         LoginStatus::Failed { reason } => (
             format!("Login failed: {reason}"),
-            Color::srgb(1.0, 0.25, 0.25),
+            Color::srgb(1.0, 0.34, 0.24),
         ),
         LoginStatus::Error { message } => (
             message.clone(),
-            Color::srgb(1.0, 0.25, 0.25),
+            Color::srgb(1.0, 0.34, 0.24),
         ),
     }
 }
