@@ -2674,10 +2674,11 @@ dependencies = [
  "anyhow",
  "bevy",
  "quinn",
- "rcgen 0.14.8",
+ "rcgen",
  "rustls",
  "serde",
  "serde_json",
+ "shared",
  "tokio",
 ]
 
@@ -2687,11 +2688,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "quinn",
- "rcgen 0.13.2",
+ "rcgen",
  "rustls",
  "rustls-pki-types",
  "serde",
  "serde_json",
+ "shared",
  "tokio",
 ]
 
@@ -3256,6 +3258,7 @@ dependencies = [
  "rustls",
  "serde",
  "serde_json",
+ "shared",
  "tokio",
 ]
 
@@ -4397,19 +4400,6 @@ checksum = "20675572f6f24e9e76ef639bc5552774ed45f1c30e2951e1e99c59888861c539"
 
 [[package]]
 name = "rcgen"
-version = "0.13.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75e669e5202259b5314d1ea5397316ad400819437857b90861765f24c4cf80a2"
-dependencies = [
- "pem",
- "ring",
- "rustls-pki-types",
- "time",
- "yasna 0.5.2",
-]
-
-[[package]]
-name = "rcgen"
 version = "0.14.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57f6d249aad744e274e682777a50283a225a32705394ee6d5fcc01efa25e4055"
@@ -4419,7 +4409,7 @@ dependencies = [
  "rustls-pki-types",
  "time",
  "x509-parser",
- "yasna 0.6.0",
+ "yasna",
 ]
 
 [[package]]
@@ -4837,6 +4827,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
 dependencies = [
  "lazy_static",
+]
+
+[[package]]
+name = "shared"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -6710,15 +6709,6 @@ name = "xml-rs"
 version = "0.8.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ae8337f8a065cfc972643663ea4279e04e7256de865aa66fe25cec5fb912d3f"
-
-[[package]]
-name = "yasna"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e17bb3549cc1321ae1296b9cdc2698e2b6cb1992adfa19a8c72e5b7a738f44cd"
-dependencies = [
- "time",
-]
 
 [[package]]
 name = "yasna"

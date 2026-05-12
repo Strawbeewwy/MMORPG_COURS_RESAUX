@@ -1,7 +1,9 @@
 use crate::auth::service::authenticate;
-use crate::config::LOGIN_REQUEST_SIZE_LIMIT;
-use crate::protocol::{LoginRequest, LoginResponse};
 use anyhow::{Context, Result};
+use shared::config::LOGIN_REQUEST_SIZE_LIMIT;
+use shared::protocol::codec;
+use shared::protocol::{LoginRequest, LoginResponse};
+
 
 pub async fn handle_connection(incoming: quinn::Incoming) -> Result<()> {
     let connection = incoming
@@ -34,14 +36,14 @@ async fn handle_login_stream(
         .await
         .context("failed to read login request")?;
 
-    let login_request: LoginRequest = serde_json::from_slice(&request_body)
+    let login_request: LoginRequest = codec::decode(&request_body)
         .context("failed to parse login request")?;
 
     println!("Login request: {login_request:?}");
 
     let login_response: LoginResponse = authenticate(login_request);
 
-    let response_body = serde_json::to_vec(&login_response)
+    let response_body = codec::encode(&login_response)
         .context("failed to serialize login response")?;
 
     send_stream

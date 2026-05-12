@@ -5,6 +5,7 @@
       <sourceFolder url="file://$MODULE_DIR$/GateKeeper/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/Launcher/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/GameServer/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/Shared/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/GateKeeper/target" />
       <excludeFolder url="file://$MODULE_DIR$/Launcher/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />

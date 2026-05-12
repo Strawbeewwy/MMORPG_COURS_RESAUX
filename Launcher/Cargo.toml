@@ -11,3 +11,4 @@ rustls = "0.23"
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+shared = { path = "../Shared" }

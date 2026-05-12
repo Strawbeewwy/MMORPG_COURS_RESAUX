@@ -14,7 +14,7 @@ pub fn generate_self_signed_certificate() -> Result<CertifiedKey> {
     let cert_der = CertificateDer::from(cert.cert.der().to_vec());
 
     let key_der = PrivateKeyDer::from(
-        PrivatePkcs8KeyDer::from(cert.key_pair.serialize_der()),
+        PrivatePkcs8KeyDer::from(cert.signing_key.serialize_der()),
     );
 
     Ok(CertifiedKey {

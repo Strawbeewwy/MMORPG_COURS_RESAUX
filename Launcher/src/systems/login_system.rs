@@ -5,16 +5,14 @@ It also polls the systems task to check if the systems process
 is complete.
 **/
 
-
 use bevy::prelude::*;
+use shared::protocol::LoginResponse;
 use tokio::sync::oneshot;
 
 use crate::net::gatekeeper::login_to_gatekeeper;
-use crate::protocol::LoginResponse;
 use crate::resources::network_resources::{
     LoginRequestMessage, LoginStatus, LoginTask, TokioRuntimeResource,
 };
-
 
 /**
 This plugin adds the systems as update so that they are run

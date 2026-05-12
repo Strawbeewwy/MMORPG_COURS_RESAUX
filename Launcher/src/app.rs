@@ -10,6 +10,7 @@ disable some of them since we just need a GUI.
 
 
 use bevy::prelude::*;
+use crate::config::{WINDOW_HEIGHT, WINDOW_TITLE, WINDOW_WIDTH};
 use crate::systems::SystemLoaderPlugin;
 use crate::resources::ResourceLoaderPlugin;
 
@@ -17,8 +18,8 @@ pub fn run() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
-                title: "MMORPG Launcher".to_string(),
-                resolution: (900, 600).into(),
+                title: WINDOW_TITLE.to_string(),
+                resolution: (WINDOW_WIDTH, WINDOW_HEIGHT).into(),
                 resizable: true,
                 ..default()
             }),

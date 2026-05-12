@@ -3,24 +3,16 @@ network.rs contains the logic for the QUIC connection to the
 gatekeeper.
 **/
 
-
+use crate::net::tls::create_insecure_client_config;
 use anyhow::{anyhow, Context, Result};
-use quinn::{ClientConfig, Endpoint};
-use rustls::client::danger::{
-    HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
-};
-use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
-use rustls::{DigitallySignedStruct, SignatureScheme};
-use std::net::SocketAddr;
-use std::sync::Arc;
-
-use crate::config::{
+use quinn::Endpoint;
+use shared::config::{
     GATEKEEPER_ADDRESS, GATEKEEPER_SERVER_NAME, LAUNCHER_VERSION,
-    LOGIN_RESPONSE_SIZE_LIMIT,
+    LOGIN_PROTOCOL_VERSION, LOGIN_RESPONSE_SIZE_LIMIT,
 };
-use crate::protocol::{LoginRequest, LoginResponse};
-
-
+use shared::protocol::codec;
+use shared::protocol::{LoginRequest, LoginResponse};
+use std::net::SocketAddr;
 
 /**
 This function sends a systems request to the gatekeeper and
@@ -67,16 +59,15 @@ pub async fn login_to_gatekeeper(
         .await
         .context("failed to open bidirectional QUIC stream")?;
 
-    //create a Login Request
     let login_request = LoginRequest::Login {
+        protocol_version: LOGIN_PROTOCOL_VERSION,
         username: username.to_string(),
         password: password.to_string(),
         launcher_version: LAUNCHER_VERSION.to_string(),
-        };
+    };
 
-    //serialize the Login request
-    let request_body = serde_json::to_vec(&login_request)
-        .context("failed to serialize systems request")?;
+    let request_body = codec::encode(&login_request)
+        .context("failed to serialize login request")?;
 
     //send the Login request
     send_stream
@@ -99,8 +90,8 @@ pub async fn login_to_gatekeeper(
         return Err(anyhow!("empty response received from GateKeeper"));
     }
     // deserialize the response
-    let login_response = serde_json::from_slice(&response_body)
-        .context("failed to parse systems response")?;
+    let login_response = codec::decode(&response_body)
+        .context("failed to parse login response")?;
 
     connection.close(0u32.into(), b"systems complete");
 

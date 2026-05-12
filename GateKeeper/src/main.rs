@@ -2,7 +2,6 @@ mod app;
 mod auth;
 mod config;
 mod net;
-mod protocol;
 
 use anyhow::Result;
 

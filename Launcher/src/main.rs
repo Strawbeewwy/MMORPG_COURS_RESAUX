@@ -12,7 +12,6 @@ is started.
 mod app;
 mod config;
 mod net;
-mod protocol;
 mod resources;
 mod systems;
 

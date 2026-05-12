@@ -1,16 +1,18 @@
 use crate::auth::session::create_session_token;
-use crate::config::{
-    ACCEPTED_PASSWORD, ACCEPTED_USERNAME, GAME_SERVER_ADDRESS, LAUNCHER_VERSION,
+use crate::config::{ACCEPTED_PASSWORD, ACCEPTED_USERNAME};
+use shared::config::{
+    GAME_SERVER_ADDRESS, LAUNCHER_VERSION, LOGIN_PROTOCOL_VERSION,
 };
-use crate::protocol::{LoginRequest, LoginResponse};
+use shared::protocol::{LoginRequest, LoginResponse};
 
 pub fn authenticate(login_request: LoginRequest) -> LoginResponse {
     match login_request {
         LoginRequest::Login {
+            protocol_version,
             username,
             password,
             launcher_version,
-        } => authenticate_login(username, password, launcher_version),
+        } => authenticate_login(protocol_version, username, password, launcher_version),
         LoginRequest::Logout => LoginResponse::Failed {
             reason: "Already logged out".to_string(),
         },
@@ -21,10 +23,17 @@ pub fn authenticate(login_request: LoginRequest) -> LoginResponse {
 }
 
 fn authenticate_login(
+    protocol_version: u16,
     username: String,
     password: String,
     launcher_version: String,
 ) -> LoginResponse {
+    if protocol_version != LOGIN_PROTOCOL_VERSION {
+        return LoginResponse::Failed {
+            reason: "Unsupported login protocol version.".to_string(),
+        };
+    }
+
     if launcher_version != LAUNCHER_VERSION {
         return LoginResponse::Failed {
             reason: "Outdated launcher. Please update.".to_string(),

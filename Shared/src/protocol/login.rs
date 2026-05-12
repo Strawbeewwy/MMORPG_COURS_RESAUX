@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum LoginRequest {
     Login {
+        protocol_version: u16,
         username: String,
         password: String,
         launcher_version: String,

@@ -1,9 +1,9 @@
-use crate::config::{
+use shared::config::{
     GATEKEEPER_ADDRESS, GATEKEEPER_SERVER_NAME, LAUNCHER_VERSION,
-    LOGIN_RESPONSE_SIZE_LIMIT,
+    LOGIN_RESPONSE_SIZE_LIMIT,LOGIN_PROTOCOL_VERSION,
 };
 use crate::net::tls::create_insecure_client_config;
-use crate::protocol::{LoginRequest, LoginResponse};
+use shared::protocol::{LoginRequest, LoginResponse};
 use anyhow::{anyhow, Context, Result};
 use quinn::Endpoint;
 use std::net::SocketAddr;
@@ -37,6 +37,7 @@ pub async fn login_to_gatekeeper(
         .context("failed to open GateKeeper bidirectional stream")?;
 
     let login_request = LoginRequest::Login {
+        protocol_version: LOGIN_PROTOCOL_VERSION,
         username: username.to_string(),
         password: password.to_string(),
         launcher_version: LAUNCHER_VERSION.to_string(),

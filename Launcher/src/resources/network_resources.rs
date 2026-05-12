@@ -1,9 +1,8 @@
 
 use bevy::prelude::*;
+use shared::protocol::LoginResponse;
 use tokio::runtime::Runtime;
 use tokio::sync::oneshot;
-
-use crate::protocol::LoginResponse;
 
 /**
 This declares a Tokio runtime as a resource.

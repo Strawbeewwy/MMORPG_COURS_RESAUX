@@ -5,9 +5,8 @@ use rustls::client::danger::{
 };
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{DigitallySignedStruct, SignatureScheme};
+use shared::config::GATEKEEPER_ALPN_PROTOCOL;
 use std::sync::Arc;
-
-use crate::config::GATEKEEPER_ALPN_PROTOCOL;
 
 pub fn create_insecure_client_config() -> Result<ClientConfig> {
     let provider = rustls::crypto::aws_lc_rs::default_provider();

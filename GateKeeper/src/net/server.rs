@@ -1,8 +1,9 @@
-use crate::config::{GATEKEEPER_ALPN_PROTOCOL, GATEKEEPER_BIND_ADDRESS};
+use crate::config::GATEKEEPER_BIND_ADDRESS;
 use crate::net::certificate::generate_self_signed_certificate;
 use crate::net::stream;
 use anyhow::{Context, Result};
 use quinn::{Endpoint, ServerConfig};
+use shared::config::GATEKEEPER_ALPN_PROTOCOL;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
