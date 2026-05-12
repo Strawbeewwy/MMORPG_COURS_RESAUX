@@ -1,4 +1,6 @@
 mod server;
+mod protocol;
+mod config;
 
 
 use anyhow::Result;
