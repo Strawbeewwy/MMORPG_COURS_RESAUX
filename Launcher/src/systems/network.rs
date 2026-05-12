@@ -23,10 +23,10 @@ use crate::protocol::{LoginRequest, LoginResponse};
 
 
 /**
-This function sends a login request to the gatekeeper and
+This function sends a systems request to the gatekeeper and
 waits for the response. It first creates a client endpoint,
 then connects to the gatekeeper, then opens a bidirectional
-stream, then sends the login request, then reads the response,
+stream, then sends the systems request, then reads the response,
 and finally closes the connection.
 **/
 pub async fn login_to_gatekeeper(
@@ -67,43 +67,43 @@ pub async fn login_to_gatekeeper(
         .await
         .context("failed to open bidirectional QUIC stream")?;
 
-    //create a login request
+    //create a systems request
     let login_request = LoginRequest {
-        message_type: "login".to_string(),
+        message_type: "systems".to_string(),
         username: username.to_string(),
         password: password.to_string(),
         launcher_version: LAUNCHER_VERSION.to_string(),
     };
 
-    //serialize the login request
+    //serialize the systems request
     let request_body = serde_json::to_vec(&login_request)
-        .context("failed to serialize login request")?;
+        .context("failed to serialize systems request")?;
 
-    //send the login request
+    //send the systems request
     send_stream
         .write_all(&request_body)
         .await
-        .context("failed to send login request")?;
+        .context("failed to send systems request")?;
 
     // finish the stream so the server knows we are done sending
     send_stream
         .finish()
-        .context("failed to finish login request stream")?;
+        .context("failed to finish systems request stream")?;
 
     // read the response
     let response_body = receive_stream
         .read_to_end(LOGIN_RESPONSE_SIZE_LIMIT)
         .await
-        .context("failed to read login response")?;
+        .context("failed to read systems response")?;
 
     if response_body.is_empty() {
         return Err(anyhow!("empty response received from GateKeeper"));
     }
     // deserialize the response
     let login_response = serde_json::from_slice(&response_body)
-        .context("failed to parse login response")?;
+        .context("failed to parse systems response")?;
 
-    connection.close(0u32.into(), b"login complete");
+    connection.close(0u32.into(), b"systems complete");
 
     // return the response
     Ok(login_response)
