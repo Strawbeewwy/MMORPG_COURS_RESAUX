@@ -1,6 +1,6 @@
 
 use bevy::prelude::*;
-use shared::protocol::LoginResponse;
+use shared::protocol::LoginHttpResponse;
 use tokio::runtime::Runtime;
 use tokio::sync::oneshot;
 
@@ -34,11 +34,9 @@ pub enum LoginStatus {
     Idle,
     LoggingIn,
     Success {
-        session_token: String,
-        game_server_address: String,
-    },
-    Failed {
-        reason: String,
+        player_id: String,
+        server_address: String,
+        zone: String,
     },
     Error {
         message: String,
@@ -63,7 +61,7 @@ while the sender is the gatekeeper.
 **/
 #[derive(Resource, Default)]
 pub struct LoginTask {
-    pub receiver: Option<oneshot::Receiver<anyhow::Result<LoginResponse>>>,
+    pub receiver: Option<oneshot::Receiver<anyhow::Result<LoginHttpResponse>>>,
 }
 
 /**

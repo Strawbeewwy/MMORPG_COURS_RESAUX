@@ -4,7 +4,7 @@ use redis::AsyncCommands;
 use shared::protocol::ServerInfo;
 
 pub fn create_pool(redis_url: &str) -> Result<Pool> {
-    let mut config = Config::from_url(redis_url);
+    let config = Config::from_url(redis_url);
 
     config
         .create_pool(Some(Runtime::Tokio1))

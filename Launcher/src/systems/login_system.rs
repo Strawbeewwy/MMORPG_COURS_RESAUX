@@ -6,7 +6,6 @@ is complete.
 **/
 
 use bevy::prelude::*;
-use shared::protocol::LoginResponse;
 use tokio::sync::oneshot;
 
 use crate::net::gatekeeper::login_to_gatekeeper;
@@ -95,21 +94,13 @@ fn poll_login_task(
             login_task.receiver = None;
 
             match result {
-                Ok(response) => match response {
-                    LoginResponse::Success { session_token, game_server_address } => {
-                        *login_status = LoginStatus::Success {
-                            session_token,
-                            game_server_address,
-                        };
-                    }
-                    LoginResponse::Failed { reason } => {
-                        *login_status = LoginStatus::Failed { reason };
-                    }
-                    LoginResponse::ServerFull { queue_position } => {
-                        let reason = format!("Server is full. Please try again later. Queue position: {}", queue_position);
-                        *login_status = LoginStatus::Failed { reason };
-                    }
-                },
+                Ok(response) => {
+                    *login_status = LoginStatus::Success {
+                        player_id: response.player_id,
+                        server_address: format!("{}:{}", response.server.ip, response.server.port),
+                        zone: response.server.zone,
+                    };
+                }
                 Err(error) => {
                     *login_status = LoginStatus::Error {
                         message: error.to_string(),
