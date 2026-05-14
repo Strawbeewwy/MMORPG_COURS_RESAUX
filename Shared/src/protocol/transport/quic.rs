@@ -2,8 +2,7 @@ use anyhow::{anyhow, Context, Result};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-
-use crate::protocol::codec;
+use crate::protocol::transport::codec;
 
 /// Send one serialized message on a QUIC send stream.
 ///
@@ -31,9 +30,6 @@ where
     Ok(())
 }
 
-/// Receive one serialized message from a QUIC receive stream.
-///
-/// The caller provides a maximum size to avoid reading unbounded data.
 pub async fn receive_message<T>(
     receive_stream: &mut quinn::RecvStream,
     size_limit: usize,
@@ -54,7 +50,6 @@ where
         .context("failed to decode QUIC protocol message")
 }
 
-/// Send a request and receive a response over a new bidirectional QUIC stream.
 pub async fn send_request<Request, Response>(
     connection: &quinn::Connection,
     request: &Request,
@@ -74,7 +69,6 @@ where
     receive_message(&mut receive_stream, response_size_limit).await
 }
 
-/// Receive a request and send a response on an accepted bidirectional stream.
 pub async fn handle_request<Request, Response, Handler>(
     mut send_stream: quinn::SendStream,
     mut receive_stream: quinn::RecvStream,
