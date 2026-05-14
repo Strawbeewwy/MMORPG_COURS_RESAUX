@@ -4,5 +4,6 @@ members = [
     "GateKeeper",
     "Launcher",
     "GameServer",
+    "Orchestrator",
 ]
 resolver = "2"

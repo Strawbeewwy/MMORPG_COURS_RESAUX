@@ -1,9 +1,8 @@
-pub mod codec;
+pub mod discovery;
 pub mod game;
-pub mod quic_protocol;
-pub mod shared_types;
+pub mod http;
+pub mod transport;
 
+pub use discovery::{Heartbeat, ServerInfo};
 pub use game::{ClientGameMessage, ServerGameMessage};
-pub use shared_types::{
-    ErrorResponse, HealthResponse, Heartbeat, LoginHttpRequest, LoginHttpResponse, ServerInfo,
-};
+pub use http::{ErrorResponse, HealthResponse, LoginHttpRequest, LoginHttpResponse};

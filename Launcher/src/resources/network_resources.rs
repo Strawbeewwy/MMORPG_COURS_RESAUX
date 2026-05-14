@@ -1,4 +1,3 @@
-
 use bevy::prelude::*;
 use shared::protocol::LoginHttpResponse;
 use tokio::runtime::Runtime;
@@ -23,7 +22,6 @@ impl TokioRuntimeResource {
         }
     }
 }
-
 
 /**
 This declares a login status resource so that the login
@@ -53,7 +51,6 @@ impl Default for LoginStatus {
     }
 }
 
-
 /**
 This resource is used to store the oneshot channel that awaits
 the result of the systems process. The bevy app is the receiver,
@@ -65,9 +62,9 @@ pub struct LoginTask {
 }
 
 /**
-This declares a message sent to the login system so it 
-what the username and password to login with. Since the login form 
-is a ressouce and can be modified whenever, we make sure to send 
+This declares a message sent to the login system so it
+what the username and password to login with. Since the login form
+is a ressouce and can be modified whenever, we make sure to send
 this message so that the login system uses the latest information
 and not a resource that might be outdated.
 **/

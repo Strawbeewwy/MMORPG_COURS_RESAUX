@@ -2,19 +2,13 @@
 ui_system contains the systems that are used to draw the
 login UI.
 **/
-
 use bevy::prelude::*;
-
 
 use bevy::input::keyboard::KeyboardInput;
 
-
-use crate::resources::ui_resources::{
-    LoginForm, ActiveLoginField,
-};
+use crate::resources::ui_resources::{ActiveLoginField, LoginForm};
 
 use crate::resources::network_resources::{LoginRequestMessage, LoginStatus};
-
 
 #[derive(Component)]
 struct UsernameFieldText;
@@ -42,19 +36,17 @@ pub struct UISystemPlugin;
 
 impl Plugin for UISystemPlugin {
     fn build(&self, app: &mut App) {
-        app
-            .add_systems(Startup, spawn_login_ui)
-            .add_systems(
-                Update,
-                (
-                    handle_login_field_clicks,
-                    handle_login_text_input,
-                    handle_login_button,
-                    update_login_form_text,
-                    update_login_status_text,
-                    update_login_button_style,
-                ),
-            );
+        app.add_systems(Startup, spawn_login_ui).add_systems(
+            Update,
+            (
+                handle_login_field_clicks,
+                handle_login_text_input,
+                handle_login_button,
+                update_login_form_text,
+                update_login_status_text,
+                update_login_button_style,
+            ),
+        );
     }
 }
 fn spawn_login_ui(mut commands: Commands) {
@@ -333,7 +325,6 @@ fn spawn_input_field<TButton, TText>(
         });
 }
 
-
 fn update_login_button_style(
     login_status: Res<LoginStatus>,
     mut query: Query<
@@ -491,9 +482,6 @@ fn login_status_message_and_color(login_status: &LoginStatus) -> (String, Color)
             ),
             Color::srgb(0.42, 1.0, 0.55),
         ),
-        LoginStatus::Error { message } => (
-            message.clone(),
-            Color::srgb(1.0, 0.34, 0.24),
-        ),
+        LoginStatus::Error { message } => (message.clone(), Color::srgb(1.0, 0.34, 0.24)),
     }
 }

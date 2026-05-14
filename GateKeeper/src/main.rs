@@ -2,18 +2,20 @@ mod handlers;
 mod redis_pool;
 
 use anyhow::Result;
-use axum::{routing::{get, post}, Router};
+use axum::{
+    routing::{get, post},
+    Router,
+};
+use shared::config::GATEKEEPER_HTTP_ADDRESS;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use shared::config::GATEKEEPER_HTTP_ADDRESS;
-
 
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
-    let redis_url = std::env::var("REDIS_URL")
-        .unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
+    let redis_url =
+        std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
 
     let bind_address = std::env::var("GATEKEEPER_HTTP_ADDRESS")
         .unwrap_or_else(|_| GATEKEEPER_HTTP_ADDRESS.to_string());
