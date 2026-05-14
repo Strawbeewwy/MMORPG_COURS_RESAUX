@@ -471,7 +471,6 @@ fn update_login_status_text(
         text_color.0 = color;
     }
 }
-
 fn login_status_message_and_color(login_status: &LoginStatus) -> (String, Color) {
     match login_status {
         LoginStatus::Idle => (
@@ -483,17 +482,14 @@ fn login_status_message_and_color(login_status: &LoginStatus) -> (String, Color)
             Color::srgb(0.95, 0.72, 0.38),
         ),
         LoginStatus::Success {
-            session_token,
-            game_server_address,
+            player_id,
+            server_address,
+            zone,
         } => (
             format!(
-                "Login accepted.\nSession token: {session_token}\nGame server: {game_server_address}"
+                "Login accepted.\nPlayer ID: {player_id}\nServer: {server_address}\nZone: {zone}"
             ),
             Color::srgb(0.42, 1.0, 0.55),
-        ),
-        LoginStatus::Failed { reason } => (
-            format!("Login failed: {reason}"),
-            Color::srgb(1.0, 0.34, 0.24),
         ),
         LoginStatus::Error { message } => (
             message.clone(),
