@@ -1,3 +1,6 @@
+use crate::config::{WINDOW_HEIGHT, WINDOW_TITLE, WINDOW_WIDTH};
+use crate::resources::ResourceLoaderPlugin;
+use crate::systems::SystemLoaderPlugin;
 /**
 This file is the entry point of the bevy app.
 It initializes the app and adds all plugins.
@@ -7,12 +10,7 @@ with the gatekeeper server.
 We also use the default plugins, but we could selectively
 disable some of them since we just need a GUI.
 **/
-
-
 use bevy::prelude::*;
-use crate::config::{WINDOW_HEIGHT, WINDOW_TITLE, WINDOW_WIDTH};
-use crate::systems::SystemLoaderPlugin;
-use crate::resources::ResourceLoaderPlugin;
 
 pub fn run() {
     App::new()

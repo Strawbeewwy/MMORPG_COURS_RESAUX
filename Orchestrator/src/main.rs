@@ -24,8 +24,8 @@ async fn main() -> Result<()> {
     info!("redis url: {}", config.redis_url);
     info!("hot servers min: {}", config.hot_servers_min);
 
-    let redis_client = redis::Client::open(config.redis_url.clone())
-        .context("failed to create Redis client")?;
+    let redis_client =
+        redis::Client::open(config.redis_url.clone()).context("failed to create Redis client")?;
 
     let registry = Arc::new(RedisRegistry::new(redis_client));
     let process_manager = Arc::new(ProcessManager::new(config.first_ds_port));

@@ -21,8 +21,8 @@ pub async fn heartbeat_listener(
             .await
             .context("failed to receive UDP heartbeat")?;
 
-        let payload = std::str::from_utf8(&buffer[..len])
-            .context("heartbeat was not valid UTF-8")?;
+        let payload =
+            std::str::from_utf8(&buffer[..len]).context("heartbeat was not valid UTF-8")?;
 
         match parse_heartbeat(payload) {
             Ok(heartbeat) => {
@@ -41,11 +41,17 @@ pub async fn heartbeat_listener(
                     .update_server(&heartbeat, config.server_ttl_seconds)
                     .await
                 {
-                    error!("failed to update Redis for server {}: {err:#}", heartbeat.id);
+                    error!(
+                        "failed to update Redis for server {}: {err:#}",
+                        heartbeat.id
+                    );
                 }
             }
             Err(err) => {
-                warn!("invalid heartbeat from {}: {err:#}; payload={payload:?}", source);
+                warn!(
+                    "invalid heartbeat from {}: {err:#}; payload={payload:?}",
+                    source
+                );
             }
         }
     }

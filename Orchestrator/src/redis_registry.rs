@@ -12,17 +12,14 @@ impl RedisRegistry {
         Self { client }
     }
 
-    pub async fn update_server(
-        &self,
-        heartbeat: &Heartbeat,
-        ttl_seconds: usize,
-    ) -> Result<()> {
+    pub async fn update_server(&self, heartbeat: &Heartbeat, ttl_seconds: usize) -> Result<()> {
+        anyhow::ensure!(
+            ttl_seconds > 0,
+            "server TTL seconds must be greater than zero"
+        );
 
-        anyhow::ensure!(ttl_seconds > 0, "server TTL seconds must be greater than zero");
-
-        let ttl_seconds = i64::try_from(ttl_seconds)
-            .context("server TTL seconds does not fit into i64")?;
-
+        let ttl_seconds =
+            i64::try_from(ttl_seconds).context("server TTL seconds does not fit into i64")?;
 
         let mut connection = self
             .client

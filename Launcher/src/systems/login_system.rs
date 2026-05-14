@@ -4,7 +4,6 @@ systems UI.
 It also polls the systems task to check if the systems process
 is complete.
 **/
-
 use bevy::prelude::*;
 use tokio::sync::oneshot;
 
@@ -21,13 +20,10 @@ pub struct LoginSystemPlugin;
 
 impl Plugin for LoginSystemPlugin {
     fn build(&self, app: &mut App) {
-        app
-            .add_systems(Update, poll_login_task)
+        app.add_systems(Update, poll_login_task)
             .add_systems(Update, login_trigger_system);
-
     }
 }
-
 
 pub fn login_trigger_system(
     mut messages: MessageReader<LoginRequestMessage>,
@@ -81,10 +77,7 @@ pub fn start_login(
     *login_status = LoginStatus::LoggingIn;
 }
 
-fn poll_login_task(
-    mut login_task: ResMut<LoginTask>,
-    mut login_status: ResMut<LoginStatus>,
-) {
+fn poll_login_task(mut login_task: ResMut<LoginTask>, mut login_status: ResMut<LoginStatus>) {
     let Some(receiver) = login_task.receiver.as_mut() else {
         return;
     };

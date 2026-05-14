@@ -3,9 +3,7 @@ use crate::AppState;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
-use shared::protocol::{
-    ErrorResponse, HealthResponse, LoginHttpRequest, LoginHttpResponse,
-};
+use shared::protocol::{ErrorResponse, HealthResponse, LoginHttpRequest, LoginHttpResponse};
 use std::sync::Arc;
 use uuid::Uuid;
 

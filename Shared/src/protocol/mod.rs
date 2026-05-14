@@ -1,4 +1,3 @@
-
 pub mod discovery;
 pub mod game;
 pub mod http;

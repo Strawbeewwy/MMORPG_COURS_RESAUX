@@ -7,8 +7,6 @@ all other modules that are needed.
 We could add a Logo here when the launcher
 is started.
 **/
-
-
 mod app;
 mod config;
 mod net;

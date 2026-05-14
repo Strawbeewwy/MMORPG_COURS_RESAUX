@@ -8,15 +8,11 @@ use crate::protocol::transport::codec;
 ///
 /// The stream is finished after sending, so the peer can safely use
 /// `read_to_end` to know when the message is complete.
-pub async fn send_message<T>(
-    send_stream: &mut quinn::SendStream,
-    message: &T,
-) -> Result<()>
+pub async fn send_message<T>(send_stream: &mut quinn::SendStream, message: &T) -> Result<()>
 where
     T: Serialize,
 {
-    let payload = codec::encode(message)
-        .context("failed to encode QUIC protocol message")?;
+    let payload = codec::encode(message).context("failed to encode QUIC protocol message")?;
 
     send_stream
         .write_all(&payload)
@@ -46,8 +42,7 @@ where
         return Err(anyhow!("empty QUIC protocol message"));
     }
 
-    codec::decode(&payload)
-        .context("failed to decode QUIC protocol message")
+    codec::decode(&payload).context("failed to decode QUIC protocol message")
 }
 
 pub async fn send_request<Request, Response>(

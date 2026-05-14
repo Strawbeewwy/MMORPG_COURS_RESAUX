@@ -2,9 +2,7 @@ use crate::config::OrchestratorConfig;
 use anyhow::{Context, Result};
 use std::{
     process::{Child, Command, Stdio},
-    sync::{
-        atomic::{AtomicU16, Ordering},
-    },
+    sync::atomic::{AtomicU16, Ordering},
 };
 use tokio::sync::Mutex;
 use tracing::warn;

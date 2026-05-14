@@ -29,8 +29,7 @@ impl OrchestratorConfig {
             .parse()
             .context("invalid ORCH_ADDR")?;
 
-        let redis_url =
-            env::var("REDIS_URL").unwrap_or_else(|_| DEFAULT_REDIS_URL.to_string());
+        let redis_url = env::var("REDIS_URL").unwrap_or_else(|_| DEFAULT_REDIS_URL.to_string());
 
         let hot_servers_min = env::var("HOT_SERVERS_MIN")
             .ok()

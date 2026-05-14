@@ -1,7 +1,5 @@
 use crate::{
-    config::OrchestratorConfig,
-    process_manager::ProcessManager,
-    redis_registry::RedisRegistry,
+    config::OrchestratorConfig, process_manager::ProcessManager, redis_registry::RedisRegistry,
 };
 use anyhow::Result;
 use std::sync::Arc;
@@ -13,19 +11,20 @@ pub async fn scaler_loop(
     registry: Arc<RedisRegistry>,
     process_manager: Arc<ProcessManager>,
 ) -> Result<()> {
-    let mut interval = time::interval(time::Duration::from_secs(
-        config.scaler_interval_seconds,
-    ));
+    let mut interval = time::interval(time::Duration::from_secs(config.scaler_interval_seconds));
 
     loop {
         interval.tick().await;
 
         process_manager.reap_finished_processes().await;
 
-        let available = registry.count_available_servers().await.unwrap_or_else(|err| {
-            error!("failed to count available servers: {err:#}");
-            0
-        });
+        let available = registry
+            .count_available_servers()
+            .await
+            .unwrap_or_else(|err| {
+                error!("failed to count available servers: {err:#}");
+                0
+            });
 
         info!(
             "available servers: {}, required hot servers: {}",

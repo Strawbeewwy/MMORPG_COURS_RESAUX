@@ -1,13 +1,10 @@
 use anyhow::{Context, Result};
-use shared::protocol::{LoginHttpRequest, LoginHttpResponse};
 use shared::config::GATEKEEPER_HTTP_URL;
+use shared::protocol::{LoginHttpRequest, LoginHttpResponse};
 
-pub async fn login_to_gatekeeper(
-    username: &str,
-    password: &str,
-) -> Result<LoginHttpResponse> {
-    let gatekeeper_url = std::env::var("GATEKEEPER_HTTP_URL")
-        .unwrap_or_else(|_| GATEKEEPER_HTTP_URL.to_string());
+pub async fn login_to_gatekeeper(username: &str, password: &str) -> Result<LoginHttpResponse> {
+    let gatekeeper_url =
+        std::env::var("GATEKEEPER_HTTP_URL").unwrap_or_else(|_| GATEKEEPER_HTTP_URL.to_string());
 
     let login_url = format!("{gatekeeper_url}/login");
 
