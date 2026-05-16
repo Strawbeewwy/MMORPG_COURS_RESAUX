@@ -2805,6 +2805,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
+ "bytes",
  "quinn",
  "rcgen",
  "rustls",
@@ -2812,6 +2813,9 @@ dependencies = [
  "serde_json",
  "shared",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
@@ -5423,9 +5427,16 @@ name = "shared"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bytes",
  "quinn",
+ "rcgen",
+ "rustls",
  "serde",
  "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
