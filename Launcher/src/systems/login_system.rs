@@ -1,9 +1,8 @@
-/**
-login_system contains the systems that are used to draw the
-systems UI.
+/*
+login_system contains the systems that are used
 It also polls the systems task to check if the systems process
 is complete.
-**/
+*/
 use bevy::prelude::*;
 use tokio::sync::oneshot;
 
@@ -12,10 +11,10 @@ use crate::resources::network_resources::{
     LoginRequestMessage, LoginStatus, LoginTask, TokioRuntimeResource,
 };
 
-/**
+/*
 This plugin adds the systems as update so that they are run
 each frame.
-**/
+*/
 pub struct LoginSystemPlugin;
 
 impl Plugin for LoginSystemPlugin {
@@ -25,6 +24,10 @@ impl Plugin for LoginSystemPlugin {
     }
 }
 
+/*
+go through all the messages and start the login process
+if the message is a login request message.
+*/
 pub fn login_trigger_system(
     mut messages: MessageReader<LoginRequestMessage>,
     mut login_status: ResMut<LoginStatus>,
@@ -42,6 +45,10 @@ pub fn login_trigger_system(
     }
 }
 
+/*
+start the login process by sending a request to the gatekeeper
+server.
+*/
 pub fn start_login(
     username: &str,
     password: &str,
@@ -66,22 +73,28 @@ pub fn start_login(
     let username = username.to_string();
     let password = password.to_string();
 
+    //create a oneshot channel to communicate with the systems task
     let (sender, receiver) = oneshot::channel();
 
+    //spawn the login task
     tokio_runtime.runtime.spawn(async move {
         let result = login_to_gatekeeper(&username, &password).await;
         let _ = sender.send(result);
     });
-
+    //store the oneshot channel in the login task so polling can acess it everyframe
     login_task.receiver = Some(receiver);
     *login_status = LoginStatus::LoggingIn;
 }
 
 fn poll_login_task(mut login_task: ResMut<LoginTask>, mut login_status: ResMut<LoginStatus>) {
+   //check if we have a task to poll
     let Some(receiver) = login_task.receiver.as_mut() else {
         return;
     };
-
+    /*
+    we check every frame if we received a response
+    if so we process it.
+    */
     match receiver.try_recv() {
         Ok(result) => {
             login_task.receiver = None;

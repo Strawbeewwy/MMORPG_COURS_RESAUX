@@ -4,16 +4,16 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ServerGameMessage {
-    JoinAccepted {
+    JoinAccepted {///when the server accepts a player connection
         player_id: PlayerId,
         player: PlayerPublicInfo,
         snapshot: WorldSnapshot,
         message: String,
     },
-    JoinRejected {
+    JoinRejected {///when the server rejects a player connection
         reason: String,
     },
-    HeartbeatAck,
+    HeartbeatAck,///server sends this to the client to confirm the heartbeat sent by the client
     InputAccepted {
         movement_x: f32,
         movement_y: f32,
@@ -21,11 +21,12 @@ pub enum ServerGameMessage {
     WorldSnapshot {
         snapshot: WorldSnapshot,
     },
-    PlayerJoined {
+    PlayerJoined {///when a player joins the game
         player: PlayerPublicInfo,
     },
-    PlayerLeft {
+    PlayerLeft {///when a player leaves the game
         player_id: PlayerId,
     },
+    ///can be used later when a server closes to confirm with the orchestrator
     Goodbye,
 }

@@ -1,5 +1,10 @@
 use serde::{Deserialize, Serialize};
 
+
+/**
+Heartbeat message sent by the server to the orchestrator.
+based on the teacher's example.
+**/
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Heartbeat {
     pub id: String,
@@ -10,6 +15,10 @@ pub struct Heartbeat {
     pub max_players: usize,
 }
 
+/**
+Heartbeat message implementation
+with a method to get the status of the server.
+**/
 impl Heartbeat {
     pub fn status(&self) -> &'static str {
         if self.player_count >= self.max_players {

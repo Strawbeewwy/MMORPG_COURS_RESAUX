@@ -4,6 +4,8 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
 use shared::protocol::{ErrorResponse, HealthResponse, LoginHttpRequest, LoginHttpResponse};
+use shared::config::DEFAULT_DEBUG_PASSWORD;
+use anyhow::Result;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -17,7 +19,7 @@ pub async fn login_handler(
     State(state): State<Arc<AppState>>,
     Json(request): Json<LoginHttpRequest>,
 ) -> Result<Json<LoginHttpResponse>, (StatusCode, Json<ErrorResponse>)> {
-    if request.username.trim().is_empty() || request.password != "1234" {
+    if request.username.trim().is_empty() || request.password != DEFAULT_DEBUG_PASSWORD.to_string() {
         return Err((
             StatusCode::UNAUTHORIZED,
             Json(ErrorResponse {

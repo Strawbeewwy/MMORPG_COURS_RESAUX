@@ -1,6 +1,7 @@
 use crate::config::ServerConfig;
 use crate::net::gameplay_quic::SharedPlayerRegistry;
 use bevy::prelude::*;
+use shared::protocol::transport::codec;
 use shared::protocol::Heartbeat;
 use std::net::UdpSocket;
 use std::time::Duration;
@@ -60,17 +61,17 @@ pub fn send_heartbeat(
         max_players: config.max_players,
     };
 
-    let payload = match serde_json::to_string(&heartbeat) {
-        Ok(json) => format!("HEARTBEAT {json}"),
+    let payload = match codec::encode(&heartbeat) {
+        Ok(payload) => payload,
         Err(error) => {
-            tracing::error!("failed to serialize heartbeat: {error}");
+            tracing::error!("failed to encode heartbeat: {error:#}");
             return;
         }
     };
 
     match socket
         .socket
-        .send_to(payload.as_bytes(), config.orchestrator_addr)
+        .send_to(&payload, config.orchestrator_addr)
     {
         Ok(bytes) => {
             tracing::info!(
