@@ -7,9 +7,6 @@ pub const LAUNCHER_VERSION: &str = "0.1.0";
 pub const GAME_MESSAGE_SIZE_LIMIT: usize = 64 * 1024;
 pub const GAME_PROTOCOL_VERSION: u16 = 1;
 
-
-pub const SUPPORTED_PROTOCOL_VERSION: u16 = 1;
-
 pub const DEFAULT_ZONE: &str = "default";
 
 pub const DEFAULT_ORCHESTRATOR_HOST: &str = "127.0.0.1";
