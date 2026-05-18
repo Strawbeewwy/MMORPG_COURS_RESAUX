@@ -2800,7 +2800,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "game_client"
+name = "gameclient"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -2808,8 +2808,6 @@ dependencies = [
  "bytes",
  "shared",
  "tracing",
- "tracing-subscriber",
- "uuid",
 ]
 
 [[package]]
@@ -2839,8 +2837,6 @@ dependencies = [
  "axum",
  "deadpool-redis",
  "redis",
- "serde",
- "serde_json",
  "shared",
  "tokio",
  "tracing",
@@ -3657,8 +3653,6 @@ dependencies = [
  "anyhow",
  "bevy",
  "reqwest",
- "serde",
- "serde_json",
  "shared",
  "tokio",
  "tracing",
@@ -4495,8 +4489,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "redis",
- "serde",
- "serde_json",
  "shared",
  "tokio",
  "tracing",

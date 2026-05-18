@@ -3,12 +3,11 @@ use crate::state::LocalPlayerState;
 use crate::input::keyboard_input_system;
 use crate::net::gameplay_quic::{
     connect_to_game_server, poll_gameplay_events,
+    GameplayClient,retry_connection_if_needed
 };
 use bevy::prelude::*;
 
 pub fn run() {
-    tracing_subscriber::fmt::init();
-
 
     let config = match ClientConfig::from_env() {
         Ok(config) => config,
@@ -29,11 +28,13 @@ pub fn run() {
         }))
         .insert_resource(config)
         .insert_resource(LocalPlayerState::default())
+        .insert_resource(GameplayClient::default())
         .add_systems(Startup, (setup_camera, connect_to_game_server))
         .add_systems(
             Update,
             (
                 poll_gameplay_events,
+                retry_connection_if_needed,
                 keyboard_input_system,
             ),
         )

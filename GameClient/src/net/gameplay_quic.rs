@@ -9,15 +9,28 @@ use shared::protocol::transport::gamesockets_lib::{
 };
 use shared::protocol::{ClientGameMessage, ServerGameMessage};
 use shared::config::GAME_PROTOCOL_VERSION;
+use std::time::Duration;
 
-#[derive(Resource, Default)]
+#[derive(Resource)]
 pub struct GameplayClient {
     pub peer: Option<GamePeer>,
     pub connection: Option<GameConnection>,
     pub reliable_stream: Option<GameStream>,
     pub joined: bool,
+    pub reconnect_timer: Timer,
 }
 
+impl Default for GameplayClient {
+    fn default() -> Self {
+        Self {
+            peer: None,
+            connection: None,
+            reliable_stream: None,
+            joined: false,
+            reconnect_timer: Timer::new(Duration::from_secs(2), TimerMode::Repeating),
+        }
+    }
+}
 pub fn connect_to_game_server(
     config: Res<ClientConfig>,
     mut gameplay_client: ResMut<GameplayClient>,
@@ -34,11 +47,24 @@ pub fn connect_to_game_server(
     player_state.player_id = Some(config.player_id.clone());
     player_state.zone = Some(config.zone.clone());
 
+    try_connect_to_game_server(&config, &mut gameplay_client);
+}
+
+fn try_connect_to_game_server(
+    config: &ClientConfig,
+    gameplay_client: &mut GameplayClient,
+) {
+    tracing::info!(
+        "trying to connect to game server {}:{}",
+        config.server_ip,
+        config.server_port
+    );
+
     let peer = GamePeer::new(QuicBackend::new());
 
     if let Err(error) = peer.connect(&config.server_ip, config.server_port) {
         tracing::error!(
-            "failed to connect to game server {}:{}: {}",
+            "failed to start connection to game server {}:{}: {}",
             config.server_ip,
             config.server_port,
             error
@@ -47,8 +73,39 @@ pub fn connect_to_game_server(
     }
 
     gameplay_client.peer = Some(peer);
+    gameplay_client.connection = None;
+    gameplay_client.reliable_stream = None;
+    gameplay_client.joined = false;
 
-    tracing::info!("connecting to game server {}...", config.server_addr());
+    tracing::info!("connection attempt started to {}", config.server_addr());
+}
+
+pub fn retry_connection_if_needed(
+    time: Res<Time>,
+    config: Res<ClientConfig>,
+    mut gameplay_client: ResMut<GameplayClient>,
+) {
+    if gameplay_client.joined || gameplay_client.connection.is_some() {
+        return;
+    }
+
+    gameplay_client.reconnect_timer.tick(time.delta());
+
+    if !gameplay_client.reconnect_timer.just_finished() {
+        return;
+    }
+
+    tracing::info!(
+        "not connected to game server yet; retrying {}",
+        config.server_addr()
+    );
+
+    gameplay_client.peer = None;
+    gameplay_client.connection = None;
+    gameplay_client.reliable_stream = None;
+    gameplay_client.joined = false;
+
+    try_connect_to_game_server(&config, &mut gameplay_client);
 }
 
 pub fn poll_gameplay_events(
@@ -66,7 +123,17 @@ pub fn poll_gameplay_events(
                 Ok(Some(event)) => event,
                 Ok(None) => break,
                 Err(error) => {
-                    tracing::error!("failed to poll game peer: {}", error);
+                    tracing::warn!(
+                        "game peer poll failed while connecting to {}: {}",
+                        config.server_addr(),
+                        error
+                    );
+
+                    gameplay_client.peer = None;
+                    gameplay_client.connection = None;
+                    gameplay_client.reliable_stream = None;
+                    gameplay_client.joined = false;
+
                     break;
                 }
             }
@@ -153,10 +220,16 @@ fn handle_gameplay_event(
 
         GameNetworkEvent::Error { connection, inner } => {
             tracing::warn!(
-                "game socket error on connection {}: {}",
+                "game socket error on connection {} while targeting {}: {}",
                 connection.connection_id,
+                config.server_addr(),
                 inner
             );
+
+            gameplay_client.peer = None;
+            gameplay_client.connection = None;
+            gameplay_client.reliable_stream = None;
+            gameplay_client.joined = false;
         }
     }
 }

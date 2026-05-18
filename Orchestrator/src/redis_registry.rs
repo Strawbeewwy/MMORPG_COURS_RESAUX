@@ -21,26 +21,26 @@ impl RedisRegistry {
         let ttl_seconds =
             i64::try_from(ttl_seconds).context("server TTL seconds does not fit into i64")?;
 
-        /**
+        /*
         create a redis connection to the redis server
         and make it multiplexed so we don't block other requests
-        **/
+        */
         let mut connection = self
             .client
             .get_multiplexed_async_connection()
             .await
             .context("failed to connect to Redis")?;
 
-        /**
+        /*
         get the server key so later we can update it
         with the redis pipeline
-        **/
+        */
         let key = format!("server:{}", heartbeat.id);
         let status = heartbeat.status();
 
-        /**
+        /*
         a redis piepline so we can send many commands to redis
-        **/
+        */
         let _: () = redis::pipe()
             .atomic()
             .hset(&key, "id", &heartbeat.id)
@@ -61,16 +61,16 @@ impl RedisRegistry {
     pub async fn count_available_servers(&self)
         -> Result<usize> {
 
-        ///connect to the redis server and get a multiplexed connection
+        //connect to the redis server and get a multiplexed connection
         let mut connection = self
             .client
             .get_multiplexed_async_connection()
             .await
             .context("failed to connect to Redis")?;
 
-        /**
+        /*
         since we will check all servers the key is the get all key
-        **/
+        */
         let keys: Vec<String> = connection
             .keys("server:*")
             .await
@@ -78,7 +78,7 @@ impl RedisRegistry {
 
         let mut available_count = 0;
 
-        ///iterate over all the keys and check if the status is available
+        //iterate over all the keys and check if the status is available
         for key in keys {
             let status: Option<String> = connection
                 .hget(&key, "status")

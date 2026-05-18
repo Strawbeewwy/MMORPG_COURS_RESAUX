@@ -8,7 +8,7 @@ use tokio::sync::Mutex;
 use tracing::warn;
 
 pub struct ProcessManager {
-    next_port: AtomicU16,///integer safe for multithread access
+    next_port: AtomicU16,//integer safe for multithread access
     children: Mutex<Vec<Child>>,
 }
 
@@ -22,10 +22,10 @@ impl ProcessManager {
 
     pub async fn spawn_server(&self, config: &OrchestratorConfig)
         -> Result<u16> {
-        ///fetch the port and increment it
+        //fetch the port and increment it
         let port = self.next_port.fetch_add(1, Ordering::SeqCst);
 
-        ///runs a child process that will run the dedicated server
+        //runs a child process that will run the dedicated server
         let child = Command::new("cargo")
             .arg("run")
             .arg("-p")
@@ -44,17 +44,20 @@ impl ProcessManager {
                 )
             })?;
 
-        ///lock the children vector and add the child to it
+        //lock the children vector and add the child to it
         self.children.lock().await.push(child);
 
         Ok(port)
     }
 
+    pub async fn running_process_count(&self) -> usize {
+        self.children.lock().await.len()
+    }
     pub async fn reap_finished_processes(&self) {
-        ///lock the children vector so we dont add new ones while we are removing old ones
+        //lock the children vector so we dont add new ones while we are removing old ones
         let mut children = self.children.lock().await;
 
-        ///retain only the children that are still running
+        //retain only the children that are still running
         children.retain_mut(|child| match child.try_wait() {
             Ok(Some(status)) => {
                 warn!("dedicated server process exited with status {}", status);

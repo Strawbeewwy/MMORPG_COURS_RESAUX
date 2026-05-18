@@ -1,5 +1,5 @@
 [package]
-name = "game_client"
+name = "gameclient"
 version = "0.1.0"
 edition = "2021"
 
@@ -9,5 +9,3 @@ bevy = { version = "0.18.1", default-features = true }
 bytes = "1"
 shared = { path = "../Shared" }
 tracing = "0.1"
-tracing-subscriber = "0.3"
-uuid = { version = "1", features = ["v4"] }

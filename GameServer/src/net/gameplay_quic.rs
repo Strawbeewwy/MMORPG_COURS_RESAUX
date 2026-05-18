@@ -17,8 +17,6 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-const GAME_RELIABLE_STREAM_ID: u16 = 1;
-
 #[derive(Resource, Clone)]
 pub struct SharedPlayerRegistry {
     pub inner: Arc<Mutex<PlayerRegistry>>,

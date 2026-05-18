@@ -11,30 +11,30 @@ pub async fn heartbeat_listener(
     config: Arc<OrchestratorConfig>,
     registry: Arc<RedisRegistry>,
 ) -> Result<()> {
-    /**we use udp for the heatbeat, since we just need
+    /*we use udp for the heatbeat, since we just need
     acknoledgement that the server is alive all the info are
     just flourish
-    **/
+    */
     let socket = UdpSocket::bind(config.orch_addr)
         .await
         .with_context(|| format!("failed to bind UDP socket on {}", config.orch_addr))?;
 
-    ///this should be enough for the heartbeat
+    //this should be enough for the heartbeat
     let mut buffer = [0_u8; DEFAULT_HEARTBEAT_BUFFER_SIZE];
 
-    ///main loop of the listener
+    //main loop of the listener
     loop {
-        /**
+        /*
         when we receive a packet we put it in the buffer and then
         create a tuple with the length of the packet and the source ip address
-        **/
+        */
         let (len, source) = socket
             .recv_from(&mut buffer)
             .await
             .context("failed to receive UDP heartbeat")?;
 
 
-        ///decode the buffer into a heartbeat
+        //decode the buffer into a heartbeat
         match codec::decode::<Heartbeat>(&buffer[..len]) {
             Ok(heartbeat) => {
                 info!(

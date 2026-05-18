@@ -38,7 +38,7 @@ fn launch_game_client_on_message(
     mut messages: MessageReader<LaunchGameClientMessage>,
     mut launch_state: ResMut<GameLaunchState>,
     primary_window_query: Query<Entity, With<PrimaryWindow>>,
-    winit_windows: NonSend<WinitWindows>,
+    winit_windows: Option<NonSend<WinitWindows>>,
 ) {
     if launch_state.launched {
         return;
@@ -71,7 +71,7 @@ fn launch_game_client(message: &LaunchGameClientMessage) -> Option<Child> {
     let spawn_result = Command::new("cargo")
         .arg("run")
         .arg("-p")
-        .arg("game_client")
+        .arg("gameclient")
         .env("PLAYER_ID", &message.player_id)
         .env("USERNAME", &message.username)
         .env("GAME_SERVER_IP", &message.server_ip)
@@ -96,7 +96,7 @@ fn launch_game_client(message: &LaunchGameClientMessage) -> Option<Child> {
 fn restore_launcher_when_game_client_exits(
     mut launch_state: ResMut<GameLaunchState>,
     primary_window_query: Query<Entity, With<PrimaryWindow>>,
-    winit_windows: NonSend<WinitWindows>,
+    winit_windows: Option<NonSend<WinitWindows>>,
 ) {
     let Some(child) = launch_state.child.as_mut() else {
         return;
@@ -125,8 +125,13 @@ fn restore_launcher_when_game_client_exits(
 
 fn minimize_launcher_window(
     primary_window_query: Query<Entity, With<PrimaryWindow>>,
-    winit_windows: NonSend<WinitWindows>,
+    winit_windows: Option<NonSend<WinitWindows>>,
 ) {
+    let Some(winit_windows) = winit_windows else {
+        tracing::warn!("WinitWindows resource is not available; cannot minimize launcher");
+        return;
+    };
+
     let Ok(window_entity) = primary_window_query.single() else {
         tracing::warn!("could not find primary launcher window to minimize");
         return;
@@ -144,8 +149,13 @@ fn minimize_launcher_window(
 
 fn restore_launcher_window(
     primary_window_query: Query<Entity, With<PrimaryWindow>>,
-    winit_windows: NonSend<WinitWindows>,
+    winit_windows: Option<NonSend<WinitWindows>>,
 ) {
+    let Some(winit_windows) = winit_windows else {
+        tracing::warn!("WinitWindows resource is not available; cannot restore launcher");
+        return;
+    };
+
     let Ok(window_entity) = primary_window_query.single() else {
         tracing::warn!("could not find primary launcher window to restore");
         return;

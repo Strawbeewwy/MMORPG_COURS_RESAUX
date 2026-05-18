@@ -132,7 +132,8 @@ fn make_client_config() -> quinn::ClientConfig {
 pub struct QuicBackend {
     connections: HashMap<Uuid, Connection>,
     reliable_send_streams: HashMap<(Uuid, u16), SendStream>,
-    unreliable_send_streams: Vec<(Uuid, u16)>
+    unreliable_send_streams: Vec<(Uuid, u16)>,
+    endpoints: Vec<Endpoint>,
 }
 
 impl GameSocketBackend for QuicBackend {
@@ -165,42 +166,165 @@ impl GameSocketBackend for QuicBackend {
                     Some(cmd) = cmd_rx.recv() => {
                         match cmd {
                             BackendCommand::Bind { addr, port } => {
-                                let (server_config, _cert) = make_server_config();
-                                let addr = format!("{}:{}", addr, port).parse().unwrap();
-                                let endpoint = Endpoint::server(server_config, addr).unwrap();
+                                  let (server_config, _cert) = make_server_config();
+
+                                let bind_addr = match format!("{}:{}", addr, port).parse() {
+                                    Ok(bind_addr) => bind_addr,
+                                    Err(error) => {
+                                        let _ = event_tx.send(GameNetworkEvent::Error {
+                                            connection: Uuid::nil().into(),
+                                            inner: GameSocketError::InitError {
+                                                inner_msg: format!("invalid bind address {addr}:{port}: {error}"),
+                                            },
+                                        });
+                                        continue;
+                                    }
+                                };
+
+                                let endpoint = match Endpoint::server(server_config, bind_addr) {
+                                    Ok(endpoint) => endpoint,
+                                    Err(error) => {
+                                        let _ = event_tx.send(GameNetworkEvent::Error {
+                                            connection: Uuid::nil().into(),
+                                            inner: GameSocketError::InitError {
+                                                inner_msg: format!("failed to bind QUIC server on {bind_addr}: {error}"),
+                                            },
+                                        });
+                                        continue;
+                                    }
+                                };
+
+                                 self.endpoints.push(endpoint.clone());
+
                                 let event_tx = event_tx.clone();
-                                let conn_reg_tx = conn_reg_tx.clone(); // Clone for task
+                                let conn_reg_tx = conn_reg_tx.clone();
                                 let stream_reg_tx = stream_reg_tx.clone();
+
+                                tracing::info!("QUIC server listening on {}", bind_addr);
 
                                 tokio::spawn(async move {
                                     while let Some(conn) = endpoint.accept().await {
-                                        let connection = conn.await.unwrap();
+                                        let connection = match conn.await {
+                                            Ok(connection) => connection,
+                                            Err(error) => {
+                                                tracing::warn!(
+                                                    "failed to accept QUIC connection on {}: {}",
+                                                    bind_addr,
+                                                    error
+                                                );
+                                                continue;
+                                            }
+                                        };
+
                                         let uuid = Uuid::new_v4();
 
-                                        // Notify Game Thread
-                                        let _ = event_tx.send(GameNetworkEvent::Connected(uuid.into()));
+                                        tracing::info!(
+                                            "QUIC server accepted connection_id={}",
+                                            uuid
+                                        );
 
-                                        // Notify Backend Thread so we can send data back
+                                        let _ = event_tx.send(GameNetworkEvent::Connected(uuid.into()));
                                         let _ = conn_reg_tx.send((uuid, connection.clone()));
 
-                                        QuicBackend::spawn_reader(connection, uuid, event_tx.clone(), stream_reg_tx.clone());
-                                    }
+                                        QuicBackend::spawn_reader(
+                                            connection,
+                                            uuid,
+                                            event_tx.clone(),
+                                            stream_reg_tx.clone(),
+                                        );}
                                 });
                             }
                             BackendCommand::Connect { addr, port } => {
-                                let client_config = make_client_config();
-                                let mut endpoint = Endpoint::client("0.0.0.0:0".parse().unwrap()).unwrap();
-                                endpoint.set_default_client_config(client_config);
+                               let client_config = make_client_config();
 
-                                let remote = format!("{}:{}", addr, port).parse().unwrap();
-                                let connection = endpoint.connect(remote, "localhost").unwrap().await.unwrap();
+                                let client_bind_addr = "0.0.0.0:0"
+                                    .parse()
+                                    .expect("valid client bind address");
+
+                                let mut endpoint = match Endpoint::client(client_bind_addr) {
+                                    Ok(endpoint) => endpoint,
+                                    Err(error) => {
+                                        let _ = event_tx.send(GameNetworkEvent::Error {
+                                            connection: Uuid::nil().into(),
+                                            inner: GameSocketError::InitError {
+                                                inner_msg: format!("failed to create QUIC client endpoint: {error}"),
+                                            },
+                                        });
+                                        continue;
+                                    }
+                                };
+
+                                endpoint.set_default_client_config(client_config);
+                                self.endpoints.push(endpoint.clone());
+
+                                let remote = match format!("{}:{}", addr, port).parse() {
+                                    Ok(remote) => remote,
+                                    Err(error) => {
+                                        let _ = event_tx.send(GameNetworkEvent::Error {
+                                            connection: Uuid::nil().into(),
+                                            inner: GameSocketError::InitError {
+                                                inner_msg: format!("invalid remote address {addr}:{port}: {error}"),
+                                            },
+                                        });
+                                        continue;
+                                    }
+                                };
+
+                                tracing::info!("QUIC client connecting to {}", remote);
+
+                                let connecting = match endpoint.connect(remote, "localhost") {
+                                    Ok(connecting) => connecting,
+                                    Err(error) => {
+                                        let _ = event_tx.send(GameNetworkEvent::Error {
+                                            connection: Uuid::nil().into(),
+                                            inner: GameSocketError::ConnectionError,
+                                        });
+
+                                        tracing::error!(
+                                            "failed to start QUIC connection to {}: {}",
+                                            remote,
+                                            error
+                                        );
+
+                                        continue;
+                                    }
+                                };
+
+                                let connection = match connecting.await {
+                                    Ok(connection) => connection,
+                                    Err(error) => {
+                                        let _ = event_tx.send(GameNetworkEvent::Error {
+                                            connection: Uuid::nil().into(),
+                                            inner: GameSocketError::ConnectionError,
+                                        });
+
+                                        tracing::error!(
+                                            "failed to establish QUIC connection to {}: {}",
+                                            remote,
+                                            error
+                                        );
+
+                                        continue;
+                                    }
+                                };
+
                                 let uuid = Uuid::new_v4();
+
+                                tracing::info!(
+                                    "QUIC client connected to {} with connection_id={}",
+                                    remote,
+                                    uuid
+                                );
 
                                 self.connections.insert(uuid, connection.clone());
                                 let _ = event_tx.send(GameNetworkEvent::Connected(uuid.into()));
 
-                                QuicBackend::spawn_reader(connection, uuid, event_tx.clone(), stream_reg_tx.clone());
-                            }
+                                QuicBackend::spawn_reader(
+                                    connection,
+                                    uuid,
+                                    event_tx.clone(),
+                                    stream_reg_tx.clone(),
+                                );                            }
                             BackendCommand::Send { connection, stream, data } => {
                                 if let Some(conn) = self.connections.get(&connection) {
                                     if stream.is_reliable() {
@@ -275,7 +399,8 @@ impl QuicBackend {
         Self {
             connections: HashMap::new(),
             reliable_send_streams: HashMap::new(),
-            unreliable_send_streams: Vec::new()
+            unreliable_send_streams: Vec::new(),
+            endpoints: Vec::new(),
         }
     }
 

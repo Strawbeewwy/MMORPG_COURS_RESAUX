@@ -25,10 +25,10 @@ pub struct OrchestratorConfig {
 }
 
 impl OrchestratorConfig {
-    /**
+    /*
     when launching the orchestrator we might want to change the
     default values so we can do that by setting the environment variables
-    **/
+    */
     pub fn from_env() -> Result<Self> {
 
         let orch_addr = env::var("ORCH_ADDR")
