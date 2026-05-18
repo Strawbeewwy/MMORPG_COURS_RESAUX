@@ -1,8 +1,17 @@
-
+use crate::config::ClientConfig;
 use bevy::prelude::*;
 
 pub fn run() {
     tracing_subscriber::fmt::init();
+
+
+    let config = match ClientConfig::from_env() {
+        Ok(config) => config,
+        Err(error) => {
+            tracing::error!("failed to start GameClient: {error:#}");
+            return;
+        }
+    };
 
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -13,6 +22,7 @@ pub fn run() {
             }),
             ..default()
         }))
+        .insert_resource(config)
         .add_systems(Startup, setup_camera)
         .run();
 }
