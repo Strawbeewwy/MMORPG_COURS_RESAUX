@@ -1,14 +1,16 @@
 use anyhow::{Context, Result};
 use std::{env, net::SocketAddr};
-
-const DEFAULT_ORCH_ADDR: &str = "127.0.0.1:6000";
-const DEFAULT_REDIS_URL: &str = "redis://127.0.0.1:6379";
-const DEFAULT_HOT_SERVERS_MIN: usize = 1;
-const DEFAULT_SERVER_TTL_SECONDS: usize = 15;
-const DEFAULT_SCALER_INTERVAL_SECONDS: u64 = 5;
-const DEFAULT_FIRST_DS_PORT: u16 = 7001;
-const DEFAULT_ZONE: &str = "zone_A";
-const DEFAULT_DS_BINARY: &str = "gameserver";
+use shared::config::{
+    DEFAULT_FIRST_DS_PORT,
+    DEFAULT_HOT_SERVERS_MIN,
+    DEFAULT_ORCHESTRATOR_HOST,
+    DEFAULT_ORCHESTRATOR_PORT,
+    DEFAULT_REDIS_URL,
+    DEFAULT_SCALER_INTERVAL_SECONDS,
+    DEFAULT_SERVER_TTL_SECONDS,
+    DEFAULT_ZONE,
+    DEFAULT_DS_BINARY,
+};
 
 #[derive(Debug, Clone)]
 pub struct OrchestratorConfig {
@@ -23,9 +25,14 @@ pub struct OrchestratorConfig {
 }
 
 impl OrchestratorConfig {
+    /**
+    when launching the orchestrator we might want to change the
+    default values so we can do that by setting the environment variables
+    **/
     pub fn from_env() -> Result<Self> {
+
         let orch_addr = env::var("ORCH_ADDR")
-            .unwrap_or_else(|_| DEFAULT_ORCH_ADDR.to_string())
+            .unwrap_or_else(|_| format!("{DEFAULT_ORCHESTRATOR_HOST}:{DEFAULT_ORCHESTRATOR_PORT}"))
             .parse()
             .context("invalid ORCH_ADDR")?;
 

@@ -12,8 +12,7 @@ pub struct TokioRuntimeResource {
 }
 
 /**
-This implements a multithreaded Tokio runtime to run our
-async code.
+This implements a Tokio runtime to run our async code.
 **/
 impl TokioRuntimeResource {
     pub fn new() -> Self {
@@ -51,23 +50,23 @@ impl Default for LoginStatus {
     }
 }
 
-/**
+/*
 This resource is used to store the oneshot channel that awaits
 the result of the systems process. The bevy app is the receiver,
 while the sender is the gatekeeper.
-**/
+*/
 #[derive(Resource, Default)]
 pub struct LoginTask {
     pub receiver: Option<oneshot::Receiver<anyhow::Result<LoginHttpResponse>>>,
 }
 
-/**
+/*
 This declares a message sent to the login system so it
 what the username and password to login with. Since the login form
 is a ressouce and can be modified whenever, we make sure to send
 this message so that the login system uses the latest information
 and not a resource that might be outdated.
-**/
+*/
 #[derive(Message, Debug, Clone)]
 pub struct LoginRequestMessage {
     pub username: String,

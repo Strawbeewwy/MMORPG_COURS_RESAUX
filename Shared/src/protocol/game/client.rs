@@ -10,8 +10,13 @@ pub enum ClientGameMessage {
         username: Username,
     },
     LeaveGame,///when the player leaves the game
-    Heartbeat,///
+    Heartbeat,///can be used later to detect if the player is AFK
     PlayerInput {
+        /**
+        for the movement we don't need x- or y- since
+        we can just invert the x and y values depending on
+        which key is pressed
+        **/
         movement_x: f32,
         movement_y: f32,
     },

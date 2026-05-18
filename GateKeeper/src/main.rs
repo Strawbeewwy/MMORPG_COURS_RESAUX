@@ -6,17 +6,19 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use shared::config::GATEKEEPER_HTTP_ADDRESS;
+use shared::config::{GATEKEEPER_HTTP_ADDRESS, DEFAULT_REDIS_URL};
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+
     tracing_subscriber::fmt::init();
-
+    //get the redis url
     let redis_url =
-        std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
+        std::env::var("REDIS_URL").unwrap_or_else(|_| DEFAULT_REDIS_URL.to_string());
 
+    //get the bind address we will use to listen for requests
     let bind_address = std::env::var("GATEKEEPER_HTTP_ADDRESS")
         .unwrap_or_else(|_| GATEKEEPER_HTTP_ADDRESS.to_string());
 
@@ -25,7 +27,9 @@ async fn main() -> Result<()> {
     });
 
     let app = Router::new()
+        //route for GET health
         .route("/health", get(handlers::health_handler))
+        //route for POST login
         .route("/login", post(handlers::login_handler))
         .with_state(state);
 
@@ -40,5 +44,5 @@ async fn main() -> Result<()> {
 }
 
 pub struct AppState {
-    pub redis: deadpool_redis::Pool,
+    pub redis: deadpool_redis::Pool,//deadpool are used for async redis connections
 }

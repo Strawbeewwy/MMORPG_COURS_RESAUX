@@ -1,11 +1,18 @@
 use bevy::prelude::*;
 
+/*
+This resource is used to store the username and password
+of the user that wants to log in.
+*/
 #[derive(Resource, Default)]
 pub struct LoginForm {
     pub username: String,
     pub password: String,
 }
 
+/*
+This resource is used to store the currently active login field.
+*/
 #[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActiveLoginField {
     #[default]
