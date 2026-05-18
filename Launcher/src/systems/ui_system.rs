@@ -474,11 +474,13 @@ fn login_status_message_and_color(login_status: &LoginStatus) -> (String, Color)
         ),
         LoginStatus::Success {
             player_id,
-            server_address,
+            server_ip,
+            server_port,
             zone,
+            username,
         } => (
             format!(
-                "Login accepted.\nPlayer ID: {player_id}\nServer: {server_address}\nZone: {zone}"
+                "Login accepted.\nPlayer ID: {player_id}\nServer: {server_ip}:{server_port}\nZone: {zone}\nUsername: {username}"
             ),
             Color::srgb(0.42, 1.0, 0.55),
         ),

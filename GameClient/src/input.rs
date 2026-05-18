@@ -2,11 +2,13 @@ use crate::net::gameplay_quic::{
     send_message, send_player_input, GameplayClient,
 };
 use bevy::prelude::*;
+use bevy::app::AppExit;
 use shared::protocol::ClientGameMessage;
 
 pub fn keyboard_input_system(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut gameplay_client: ResMut<GameplayClient>,
+    mut app_exit: MessageWriter<AppExit>,
 ) {
     if keyboard.just_pressed(KeyCode::KeyW) {
         send_player_input(&mut gameplay_client, 0.0, 1.0);
@@ -30,6 +32,7 @@ pub fn keyboard_input_system(
 
     if keyboard.just_pressed(KeyCode::Escape) {
         send_message(&mut gameplay_client, ClientGameMessage::LeaveGame);
+        app_exit.write(AppExit::Success);
     }
 
     if !keyboard.just_pressed(KeyCode::Escape) && keyboard.get_just_pressed().next().is_some() {

@@ -10,6 +10,7 @@ use crate::net::gatekeeper::login_to_gatekeeper;
 use crate::resources::network_resources::{
     LoginRequestMessage, LoginStatus, LoginTask, TokioRuntimeResource,
 };
+use crate::systems::launch_game_system::LaunchGameClientMessage;
 
 /*
 This plugin adds the systems as update so that they are run
@@ -77,34 +78,51 @@ pub fn start_login(
     let (sender, receiver) = oneshot::channel();
 
     //spawn the login task
-    tokio_runtime.runtime.spawn(async move {
-        let result = login_to_gatekeeper(&username, &password).await;
-        let _ = sender.send(result);
+    tokio_runtime.runtime.spawn({
+        let username = username.clone();
+
+        async move {
+            let result = login_to_gatekeeper(&username, &password).await;
+            let _ = sender.send(result);
+        }
     });
     //store the oneshot channel in the login task so polling can acess it everyframe
     login_task.receiver = Some(receiver);
+    login_task.username = Some(username);
     *login_status = LoginStatus::LoggingIn;
 }
-
-fn poll_login_task(mut login_task: ResMut<LoginTask>, mut login_status: ResMut<LoginStatus>) {
-   //check if we have a task to poll
+fn poll_login_task(
+    mut login_task: ResMut<LoginTask>,
+    mut login_status: ResMut<LoginStatus>,
+    mut launch_messages: MessageWriter<LaunchGameClientMessage>,
+) {
+    //check if we have a task to poll
     let Some(receiver) = login_task.receiver.as_mut() else {
         return;
     };
-    /*
-    we check every frame if we received a response
-    if so we process it.
-    */
+
     match receiver.try_recv() {
         Ok(result) => {
             login_task.receiver = None;
 
             match result {
                 Ok(response) => {
+                    let username = login_task.username.clone().unwrap_or_default();
+
+                    launch_messages.write(LaunchGameClientMessage {
+                        player_id: response.player_id.clone(),
+                        username: username.clone(),
+                        server_ip: response.server.ip.clone(),
+                        server_port: response.server.port,
+                        zone: response.server.zone.clone(),
+                    });
+
                     *login_status = LoginStatus::Success {
                         player_id: response.player_id,
-                        server_address: format!("{}:{}", response.server.ip, response.server.port),
+                        server_ip: response.server.ip,
+                        server_port: response.server.port,
                         zone: response.server.zone,
+                        username,
                     };
                 }
                 Err(error) => {
