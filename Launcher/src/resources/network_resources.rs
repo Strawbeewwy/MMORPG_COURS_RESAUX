@@ -32,8 +32,10 @@ pub enum LoginStatus {
     LoggingIn,
     Success {
         player_id: String,
-        server_address: String,
+        server_ip: String,
+        server_port: u16,
         zone: String,
+        username: String,
     },
     Error {
         message: String,
@@ -58,6 +60,7 @@ while the sender is the gatekeeper.
 #[derive(Resource, Default)]
 pub struct LoginTask {
     pub receiver: Option<oneshot::Receiver<anyhow::Result<LoginHttpResponse>>>,
+    pub username: Option<String>,
 }
 
 /*

@@ -2800,6 +2800,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "game_client"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bytes",
+ "shared",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "gameserver"
 version = "0.1.0"
 dependencies = [
@@ -3648,6 +3661,7 @@ dependencies = [
  "serde_json",
  "shared",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
