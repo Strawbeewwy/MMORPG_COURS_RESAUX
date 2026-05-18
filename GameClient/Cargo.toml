@@ -7,9 +7,7 @@ edition = "2021"
 anyhow = "1"
 bevy = { version = "0.18.1", default-features = true }
 bytes = "1"
-reqwest = { version = "0.12.28", features = ["json"] }
 shared = { path = "../Shared" }
-tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
 uuid = { version = "1", features = ["v4"] }

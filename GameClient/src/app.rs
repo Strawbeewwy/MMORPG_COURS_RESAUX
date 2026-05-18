@@ -1,5 +1,6 @@
 use crate::config::ClientConfig;
 use crate::state::LocalPlayerState;
+use crate::input::keyboard_input_system;
 use crate::net::gameplay_quic::{
     connect_to_game_server, poll_gameplay_events,
 };
@@ -33,6 +34,7 @@ pub fn run() {
             Update,
             (
                 poll_gameplay_events,
+                keyboard_input_system,
             ),
         )
         .run();
