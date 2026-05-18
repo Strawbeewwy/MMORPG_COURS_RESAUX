@@ -1,2 +1,2 @@
-mod login;
-mod gameplay_quic;
+pub mod login;
+pub mod gameplay_quic;
