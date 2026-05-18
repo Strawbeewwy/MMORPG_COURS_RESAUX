@@ -1,4 +1,5 @@
 use crate::config::ClientConfig;
+use crate::state::LocalPlayerState;
 use bevy::prelude::*;
 
 pub fn run() {
@@ -23,6 +24,7 @@ pub fn run() {
             ..default()
         }))
         .insert_resource(config)
+        .insert_resource(LocalPlayerState::default())
         .add_systems(Startup, setup_camera)
         .run();
 }
