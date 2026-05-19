@@ -1,5 +1,5 @@
 use crate::config::ServerConfig;
-use crate::net::gameplay_quic::SharedPlayerRegistry;
+use crate::net::network_event::SharedPlayerRegistry;
 use bevy::prelude::*;
 use shared::protocol::transport::codec;
 use shared::protocol::Heartbeat;
