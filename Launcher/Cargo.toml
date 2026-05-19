@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = "0.18.1"
-tokio = { version = "1", features = ["full"] }
-anyhow = "1"
-reqwest = { version = "0.12", features = ["json"] }
-shared = { path = "../Shared" }
-tracing = "0.1.44"
+bevy = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+reqwest = { version = "0.13.3", features = ["json"] }
+shared = { workspace = true }
+tracing = { workspace = true }

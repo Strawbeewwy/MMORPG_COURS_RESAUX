@@ -3,8 +3,8 @@ use crate::state::LocalPlayerState;
 use bevy::prelude::*;
 use bytes::Bytes;
 use shared::protocol::transport::codec;
-use shared::protocol::transport::game_sockets_quic::QuicBackend;
-use shared::protocol::transport::gamesockets_lib::{
+use shared::game_sockets::protocols::QuicBackend;
+use shared::game_sockets::{
     GameConnection, GameNetworkEvent, GamePeer, GameStream, GameStreamReliability,
 };
 use shared::protocol::{ClientGameMessage, ServerGameMessage};

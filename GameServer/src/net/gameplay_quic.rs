@@ -8,8 +8,8 @@ use shared::protocol::{
 };
 use shared::config::GAME_PROTOCOL_VERSION;
 use shared::protocol::transport::codec;
-use shared::protocol::transport::game_sockets_quic::QuicBackend;
-use shared::protocol::transport::gamesockets_lib::{
+use shared::game_sockets::protocols::QuicBackend;
+use shared::game_sockets::{
     GameConnection, GameNetworkEvent, GamePeer, GameStream, GameStreamReliability,
 };
 use std::collections::HashMap;
@@ -366,7 +366,7 @@ fn send_response(
     if let Err(error) = gameplay_peer.peer.send(&connection, &stream, payload.into()) {
         tracing::error!(
             "failed to send response to player {}: {}",
-            player_id
+            connection.connection_id,
             error
         );
     }
