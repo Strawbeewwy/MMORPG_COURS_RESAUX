@@ -1,8 +1,4 @@
-/*
-login_system contains the systems that are used
-It also polls the systems task to check if the systems process
-is complete.
-*/
+
 use bevy::prelude::*;
 use tokio::sync::oneshot;
 

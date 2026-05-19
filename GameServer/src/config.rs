@@ -1,13 +1,10 @@
 use bevy::prelude::Resource;
 use std::env;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{SocketAddr};
 use uuid::Uuid;
-
-const DEFAULT_DS_IP: &str = "127.0.0.1";
-const DEFAULT_DS_PORT: u16 = 7001;
-const DEFAULT_ZONE: &str = "zone_A";
-const DEFAULT_MAX_PLAYERS: usize = 32;
-const DEFAULT_ORCH_ADDR: &str = "127.0.0.1:6000";
+use shared::config::{DEFAULT_ORCHESTRATOR_PORT, DEFAULT_ORCHESTRATOR_HOST,
+DEFAULT_MAX_PLAYERS,DEFAULT_ZONE,DEFAULT_FIRST_DS_PORT,DEFAULT_DS_IP,
+};
 
 #[derive(Debug, Clone, Resource)]
 pub struct ServerConfig {
@@ -28,7 +25,7 @@ impl ServerConfig {
         let port = env::var("DS_PORT")
             .ok()
             .and_then(|value| value.parse().ok())
-            .unwrap_or(DEFAULT_DS_PORT);
+            .unwrap_or(DEFAULT_FIRST_DS_PORT);
 
         let zone = env::var("ZONE").unwrap_or_else(|_| DEFAULT_ZONE.to_string());
 
@@ -38,7 +35,7 @@ impl ServerConfig {
             .unwrap_or(DEFAULT_MAX_PLAYERS);
 
         let orchestrator_addr = env::var("ORCH_ADDR")
-            .unwrap_or_else(|_| DEFAULT_ORCH_ADDR.to_string())
+            .unwrap_or_else(|_| format!("{DEFAULT_ORCHESTRATOR_HOST}:{DEFAULT_ORCHESTRATOR_PORT}"))
             .parse()
             .expect("invalid ORCH_ADDR");
 
@@ -50,9 +47,5 @@ impl ServerConfig {
             max_players,
             orchestrator_addr,
         }
-    }
-
-    pub fn quic_bind_addr(&self) -> SocketAddr {
-        SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), self.port)
     }
 }

@@ -1,10 +1,10 @@
-use crate::config::ClientConfig;
+use crate::config::{ClientConfig, DEFAULT_RECONNECT_INTERVAL};
 use crate::state::LocalPlayerState;
 use bevy::prelude::*;
 use bytes::Bytes;
 use shared::protocol::transport::codec;
-use shared::protocol::transport::game_sockets_quic::QuicBackend;
-use shared::protocol::transport::gamesockets_lib::{
+use shared::game_sockets::protocols::QuicBackend;
+use shared::game_sockets::{
     GameConnection, GameNetworkEvent, GamePeer, GameStream, GameStreamReliability,
 };
 use shared::protocol::{ClientGameMessage, ServerGameMessage};
@@ -27,7 +27,7 @@ impl Default for GameplayClient {
             connection: None,
             reliable_stream: None,
             joined: false,
-            reconnect_timer: Timer::new(Duration::from_secs(2), TimerMode::Repeating),
+            reconnect_timer: Timer::new(Duration::from_secs(DEFAULT_RECONNECT_INTERVAL), TimerMode::Repeating),
         }
     }
 }
@@ -325,7 +325,7 @@ fn send_join_game(config: &ClientConfig, gameplay_client: &mut GameplayClient) {
     send_message(
         gameplay_client,
         ClientGameMessage::JoinGame {
-            protocol_version: GAME_PROTOCOL_VERSION,
+            protocol_version: GAME_PROTOCOL_VERSION.to_string(),
             session_token: config.player_id.clone(),
             username: config.username.clone(),
         },

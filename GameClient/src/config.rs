@@ -2,6 +2,8 @@ use anyhow::{Context, Result};
 use bevy::prelude::*;
 use std::env;
 
+pub const DEFAULT_RECONNECT_INTERVAL: u64 = 5;
+
 #[derive(Resource, Debug, Clone)]
 pub struct ClientConfig {
     pub player_id: String,

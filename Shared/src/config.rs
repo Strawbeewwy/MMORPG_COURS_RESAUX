@@ -5,7 +5,7 @@ pub const GATEKEEPER_SERVER_NAME: &str = "localhost";
 pub const LAUNCHER_VERSION: &str = "0.1.0";
 
 pub const GAME_MESSAGE_SIZE_LIMIT: usize = 64 * 1024;
-pub const GAME_PROTOCOL_VERSION: u16 = 1;
+pub const GAME_PROTOCOL_VERSION: &str = "0.1.0";
 
 pub const DEFAULT_ZONE: &str = "default";
 
@@ -19,7 +19,11 @@ pub const DEFAULT_SERVER_TTL_SECONDS: usize = 10;
 pub const DEFAULT_SCALER_INTERVAL_SECONDS: u64 = 2;
 
 pub const DEFAULT_FIRST_DS_PORT: u16 = 9000;
+
+pub const DEFAULT_DS_IP: &str = "127.0.0.1";
 pub const DEFAULT_DS_BINARY: &str = "GameServer";
+
+pub const DEFAULT_DS_TICK_RATE: u64 = 20;
 
 pub const DEFAULT_MAX_PLAYERS: usize = 100;
 

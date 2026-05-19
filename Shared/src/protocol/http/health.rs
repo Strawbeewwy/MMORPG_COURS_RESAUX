@@ -1,8 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /*
-response to the health check from the gatekeeper to the
-orchestrator
+response to the health check
 */
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HealthResponse {

@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1"
-redis = { version = "1.2.1", features = ["tokio-comp"] }
-shared = { path = "../Shared" }
-tokio = { version = "1", features = ["full"] }
-tracing = "0.1"
-tracing-subscriber = "0.3"
+anyhow = { workspace = true }
+redis = { workspace = true }
+shared = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

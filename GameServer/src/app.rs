@@ -11,6 +11,7 @@ use bevy::prelude::*;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
+use shared::config::DEFAULT_DS_TICK_RATE;
 
 pub fn run() {
     tracing_subscriber::fmt()
@@ -19,7 +20,10 @@ pub fn run() {
         .init();
 
     App::new()
-        .add_plugins(MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_millis(16))))
+        .add_plugins(MinimalPlugins
+            .set(ScheduleRunnerPlugin::run_loop({
+                Duration::from_millis(1000/DEFAULT_DS_TICK_RATE)
+            })))
         .insert_resource(ServerConfig::from_env())
         .insert_resource(SharedPlayerRegistry {
             inner: Arc::new(Mutex::new(PlayerRegistry::default())),

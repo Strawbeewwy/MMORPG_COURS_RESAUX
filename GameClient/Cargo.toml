@@ -3,9 +3,10 @@ name = "gameclient"
 version = "0.1.0"
 edition = "2021"
 
+
 [dependencies]
-anyhow = "1"
-bevy = { version = "0.18.1", default-features = true }
-bytes = "1"
-shared = { path = "../Shared" }
-tracing = "0.1"
+anyhow = { workspace = true }
+bevy = { workspace = true, default-features = true }
+bytes = { workspace = true }
+shared = { workspace = true }
+tracing = { workspace = true }

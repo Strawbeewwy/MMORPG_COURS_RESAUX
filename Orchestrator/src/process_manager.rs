@@ -54,7 +54,7 @@ impl ProcessManager {
         self.children.lock().await.len()
     }
     pub async fn reap_finished_processes(&self) {
-        //lock the children vector so we dont add new ones while we are removing old ones
+        //lock the children vector so we don't add new ones while we are removing old ones
         let mut children = self.children.lock().await;
 
         //retain only the children that are still running
