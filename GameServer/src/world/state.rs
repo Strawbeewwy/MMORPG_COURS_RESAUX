@@ -1,12 +1,11 @@
 use crate::world::player::PlayerInfo;
 use bevy::prelude::Resource;
-use shared::protocol::{PlayerSnapshot, WorldSnapshot, ZoneId};
+use shared::protocol::{PlayerSnapshot, WorldSnapshot, ZoneId, PlayerId};
 use std::collections::HashMap;
-use uuid::Uuid;
 
 #[derive(Debug, Default, Resource)]
 pub struct PlayerRegistry {
-    pub players: HashMap<Uuid, PlayerInfo>,
+    pub players: HashMap<PlayerId, PlayerInfo>,
     pub server_tick: u64,
 }
 

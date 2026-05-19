@@ -4,13 +4,13 @@ use crate::world::state::PlayerRegistry;
 use bevy::prelude::*;
 use bytes::Bytes;
 use shared::protocol::{
-    ClientGameMessage, NetVec2, ServerGameMessage,
+    ClientGameMessage, NetVec2, PlayerId, ServerGameMessage,
 };
+use shared::config::GAME_PROTOCOL_VERSION;
 use shared::protocol::transport::codec;
 use shared::protocol::transport::game_sockets_quic::QuicBackend;
 use shared::protocol::transport::gamesockets_lib::{
-    GameConnection, GameNetworkEvent, GamePeer, GameSocketError, GameStream,
-    GameStreamReliability,
+    GameConnection, GameNetworkEvent, GamePeer, GameStream, GameStreamReliability,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -26,6 +26,7 @@ pub struct SharedPlayerRegistry {
 pub struct GameplayPeer {
     pub peer: GamePeer,
     pub reliable_streams: HashMap<GameConnection, GameStream>,
+    pub connection_players: HashMap<GameConnection, PlayerId>,
 }
 
 pub fn start_gameplay_quic_server(mut commands: Commands, config: Res<ServerConfig>) {
@@ -44,6 +45,7 @@ pub fn start_gameplay_quic_server(mut commands: Commands, config: Res<ServerConf
     commands.insert_resource(GameplayPeer {
         peer,
         reliable_streams: HashMap::new(),
+        connection_players: HashMap::new(),
     });
 }
 
@@ -91,6 +93,12 @@ fn handle_gameplay_event(
             tracing::info!("client disconnected: {}", connection.connection_id);
 
             gameplay_peer.reliable_streams.remove(&connection);
+
+            if let Some(player_id) = gameplay_peer.connection_players.remove(&connection) {
+                if let Ok(mut registry) = registry.inner.try_lock() {
+                    registry.players.remove(&player_id);
+                }
+            }
         }
         GameNetworkEvent::StreamCreated(connection, stream) => {
             tracing::info!(
@@ -161,7 +169,7 @@ fn handle_gameplay_message(
         }
     };
 
-    let response = handle_client_message(config, registry, connection, request);
+    let response = handle_client_message(config, registry,gameplay_peer, connection, request);
 
     send_response(gameplay_peer, connection, stream, &response);
 }
@@ -169,6 +177,7 @@ fn handle_gameplay_message(
 fn handle_client_message(
     config: &ServerConfig,
     registry: &SharedPlayerRegistry,
+    gameplay_peer: &mut GameplayPeer,
     connection: GameConnection,
     message: ClientGameMessage,
 ) -> ServerGameMessage {
@@ -179,36 +188,37 @@ fn handle_client_message(
             username,
         } => handle_join_game(
             config,
+            gameplay_peer,
             registry,
             connection,
             protocol_version,
             session_token,
             username,
         ),
-        ClientGameMessage::LeaveGame => handle_leave_game(registry, connection),
+        ClientGameMessage::LeaveGame => handle_leave_game(gameplay_peer, registry, connection),
         ClientGameMessage::Heartbeat => ServerGameMessage::HeartbeatAck,
         ClientGameMessage::PlayerInput {
             movement_x,
             movement_y,
-        } => handle_player_input(registry, connection, movement_x, movement_y),
+        } => handle_player_input(gameplay_peer, registry, connection, movement_x, movement_y),
     }
 }
 
 fn handle_join_game(
     config: &ServerConfig,
+    gameplay_peer: &mut GameplayPeer,
     registry: &SharedPlayerRegistry,
     connection: GameConnection,
-    protocol_version: u16,
+    protocol_version: String,
     session_token: String,
     username: String,
 ) -> ServerGameMessage {
-    const SUPPORTED_PROTOCOL_VERSION: u16 = 1;
 
-    if protocol_version != SUPPORTED_PROTOCOL_VERSION {
+    if GAME_PROTOCOL_VERSION != protocol_version {
         return ServerGameMessage::JoinRejected {
             reason: format!(
                 "unsupported_protocol_version: expected {}, got {}",
-                SUPPORTED_PROTOCOL_VERSION, protocol_version
+                GAME_PROTOCOL_VERSION, protocol_version
             ),
         };
     }
@@ -231,15 +241,19 @@ fn handle_join_game(
         };
     };
 
-    if let Some(existing_player) = registry.players.get(&connection.connection_id) {
-        let snapshot = registry.snapshot(config.zone.clone());
+    if let Some(player_id) = gameplay_peer.connection_players.get(&connection) {
+        if let Some(existing_player) = registry.players.get(player_id) {
+            let snapshot = registry.snapshot(config.zone.clone());
 
-        return ServerGameMessage::JoinAccepted {
-            player_id: existing_player.player_id.clone(),
-            player: existing_player.public_info(),
-            snapshot,
-            message: "already_joined".to_string(),
-        };
+            return ServerGameMessage::JoinAccepted {
+                player_id: existing_player.player_id.clone(),
+                player: existing_player.public_info(),
+                snapshot,
+                message: "already_joined".to_string(),
+            };
+        }
+
+        gameplay_peer.connection_players.remove(&connection);
     }
 
     if registry.is_full(config.max_players) {
@@ -248,29 +262,30 @@ fn handle_join_game(
         };
     }
 
+    let player_id = Uuid::new_v4().to_string();
+
     let player = PlayerInfo {
-        player_id: Uuid::new_v4().to_string(),
+        player_id: player_id.clone(),
         username: username.trim().to_string(),
-        connection,
         zone: config.zone.clone(),
         position: NetVec2::ZERO,
         velocity: NetVec2::ZERO,
     };
 
-    let player_id = player.player_id.clone();
     let public_player = player.public_info();
 
-    registry.players.insert(connection.connection_id, player);
+    registry.players.insert(player_id.clone(), player);
+    gameplay_peer.connection_players.insert(connection, player_id.clone());
 
     let snapshot = registry.snapshot(config.zone.clone());
 
     tracing::info!(
-        "player joined: player_id={} connection={} players={}/{}",
-        player_id,
-        connection.connection_id,
-        registry.player_count(),
-        config.max_players
-    );
+            "player joined: player_id={} connection={} players={}/{}",
+            player_id,
+            connection.connection_id,
+            registry.player_count(),
+            config.max_players
+        );
 
     ServerGameMessage::JoinAccepted {
         player_id,
@@ -280,17 +295,21 @@ fn handle_join_game(
     }
 }
 
+
 fn handle_leave_game(
+    gameplay_peer: &mut GameplayPeer,
     registry: &SharedPlayerRegistry,
     connection: GameConnection,
 ) -> ServerGameMessage {
-    if let Ok(mut registry) = registry.inner.try_lock() {
-        if let Some(player) = registry.players.remove(&connection.connection_id) {
-            tracing::info!(
-                "player left: player_id={} connection={}",
-                player.player_id,
-                connection.connection_id
-            );
+    if let Some(player_id) = gameplay_peer.connection_players.remove(&connection) {
+        if let Ok(mut registry) = registry.inner.try_lock() {
+            if let Some(player) = registry.players.remove(&player_id) {
+                tracing::info!(
+                        "player left: player_id={} connection={}",
+                        player.player_id,
+                        connection.connection_id
+                    );
+            }
         }
     }
 
@@ -298,18 +317,25 @@ fn handle_leave_game(
 }
 
 fn handle_player_input(
+    gameplay_peer: &GameplayPeer,
     registry: &SharedPlayerRegistry,
     connection: GameConnection,
     movement_x: f32,
     movement_y: f32,
 ) -> ServerGameMessage {
+    let Some(player_id) = gameplay_peer.connection_players.get(&connection) else {
+        return ServerGameMessage::JoinRejected {
+            reason: "not_joined".to_string(),
+        };
+    };
+
     let Ok(mut registry) = registry.inner.try_lock() else {
         return ServerGameMessage::JoinRejected {
             reason: "server_busy".to_string(),
         };
     };
 
-    let Some(player) = registry.players.get_mut(&connection.connection_id) else {
+    let Some(player) = registry.players.get_mut(player_id) else {
         return ServerGameMessage::JoinRejected {
             reason: "not_joined".to_string(),
         };
@@ -339,8 +365,8 @@ fn send_response(
 
     if let Err(error) = gameplay_peer.peer.send(&connection, &stream, payload.into()) {
         tracing::error!(
-            "failed to send response to connection {}: {}",
-            connection.connection_id,
+            "failed to send response to player {}: {}",
+            player_id
             error
         );
     }

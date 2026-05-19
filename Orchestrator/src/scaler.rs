@@ -30,19 +30,19 @@ pub async fn scaler_loop(
                 error!("failed to count available servers: {err:#}");
                 0
             });
+        //since we might be starting a server, but it might not be ready yet,
+        // we need to count them as well.
         let running_processes = process_manager.running_process_count().await;
-        let effective_capacity = available + running_processes;
 
         info!(
-            "available servers: {}, running dedicated server processes: {}, effective capacity: {}, required hot servers: {}",
+            "available servers: {}, running dedicated server processes: {}, required hot servers: {}",
             available,
             running_processes,
-            effective_capacity,
             config.hot_servers_min
         );
 
-        if effective_capacity < config.hot_servers_min {
-            let to_spawn = config.hot_servers_min - effective_capacity;
+        if running_processes < config.hot_servers_min {
+            let to_spawn = config.hot_servers_min - running_processes;
 
             for _ in 0..to_spawn {
                 //spawn servers as much as to_spawn needs

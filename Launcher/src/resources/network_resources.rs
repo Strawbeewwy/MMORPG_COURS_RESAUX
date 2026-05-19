@@ -64,8 +64,8 @@ pub struct LoginTask {
 }
 
 /*
-This declares a message sent to the login system so it
-what the username and password to login with. Since the login form
+This declares a message sent to the login system, so it
+what the username and password to log in with. Since the login form
 is a ressouce and can be modified whenever, we make sure to send
 this message so that the login system uses the latest information
 and not a resource that might be outdated.

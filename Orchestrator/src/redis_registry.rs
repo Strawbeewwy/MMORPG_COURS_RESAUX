@@ -39,7 +39,7 @@ impl RedisRegistry {
         let status = heartbeat.status();
 
         /*
-        a redis piepline so we can send many commands to redis
+        a redis pipeline so we can send many commands to redis
         */
         let _: () = redis::pipe()
             .atomic()
@@ -69,7 +69,7 @@ impl RedisRegistry {
             .context("failed to connect to Redis")?;
 
         /*
-        since we will check all servers the key is the get all key
+        since we will check all servers, the key is the get-all key
         */
         let keys: Vec<String> = connection
             .keys("server:*")

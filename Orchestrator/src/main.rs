@@ -39,7 +39,7 @@ async fn main() -> Result<()> {
     let process_manager = Arc::new(ProcessManager::new(config.first_ds_port));
 
     /*
-    Task to listen to servers heartbeat messages
+    Task to listen to server's heartbeat messages
     using tokio to make it asynchronous
     */
     let heartbeat_task = tokio::spawn(heartbeat::heartbeat_listener(
@@ -57,8 +57,8 @@ async fn main() -> Result<()> {
     ));
 
     /*
-    since 2 tasks are running at the same time and forever
-    we dont want them to crash, so if any of them crashes
+    since 2 tasks are running at the same time and forever,
+    we don't want them to crash, so if any of them crashes,
     we will know and act accordingly
     */
     tokio::select! {

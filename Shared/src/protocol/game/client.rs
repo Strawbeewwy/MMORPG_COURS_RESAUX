@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClientGameMessage {
     JoinGame {///when the player joins the game
-        protocol_version: u16,
+        protocol_version: String,
         session_token: String,
         username: Username,
     },

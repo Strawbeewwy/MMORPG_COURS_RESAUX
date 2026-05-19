@@ -11,8 +11,8 @@ pub async fn heartbeat_listener(
     config: Arc<OrchestratorConfig>,
     registry: Arc<RedisRegistry>,
 ) -> Result<()> {
-    /*we use udp for the heatbeat, since we just need
-    acknoledgement that the server is alive all the info are
+    /*we use udp for the heartbeat, since we just need
+    acknowledgement that the server is alive, all the infos are
     just flourish
     */
     let socket = UdpSocket::bind(config.orch_addr)
@@ -25,7 +25,7 @@ pub async fn heartbeat_listener(
     //main loop of the listener
     loop {
         /*
-        when we receive a packet we put it in the buffer and then
+        when we receive a packet, we put it in the buffer and then
         create a tuple with the length of the packet and the source ip address
         */
         let (len, source) = socket
