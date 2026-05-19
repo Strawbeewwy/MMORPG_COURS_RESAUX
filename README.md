@@ -1,6 +1,6 @@
 # MMORPG_COURS_RESAUX
 mmorpg fait dans le cadre du cours programmation resaux avancee en jeux video
-
+par : Nathanael Tremblay - TREN19089806
 
 pour lancer le tout il suffit de lancer le script powershell avec
 `.\run_all.ps1` dans le terminal
