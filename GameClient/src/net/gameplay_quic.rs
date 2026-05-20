@@ -1,14 +1,15 @@
 use crate::config::{ClientConfig, DEFAULT_RECONNECT_INTERVAL};
-use crate::state::LocalPlayerState;
+use crate::net::gameplay_message::handle_server_message;
+use crate::net::login::send_join_game;
+use crate::world::state::LocalWorldState;
 use bevy::prelude::*;
 use bytes::Bytes;
-use shared::protocol::transport::codec;
 use shared::game_sockets::protocols::QuicBackend;
 use shared::game_sockets::{
     GameConnection, GameNetworkEvent, GamePeer, GameStream, GameStreamReliability,
 };
+use shared::protocol::transport::codec;
 use shared::protocol::{ClientGameMessage, ServerGameMessage};
-use shared::config::GAME_PROTOCOL_VERSION;
 use std::time::Duration;
 
 #[derive(Resource)]
@@ -34,7 +35,7 @@ impl Default for GameplayClient {
 pub fn connect_to_game_server(
     config: Res<ClientConfig>,
     mut gameplay_client: ResMut<GameplayClient>,
-    mut player_state: ResMut<LocalPlayerState>,
+    mut world_state: ResMut<LocalWorldState>,
 ) {
     tracing::info!(
         "starting GameClient for username={} player_id={} server={} zone={}",
@@ -44,12 +45,11 @@ pub fn connect_to_game_server(
         config.zone
     );
 
-    player_state.player_id = Some(config.player_id.clone());
-    player_state.zone = Some(config.zone.clone());
+    world_state.player_id = Some(config.player_id.clone());
+    world_state.zone = Some(config.zone.clone());
 
     try_connect_to_game_server(&config, &mut gameplay_client);
 }
-
 fn try_connect_to_game_server(
     config: &ClientConfig,
     gameplay_client: &mut GameplayClient,
@@ -111,7 +111,7 @@ pub fn retry_connection_if_needed(
 pub fn poll_gameplay_events(
     config: Res<ClientConfig>,
     mut gameplay_client: ResMut<GameplayClient>,
-    mut player_state: ResMut<LocalPlayerState>,
+    mut world_state: ResMut<LocalWorldState>,
 ) {
     loop {
         let event = {
@@ -139,14 +139,14 @@ pub fn poll_gameplay_events(
             }
         };
 
-        handle_gameplay_event(&config, &mut gameplay_client, &mut player_state, event);
+        handle_gameplay_event(&config, &mut gameplay_client, &mut world_state, event);
     }
 }
 
 fn handle_gameplay_event(
     config: &ClientConfig,
     gameplay_client: &mut GameplayClient,
-    player_state: &mut LocalPlayerState,
+    world_state: &mut LocalWorldState,
     event: GameNetworkEvent,
 ) {
     match event {
@@ -215,7 +215,7 @@ fn handle_gameplay_event(
                 data.len()
             );
 
-            handle_server_message(gameplay_client, player_state, &data);
+            decode_and_handle_server_message(gameplay_client, world_state, &data);
         }
 
         GameNetworkEvent::Error { connection, inner } => {
@@ -234,9 +234,9 @@ fn handle_gameplay_event(
     }
 }
 
-fn handle_server_message(
+fn decode_and_handle_server_message(
     gameplay_client: &mut GameplayClient,
-    player_state: &mut LocalPlayerState,
+    world_state: &mut LocalWorldState,
     data: &[u8],
 ) {
     let message = match codec::decode::<ServerGameMessage>(data) {
@@ -247,103 +247,7 @@ fn handle_server_message(
         }
     };
 
-    match message {
-        ServerGameMessage::JoinAccepted {
-            player_id,
-            player,
-            snapshot,
-            message,
-        } => {
-            gameplay_client.joined = true;
-            player_state.player_id = Some(player_id.clone());
-            player_state.zone = Some(snapshot.zone.clone());
-
-            tracing::info!(
-                "join accepted: player_id={} username={} message={} zone={} players={}",
-                player_id,
-                player.username,
-                message,
-                snapshot.zone,
-                snapshot.players.len()
-            );
-        }
-
-        ServerGameMessage::JoinRejected { reason } => {
-            tracing::warn!("join rejected: {}", reason);
-        }
-
-        ServerGameMessage::HeartbeatAck => {
-            tracing::info!("heartbeat ack");
-        }
-
-        ServerGameMessage::InputAccepted {
-            movement_x,
-            movement_y,
-        } => {
-            player_state.last_movement_x = movement_x;
-            player_state.last_movement_y = movement_y;
-
-            tracing::info!("input accepted: x={} y={}", movement_x, movement_y);
-        }
-
-        ServerGameMessage::WorldSnapshot { snapshot } => {
-            player_state.zone = Some(snapshot.zone.clone());
-
-            tracing::info!(
-                "world snapshot: zone={} players={}",
-                snapshot.zone,
-                snapshot.players.len()
-            );
-        }
-
-        ServerGameMessage::PlayerJoined { player } => {
-            tracing::info!(
-                "player joined: id={} username={}",
-                player.player_id,
-                player.username
-            );
-        }
-
-        ServerGameMessage::PlayerLeft { player_id } => {
-            tracing::info!("player left: {}", player_id);
-        }
-
-        ServerGameMessage::Goodbye => {
-            tracing::info!("server said goodbye");
-            gameplay_client.joined = false;
-        }
-    }
-}
-
-fn send_join_game(config: &ClientConfig, gameplay_client: &mut GameplayClient) {
-    tracing::info!(
-        "sending JoinGame username={} session_token={}",
-        config.username,
-        config.player_id
-    );
-
-    send_message(
-        gameplay_client,
-        ClientGameMessage::JoinGame {
-            protocol_version: GAME_PROTOCOL_VERSION.to_string(),
-            session_token: config.player_id.clone(),
-            username: config.username.clone(),
-        },
-    );
-}
-
-pub fn send_player_input(
-    gameplay_client: &mut GameplayClient,
-    movement_x: f32,
-    movement_y: f32,
-) {
-    send_message(
-        gameplay_client,
-        ClientGameMessage::PlayerInput {
-            movement_x,
-            movement_y,
-        },
-    );
+    handle_server_message(gameplay_client, world_state, message);
 }
 
 pub fn send_message(

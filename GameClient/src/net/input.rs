@@ -1,6 +1,7 @@
 use crate::net::gameplay_quic::{
-    send_message, send_player_input, GameplayClient,
+    send_message, GameplayClient
 };
+use crate::world::state::LocalWorldState;
 use bevy::prelude::*;
 use bevy::app::AppExit;
 use shared::protocol::ClientGameMessage;
@@ -38,4 +39,29 @@ pub fn keyboard_input_system(
     if !keyboard.just_pressed(KeyCode::Escape) && keyboard.get_just_pressed().next().is_some() {
         send_message(&mut gameplay_client, ClientGameMessage::Heartbeat);
     }
+}
+
+pub fn send_player_input(
+    gameplay_client: &mut GameplayClient,
+    movement_x: f32,
+    movement_y: f32,
+) {
+    send_message(
+        gameplay_client,
+        ClientGameMessage::PlayerInput {
+            movement_x,
+            movement_y,
+        },
+    );
+}
+
+pub fn handle_input_accepted(
+    world_state: &mut LocalWorldState,
+    movement_x: f32,
+    movement_y: f32,
+) {
+    world_state.last_movement_x = movement_x;
+    world_state.last_movement_y = movement_y;
+
+    tracing::info!("input accepted: x={} y={}", movement_x, movement_y);
 }

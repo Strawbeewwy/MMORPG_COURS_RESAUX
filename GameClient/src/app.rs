@@ -1,10 +1,11 @@
 use crate::config::ClientConfig;
-use crate::state::LocalPlayerState;
-use crate::input::keyboard_input_system;
+use crate::world::state::LocalWorldState;
+use crate::net::input::keyboard_input_system;
 use crate::net::gameplay_quic::{
     connect_to_game_server, poll_gameplay_events,
     GameplayClient,retry_connection_if_needed
 };
+use crate::render::entity_renderer::render_entities;
 use bevy::prelude::*;
 
 pub fn run() {
@@ -27,7 +28,7 @@ pub fn run() {
             ..default()
         }))
         .insert_resource(config)
-        .insert_resource(LocalPlayerState::default())
+        .insert_resource(LocalWorldState::default())
         .insert_resource(GameplayClient::default())
         .add_systems(Startup, (setup_camera, connect_to_game_server))
         .add_systems(
@@ -36,6 +37,7 @@ pub fn run() {
                 poll_gameplay_events,
                 retry_connection_if_needed,
                 keyboard_input_system,
+                render_entities,
             ),
         )
         .run();
