@@ -5,6 +5,7 @@ use crate::net::gameplay_quic::{
     connect_to_game_server, poll_gameplay_events,
     GameplayClient,retry_connection_if_needed
 };
+use crate::render::entity_renderer::render_entities;
 use bevy::prelude::*;
 
 pub fn run() {
@@ -36,6 +37,7 @@ pub fn run() {
                 poll_gameplay_events,
                 retry_connection_if_needed,
                 keyboard_input_system,
+                render_entities,
             ),
         )
         .run();

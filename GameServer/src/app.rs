@@ -1,9 +1,16 @@
 
 
 use crate::config::ServerConfig;
-use crate::net::network_event::{poll_network_events,start_quic_server, SharedPlayerRegistry};
-use crate::net::heartbeat::{bind_heartbeat_socket, send_heartbeat};
-use crate::world::state::{PlayerRegistry, update_players_registry};
+use crate::net::network_event::{
+    poll_network_events,start_quic_server,
+    SharedPlayerRegistry, broadcast_world_snapshots,
+};
+use crate::net::heartbeat::{
+    bind_heartbeat_socket, send_heartbeat
+};
+use crate::world::state::{
+    PlayerRegistry, update_players_registry
+};
 use bevy::app::ScheduleRunnerPlugin;
 use bevy::prelude::*;
 use std::sync::Arc;
@@ -26,12 +33,21 @@ pub fn run() {
         .insert_resource(SharedPlayerRegistry {
             inner: Arc::new(Mutex::new(PlayerRegistry::default())),
         })
-        .add_systems(Startup, {(
+        .add_systems(
+            Startup,
+            (
             bind_heartbeat_socket,
-            start_quic_server)})
-        .add_systems(Update, {(
-            poll_network_events,
-            send_heartbeat,
-            update_players_registry)})
+            start_quic_server)
+            )
+        .add_systems(
+            Update,
+            (
+                poll_network_events,//get player input
+                update_players_registry,//update player registry
+                broadcast_world_snapshots,//send updated world state
+                send_heartbeat,
+            )
+                .chain(),
+        )
         .run();
 }

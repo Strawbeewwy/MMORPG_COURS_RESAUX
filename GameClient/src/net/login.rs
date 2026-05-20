@@ -32,11 +32,8 @@ pub fn handle_join_accepted(
     gameplay_client.joined = true;
     world_state.player_id = Some(player_id.clone());
     world_state.zone = Some(snapshot.zone.clone());
-    world_state.players = snapshot
-        .players
-        .iter()
-        .map(|player| (player.player_id.clone(), player.clone()))
-        .collect();
+    world_state.set_players_from_snapshot(snapshot.players.clone());
+    world_state.rebuild_render_entities();
 
     tracing::info!(
         "join accepted: player_id={} username={} message={} zone={} players={}",
@@ -46,6 +43,7 @@ pub fn handle_join_accepted(
         snapshot.zone,
         snapshot.players.len()
     );
+
 }
 
 pub fn handle_join_rejected(reason: String) {

@@ -1,6 +1,7 @@
 use crate::config::ServerConfig;
 use crate::net::gameplay_message::handle_client_message;
 use crate::net::login::remove_player_for_connection;
+use crate::net::area_of_interest::DEFAULT_AREA_OF_INTEREST_RADIUS;
 use crate::world::state::PlayerRegistry;
 use bevy::prelude::*;
 use bytes::Bytes;
@@ -9,7 +10,9 @@ use shared::game_sockets::{
     GameConnection, GameNetworkEvent, GamePeer, GameStream, GameStreamReliability,
 };
 use shared::protocol::transport::codec;
-use shared::protocol::{ClientGameMessage, PlayerId, ServerGameMessage};
+use shared::protocol::{
+    ClientGameMessage, PlayerId, ServerGameMessage
+};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -154,17 +157,17 @@ fn handle_network_message(
                 reason: "invalid_message".to_string(),
             };
 
-            send_response(gameplay_peer, connection, stream, &response);
+            send_server_message(gameplay_peer, connection, stream, &response);
             return;
         }
     };
 
     let response = handle_client_message(config, registry, gameplay_peer, connection, request);
 
-    send_response(gameplay_peer, connection, stream, &response);
+    send_server_message(gameplay_peer, connection, stream, &response);
 }
 
-fn send_response(
+fn send_server_message(
     gameplay_peer: &GameplayPeer,
     connection: GameConnection,
     stream: GameStream,
@@ -184,5 +187,35 @@ fn send_response(
             connection.connection_id,
             error
         );
+    }
+}
+
+
+pub fn broadcast_world_snapshots(
+    config: Res<ServerConfig>,
+    gameplay_peer: Res<GameplayPeer>,
+    registry: Res<SharedPlayerRegistry>,
+) {
+    let Ok(registry) = registry.inner.try_lock() else {
+        tracing::warn!("could not lock player registry for world snapshot broadcast");
+        return;
+    };
+
+    for (connection, player_id) in gameplay_peer.connection_players.iter() {
+        let Some(stream) = gameplay_peer.reliable_streams.get(connection) else {
+            continue;
+        };
+
+        let Some(snapshot) = registry.snapshot_for_player(
+            config.zone.clone(),
+            player_id,
+            DEFAULT_AREA_OF_INTEREST_RADIUS,
+        ) else {
+            continue;
+        };
+
+        let message = ServerGameMessage::WorldSnapshot { snapshot };
+
+        send_server_message(&gameplay_peer, *connection, stream.clone(), &message);
     }
 }

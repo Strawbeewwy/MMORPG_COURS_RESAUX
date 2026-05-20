@@ -43,11 +43,9 @@ pub fn handle_server_message(
 
         ServerGameMessage::WorldSnapshot { snapshot } => {
             world_state.zone = Some(snapshot.zone.clone());
-            world_state.players = snapshot
-                .players
-                .iter()
-                .map(|player| (player.player_id.clone(), player.clone()))
-                .collect();
+            world_state.set_players_from_snapshot(snapshot.players.clone());
+
+            world_state.rebuild_render_entities();
 
             tracing::info!(
                 "world snapshot: zone={} players={}",
@@ -66,6 +64,7 @@ pub fn handle_server_message(
 
         ServerGameMessage::PlayerLeft { player_id } => {
             world_state.players.remove(&player_id);
+            world_state.rebuild_render_entities();
 
             tracing::info!("player left: {}", player_id);
         }

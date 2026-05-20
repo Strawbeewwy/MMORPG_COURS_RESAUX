@@ -193,21 +193,14 @@ fn handle_gameplay_event(
             }
         }
 
-        GameNetworkEvent::StreamCreated(connection, stream) => {
+        GameNetworkEvent::StreamClosed(connection, stream) => {
             tracing::info!(
-                "stream created: connection={} stream={}",
+                "stream closed: connection={} stream={}",
                 connection.connection_id,
                 stream.stream_id
             );
 
-            if stream.is_reliable() {
-                gameplay_client.connection = Some(connection);
-                gameplay_client.reliable_stream = Some(stream);
-
-                if !gameplay_client.joined {
-                    send_join_game(config, gameplay_client);
-                }
-            }
+            gameplay_client.reliable_stream = None;
         }
 
         GameNetworkEvent::Message {
@@ -255,37 +248,6 @@ fn decode_and_handle_server_message(
     };
 
     handle_server_message(gameplay_client, world_state, message);
-}
-
-fn send_join_game(config: &ClientConfig, gameplay_client: &mut GameplayClient) {
-    tracing::info!(
-        "sending JoinGame username={} session_token={}",
-        config.username,
-        config.player_id
-    );
-
-    send_message(
-        gameplay_client,
-        ClientGameMessage::JoinGame {
-            protocol_version: GAME_PROTOCOL_VERSION.to_string(),
-            session_token: config.player_id.clone(),
-            username: config.username.clone(),
-        },
-    );
-}
-
-pub fn send_player_input(
-    gameplay_client: &mut GameplayClient,
-    movement_x: f32,
-    movement_y: f32,
-) {
-    send_message(
-        gameplay_client,
-        ClientGameMessage::PlayerInput {
-            movement_x,
-            movement_y,
-        },
-    );
 }
 
 pub fn send_message(
