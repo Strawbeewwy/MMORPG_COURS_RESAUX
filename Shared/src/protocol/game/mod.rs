@@ -1,9 +1,9 @@
-mod client;
+mod client_message;
 mod common;
-mod server;
+mod server_message;
 
-pub use client::ClientGameMessage;
-pub use server::ServerGameMessage;
+pub use client_message::ClientGameMessage;
+pub use server_message::ServerGameMessage;
 pub use common::{
     EntityId, PlayerId, PlayerPublicInfo, PlayerSnapshot, Username, NetVec2, WorldSnapshot, ZoneId,
 };

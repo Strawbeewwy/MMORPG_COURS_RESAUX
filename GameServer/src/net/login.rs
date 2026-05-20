@@ -1,9 +1,15 @@
 use crate::config::ServerConfig;
-use crate::net::network_event::{GameplayPeer, SharedPlayerRegistry};
-use crate::world::player::PlayerInfo;
+use crate::net::network_event::{
+    GameplayPeer, SharedPlayerRegistry
+};
+use crate::world::player::{
+    PLAYER_DEFAULT_MOVE_SPEED, PlayerInfo,
+};
 use shared::config::GAME_PROTOCOL_VERSION;
 use shared::game_sockets::GameConnection;
-use shared::protocol::{NetVec2, ServerGameMessage};
+use shared::protocol::{
+    NetVec2, ServerGameMessage
+};
 use uuid::Uuid;
 
 pub fn handle_join_game(
@@ -71,6 +77,7 @@ pub fn handle_join_game(
         zone: config.zone.clone(),
         position: NetVec2::ZERO,
         velocity: NetVec2::ZERO,
+        movement_speed: PLAYER_DEFAULT_MOVE_SPEED,
     };
 
     let public_player = player.public_info();

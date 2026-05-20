@@ -1,8 +1,7 @@
 mod app;
 mod config;
-mod input;
 mod net;
-mod state;
+mod world;
 
 fn main() {
     app::run();
