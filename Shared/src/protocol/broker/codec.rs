@@ -35,17 +35,21 @@ pub enum BrokerMessage {
 
 pub fn encode_subscribe(client_id: ClientId, topic: Topic) -> Vec<u8> {
     let mut packet = Vec::with_capacity(1 + 4 + TOPIC_LEN);
+
     packet.push(TAG_SUBSCRIBE);
     packet.extend_from_slice(&client_id.to_le_bytes());
     packet.extend_from_slice(&topic);
+
     packet
 }
 
 pub fn encode_unsubscribe(client_id: ClientId, topic: Topic) -> Vec<u8> {
     let mut packet = Vec::with_capacity(1 + 4 + TOPIC_LEN);
+
     packet.push(TAG_UNSUBSCRIBE);
     packet.extend_from_slice(&client_id.to_le_bytes());
     packet.extend_from_slice(&topic);
+
     packet
 }
 
@@ -53,6 +57,7 @@ pub fn encode_publish(topic: Topic, payload: &[u8]) -> anyhow::Result<Vec<u8>> {
     let payload_len = u16::try_from(payload.len())?;
 
     let mut packet = Vec::with_capacity(1 + TOPIC_LEN + 2 + payload.len());
+
     packet.push(TAG_PUBLISH);
     packet.extend_from_slice(&topic);
     packet.extend_from_slice(&payload_len.to_le_bytes());
@@ -65,6 +70,7 @@ pub fn encode_broadcast(payload: &[u8]) -> anyhow::Result<Vec<u8>> {
     let payload_len = u16::try_from(payload.len())?;
 
     let mut packet = Vec::with_capacity(1 + 2 + payload.len());
+
     packet.push(TAG_BROADCAST);
     packet.extend_from_slice(&payload_len.to_le_bytes());
     packet.extend_from_slice(payload);
@@ -77,15 +83,17 @@ pub fn encode_client_input(
     input: [u8; CLIENT_INPUT_LEN],
 ) -> Vec<u8> {
     let mut packet = Vec::with_capacity(1 + 4 + CLIENT_INPUT_LEN);
+
     packet.push(TAG_CLIENT_INPUT);
     packet.extend_from_slice(&client_id.to_le_bytes());
     packet.extend_from_slice(&input);
+
     packet
 }
 
 pub fn decode_message(data: &[u8]) -> anyhow::Result<BrokerMessage> {
     let Some((&tag, body)) = data.split_first() else {
-        anyhow::bail!("empty message");
+        anyhow::bail!("empty broker message");
     };
 
     match tag {
@@ -104,7 +112,7 @@ fn decode_subscribe(body: &[u8]) -> anyhow::Result<BrokerMessage> {
     }
 
     let client_id = read_u32_le(&body[0..4]);
-    let topic = read_topic(&body[4..36]);
+    let topic = read_topic(&body[4..4 + TOPIC_LEN]);
 
     Ok(BrokerMessage::Subscribe { client_id, topic })
 }
@@ -115,7 +123,7 @@ fn decode_unsubscribe(body: &[u8]) -> anyhow::Result<BrokerMessage> {
     }
 
     let client_id = read_u32_le(&body[0..4]);
-    let topic = read_topic(&body[4..36]);
+    let topic = read_topic(&body[4..4 + TOPIC_LEN]);
 
     Ok(BrokerMessage::Unsubscribe { client_id, topic })
 }
@@ -125,10 +133,14 @@ fn decode_publish(body: &[u8]) -> anyhow::Result<BrokerMessage> {
         anyhow::bail!("Publish too short: {}", body.len());
     }
 
-    let topic = read_topic(&body[0..32]);
-    let payload_len = read_u16_le(&body[32..34]) as usize;
+    let topic = read_topic(&body[0..TOPIC_LEN]);
+    let payload_len_start = TOPIC_LEN;
+    let payload_len_end = TOPIC_LEN + 2;
+    let payload_len = read_u16_le(&body[payload_len_start..payload_len_end]) as usize;
 
-    if body.len() != TOPIC_LEN + 2 + payload_len {
+    let expected_len = TOPIC_LEN + 2 + payload_len;
+
+    if body.len() != expected_len {
         anyhow::bail!(
             "invalid Publish payload length: declared={}, actual={}",
             payload_len,
@@ -136,7 +148,7 @@ fn decode_publish(body: &[u8]) -> anyhow::Result<BrokerMessage> {
         );
     }
 
-    let payload = body[34..].to_vec();
+    let payload = body[payload_len_end..].to_vec();
 
     Ok(BrokerMessage::Publish { topic, payload })
 }
@@ -147,8 +159,9 @@ fn decode_broadcast(body: &[u8]) -> anyhow::Result<BrokerMessage> {
     }
 
     let payload_len = read_u16_le(&body[0..2]) as usize;
+    let expected_len = 2 + payload_len;
 
-    if body.len() != 2 + payload_len {
+    if body.len() != expected_len {
         anyhow::bail!(
             "invalid Broadcast payload length: declared={}, actual={}",
             payload_len,
@@ -169,7 +182,7 @@ fn decode_client_input(body: &[u8]) -> anyhow::Result<BrokerMessage> {
     let client_id = read_u32_le(&body[0..4]);
 
     let mut input = [0_u8; CLIENT_INPUT_LEN];
-    input.copy_from_slice(&body[4..20]);
+    input.copy_from_slice(&body[4..4 + CLIENT_INPUT_LEN]);
 
     Ok(BrokerMessage::ClientInput { client_id, input })
 }
@@ -194,10 +207,15 @@ pub fn topic_from_str(value: &str) -> Topic {
     let len = bytes.len().min(TOPIC_LEN);
 
     topic[..len].copy_from_slice(&bytes[..len]);
+
     topic
 }
 
 pub fn topic_to_string(topic: &Topic) -> String {
-    let len = topic.iter().position(|byte| *byte == 0).unwrap_or(TOPIC_LEN);
+    let len = topic
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(TOPIC_LEN);
+
     String::from_utf8_lossy(&topic[..len]).to_string()
 }

@@ -1,11 +1,11 @@
-use crate::net::gameplay_quic::GameplayClient;
+use crate::net::broker_client::BrokerClient;
 use crate::net::input::handle_input_accepted;
 use crate::net::login::{handle_goodbye, handle_join_accepted, handle_join_rejected};
 use crate::world::state::LocalWorldState;
 use shared::protocol::ServerGameMessage;
 
 pub fn handle_server_message(
-    gameplay_client: &mut GameplayClient,
+    broker_client: &mut BrokerClient,
     world_state: &mut LocalWorldState,
     message: ServerGameMessage,
 ) {
@@ -17,7 +17,7 @@ pub fn handle_server_message(
             message,
         } => {
             handle_join_accepted(
-                gameplay_client,
+                broker_client,
                 world_state,
                 player_id,
                 player,
@@ -44,7 +44,6 @@ pub fn handle_server_message(
         ServerGameMessage::WorldSnapshot { snapshot } => {
             world_state.zone = Some(snapshot.zone.clone());
             world_state.set_players_from_snapshot(snapshot.players.clone());
-
             world_state.rebuild_render_entities();
 
             tracing::info!(
@@ -70,7 +69,7 @@ pub fn handle_server_message(
         }
 
         ServerGameMessage::Goodbye => {
-            handle_goodbye(gameplay_client);
+            handle_goodbye(broker_client);
         }
     }
 }

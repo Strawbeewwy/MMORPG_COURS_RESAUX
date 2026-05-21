@@ -1,35 +1,16 @@
-use crate::config::ClientConfig;
-use crate::net::gameplay_quic::{send_message, GameplayClient};
+use crate::net::broker_client::BrokerClient;
 use crate::world::state::LocalWorldState;
-use shared::config::GAME_PROTOCOL_VERSION;
 use shared::protocol::{PlayerPublicInfo, WorldSnapshot};
 
-pub fn send_join_game(config: &ClientConfig, gameplay_client: &mut GameplayClient) {
-    tracing::info!(
-        "sending JoinGame username={} session_token={}",
-        config.username,
-        config.player_id
-    );
-
-    send_message(
-        gameplay_client,
-        shared::protocol::ClientGameMessage::JoinGame {
-            protocol_version: GAME_PROTOCOL_VERSION.to_string(),
-            session_token: config.player_id.clone(),
-            username: config.username.clone(),
-        },
-    );
-}
-
 pub fn handle_join_accepted(
-    gameplay_client: &mut GameplayClient,
+    broker_client: &mut BrokerClient,
     world_state: &mut LocalWorldState,
     player_id: String,
     player: PlayerPublicInfo,
     snapshot: WorldSnapshot,
     message: String,
 ) {
-    gameplay_client.joined = true;
+    broker_client.connected = true;
     world_state.player_id = Some(player_id.clone());
     world_state.zone = Some(snapshot.zone.clone());
     world_state.set_players_from_snapshot(snapshot.players.clone());
@@ -43,14 +24,13 @@ pub fn handle_join_accepted(
         snapshot.zone,
         snapshot.players.len()
     );
-
 }
 
 pub fn handle_join_rejected(reason: String) {
     tracing::warn!("join rejected: {}", reason);
 }
 
-pub fn handle_goodbye(gameplay_client: &mut GameplayClient) {
+pub fn handle_goodbye(broker_client: &mut BrokerClient) {
     tracing::info!("server said goodbye");
-    gameplay_client.joined = false;
+    broker_client.connected = false;
 }
