@@ -10,37 +10,23 @@ pub fn keyboard_input_system(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut gameplay_client: ResMut<GameplayClient>,
     mut app_exit: MessageWriter<AppExit>,
+    mut world_state: ResMut<LocalWorldState>,
 ) {
-    if keyboard.just_pressed(KeyCode::KeyW) {
-        send_player_input(&mut gameplay_client, 0.0, 1.0);
-    }
-
-    if keyboard.just_pressed(KeyCode::KeyS) {
-        send_player_input(&mut gameplay_client, 0.0, -1.0);
-    }
-
-    if keyboard.just_pressed(KeyCode::KeyA) {
-        send_player_input(&mut gameplay_client, -1.0, 0.0);
-    }
-
-    if keyboard.just_pressed(KeyCode::KeyD) {
-        send_player_input(&mut gameplay_client, 1.0, 0.0);
-    }
-
-    if keyboard.just_pressed(KeyCode::Space) {
-        send_player_input(&mut gameplay_client, 0.0, 0.0);
-    }
-
     if keyboard.just_pressed(KeyCode::Escape) {
         send_message(&mut gameplay_client, ClientGameMessage::LeaveGame);
         app_exit.write(AppExit::Success);
+        return;
     }
 
-    if !keyboard.just_pressed(KeyCode::Escape) && keyboard.get_just_pressed().next().is_some() {
-        send_message(&mut gameplay_client, ClientGameMessage::Heartbeat);
+    let movement_x = get_input_x_axis(&keyboard);
+    let movement_y = get_input_y_axis(&keyboard);
+
+    if movement_x != world_state.last_movement_x || movement_y != world_state.last_movement_y {
+        send_player_input(&mut gameplay_client, movement_x, movement_y);
+        world_state.last_movement_x = movement_x;
+        world_state.last_movement_y = movement_y;
     }
 }
-
 pub fn send_player_input(
     gameplay_client: &mut GameplayClient,
     movement_x: f32,
@@ -65,3 +51,18 @@ pub fn handle_input_accepted(
 
     tracing::info!("input accepted: x={} y={}", movement_x, movement_y);
 }
+
+//Can later add more input types, like gamepads
+pub fn get_input_x_axis(
+    keyboard: &Res<ButtonInput<KeyCode>>,
+) -> f32{
+    (keyboard.pressed(KeyCode::KeyD) as i8 - keyboard.pressed(KeyCode::KeyA) as i8) as f32
+}
+
+//Can later add more input types, like gamepads
+pub fn get_input_y_axis(
+    keyboard: &Res<ButtonInput<KeyCode>>,
+) -> f32{
+    (keyboard.pressed(KeyCode::KeyW) as i8 - keyboard.pressed(KeyCode::KeyS) as i8) as f32
+}
+

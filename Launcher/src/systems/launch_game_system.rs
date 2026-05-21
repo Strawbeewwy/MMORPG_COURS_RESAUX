@@ -1,7 +1,9 @@
+use std::path::PathBuf;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy::winit::WinitWindows;
 use std::process::{Child, Command, Stdio};
+use crate::config::DEFAULT_GC_BINARY;
 
 #[derive(Message, Debug, Clone)]
 pub struct LaunchGameClientMessage {
@@ -68,10 +70,34 @@ fn launch_game_client(message: &LaunchGameClientMessage) -> Option<Child> {
         message.zone
     );
 
-    let spawn_result = Command::new("cargo")
-        .arg("run")
-        .arg("-p")
-        .arg("gameclient")
+    let binary_name = if cfg!(windows) && !DEFAULT_GC_BINARY.to_ascii_lowercase().ends_with(".exe") {
+        format!("{}.exe", DEFAULT_GC_BINARY)
+    } else {
+        DEFAULT_GC_BINARY.to_string()
+    };
+
+    let workspace_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .map(|p| p.to_path_buf());
+
+    let Some(workspace_root) = workspace_root else {
+        tracing::error!("failed to resolve workspace root from CARGO_MANIFEST_DIR");
+        return None;
+    };
+
+    let binary_path = workspace_root.join("target").join("debug").join(&binary_name);
+
+    if !binary_path.exists() {
+        tracing::error!(
+        "GameClient binary not found at {}. Build with: cargo build -p gameclient",
+        binary_path.display()
+    );
+        return None;
+    }
+
+    tracing::info!("resolved GameClient binary path: {}", binary_path.display());
+
+    let spawn_result = Command::new(&binary_path)
         .env("PLAYER_ID", &message.player_id)
         .env("USERNAME", &message.username)
         .env("GAME_SERVER_IP", &message.server_ip)
@@ -80,7 +106,6 @@ fn launch_game_client(message: &LaunchGameClientMessage) -> Option<Child> {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .spawn();
-
     match spawn_result {
         Ok(child) => {
             tracing::info!("GameClient launched");

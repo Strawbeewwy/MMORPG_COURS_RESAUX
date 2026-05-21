@@ -1,6 +1,7 @@
 use crate::config::OrchestratorConfig;
 use anyhow::{Context, Result};
 use std::{
+    path::PathBuf,
     process::{Child, Command, Stdio},
     sync::atomic::{AtomicU16, Ordering},
 };
@@ -25,10 +26,21 @@ impl ProcessManager {
         //fetch the port and increment it
         let port = self.next_port.fetch_add(1, Ordering::SeqCst);
 
+
+        let binary_name = if cfg!(windows) && !config.ds_binary.to_ascii_lowercase().ends_with(".exe") {
+            format!("{}.exe", config.ds_binary)
+        } else {
+            config.ds_binary.clone()
+        };
+
+        // expects workspace build output location
+        let binary_path: PathBuf = PathBuf::from("target")
+            .join("debug")
+            .join(&binary_name);
+
+
         //runs a child process that will run the dedicated server
-        let child = Command::new("cargo")
-            .arg("run")
-            .arg("-p")
+        let child = Command::new(&binary_path)
             .arg(&config.ds_binary) //name of the package
             .env("DS_PORT", port.to_string())
             .env("DS_IP", "127.0.0.1")//keep has local for now, change later to a real address
