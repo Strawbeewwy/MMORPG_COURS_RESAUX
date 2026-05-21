@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+
 use shared::game_sockets::{
     GameConnection, GameStream
 };
@@ -9,7 +9,7 @@ use std::collections::{
     HashMap, HashSet
 };
 
-#[derive(Resource, Default)]
+#[derive(Default)]
 pub struct PubSubState {
     pub topic_subscribers: HashMap<Topic, HashSet<ClientId>>,
     pub client_topics: HashMap<ClientId, HashSet<Topic>>,

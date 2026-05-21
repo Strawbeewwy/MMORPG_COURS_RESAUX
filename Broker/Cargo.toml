@@ -5,7 +5,6 @@ edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
-bevy = { workspace = true, default-features = false }
 bytes = { workspace = true }
 shared = { workspace = true }
 tracing = { workspace = true }

@@ -7,7 +7,6 @@ name = "Broker"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "bevy",
  "bytes",
  "shared",
  "tracing",
