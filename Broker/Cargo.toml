@@ -1,6 +1,12 @@
 [package]
 name = "Broker"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
+anyhow = { workspace = true }
+bevy = { workspace = true, default-features = false }
+bytes = { workspace = true }
+shared = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
