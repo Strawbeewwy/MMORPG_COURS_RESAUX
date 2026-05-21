@@ -6,6 +6,7 @@ members = [
     "GameServer",
     "Orchestrator",
     "GameClient",
+    "Broker",
 ]
 resolver = "2"
 
