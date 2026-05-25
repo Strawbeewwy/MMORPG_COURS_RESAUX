@@ -6,6 +6,7 @@ pub const TAG_CLIENT_INPUT: u8 = 0x05;
 pub const TAG_REGISTER_CLIENT: u8 = 0x06;
 pub const TAG_REGISTER_SHARD: u8 = 0x07;
 pub const TAG_REGISTER_SPATIAL_SERVICE: u8 = 0x08;
+pub const TAG_ADD_CLIENT_TO_SHARD: u8 = 0x09;
 
 pub const TOPIC_LEN: usize = 32;
 pub const CLIENT_INPUT_LEN: usize = 16;
@@ -41,6 +42,11 @@ pub enum BrokerMessage {
         topic: Topic,
     },
     RegisterSpatialService,
+    AddClientToShard {
+        topic: Topic,
+        client_id: ClientId,
+        payload: Vec<u8>,
+    },
 }
 
 pub fn encode_register_client(client_id: ClientId) -> Vec<u8> {
@@ -124,6 +130,25 @@ pub fn encode_client_input(
     packet
 }
 
+pub fn encode_add_client_to_shard(
+    topic: Topic,
+    client_id: ClientId,
+    payload: &[u8],
+) -> anyhow::Result<Vec<u8>> {
+    let payload_len = u16::try_from(payload.len())?;
+
+    let mut packet = Vec::with_capacity(1 + TOPIC_LEN + 4 + 2 + payload.len());
+
+    packet.push(TAG_ADD_CLIENT_TO_SHARD);
+    packet.extend_from_slice(&topic);
+    packet.extend_from_slice(&client_id.to_le_bytes());
+    packet.extend_from_slice(&payload_len.to_le_bytes());
+    packet.extend_from_slice(payload);
+
+    Ok(packet)
+}
+
+
 pub fn decode_message(data: &[u8]) -> anyhow::Result<BrokerMessage> {
     let Some((&tag, body)) = data.split_first() else {
         anyhow::bail!("empty broker message");
@@ -138,6 +163,7 @@ pub fn decode_message(data: &[u8]) -> anyhow::Result<BrokerMessage> {
         TAG_REGISTER_CLIENT => decode_register_client(body),
         TAG_REGISTER_SHARD => decode_register_shard(body),
         TAG_REGISTER_SPATIAL_SERVICE => decode_register_spatial_service(body),
+        TAG_ADD_CLIENT_TO_SHARD => decode_add_client_to_shard(body),
         unknown => anyhow::bail!("unknown broker message tag: 0x{unknown:02x}"),
     }
 }
@@ -252,6 +278,39 @@ fn decode_client_input(body: &[u8]) -> anyhow::Result<BrokerMessage> {
     input.copy_from_slice(&body[4..4 + CLIENT_INPUT_LEN]);
 
     Ok(BrokerMessage::ClientInput { client_id, input })
+}
+
+fn decode_add_client_to_shard(body: &[u8]) -> anyhow::Result<BrokerMessage> {
+    if body.len() < TOPIC_LEN + 4 + 2 {
+        anyhow::bail!("AddClientToShard too short: {}", body.len());
+    }
+
+    let topic = read_topic(&body[0..TOPIC_LEN]);
+    let client_id_start = TOPIC_LEN;
+    let client_id_end = client_id_start + 4;
+    let payload_len_start = client_id_end;
+    let payload_len_end = payload_len_start + 2;
+
+    let client_id = read_u32_le(&body[client_id_start..client_id_end]);
+    let payload_len = read_u16_le(&body[payload_len_start..payload_len_end]) as usize;
+
+    let expected_len = TOPIC_LEN + 4 + 2 + payload_len;
+
+    if body.len() != expected_len {
+        anyhow::bail!(
+            "invalid AddClientToShard payload length: declared={}, actual={}",
+            payload_len,
+            body.len().saturating_sub(TOPIC_LEN + 4 + 2)
+        );
+    }
+
+    let payload = body[payload_len_end..].to_vec();
+
+    Ok(BrokerMessage::AddClientToShard {
+        topic,
+        client_id,
+        payload,
+    })
 }
 
 fn read_u16_le(bytes: &[u8]) -> u16 {

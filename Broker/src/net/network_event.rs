@@ -5,8 +5,8 @@ use shared::game_sockets::{
     GameConnection, GameNetworkEvent, GamePeer, GameStream, GameStreamReliability,
 };
 use shared::protocol::broker::{
-    BrokerMessage, CLIENT_INPUT_LEN, Topic, decode_message, encode_broadcast,
-    encode_client_input, topic_to_string,
+    BrokerMessage, CLIENT_INPUT_LEN, Topic, decode_message, encode_add_client_to_shard,
+    encode_broadcast, encode_client_input, topic_to_string,
 };
 use std::collections::HashMap;
 
@@ -219,6 +219,20 @@ impl BrokerNetwork {
                     connection.connection_id
                 );
             }
+
+            BrokerMessage::AddClientToShard {
+                topic,
+                client_id,
+                payload,
+            } => {
+                if !self.ensure_peer_role(connection, PeerRole::SpatialService, "AddClientToShard") {
+                    return;
+                }
+
+                state.subscribe_registered_client(client_id, topic);
+
+                self.relay_add_client_to_shard(state, topic, client_id, &payload);
+            }
         }
     }
 
@@ -360,6 +374,48 @@ impl BrokerNetwork {
         {
             tracing::warn!(
                 "failed to relay input from client {} to shard topic {}: {}",
+                client_id,
+                topic_to_string(&topic),
+                error
+            );
+        }
+    }
+
+    fn relay_add_client_to_shard(
+        &self,
+        state: &PubSubState,
+        topic: Topic,
+        client_id: u32,
+        payload: &[u8],
+    ) {
+        let Some((shard_connection, shard_stream)) = state.shard_streams_by_topic.get(&topic) else {
+            tracing::warn!(
+                "cannot add client {} to shard: no shard known for topic {}",
+                client_id,
+                topic_to_string(&topic)
+            );
+            return;
+        };
+
+        let packet = match encode_add_client_to_shard(topic, client_id, payload) {
+            Ok(packet) => packet,
+            Err(error) => {
+                tracing::warn!(
+                    "cannot encode AddClientToShard for client {} topic {}: {}",
+                    client_id,
+                    topic_to_string(&topic),
+                    error
+                );
+                return;
+            }
+        };
+
+        if let Err(error) = self
+            .peer
+            .send(shard_connection, shard_stream, Bytes::from(packet))
+        {
+            tracing::warn!(
+                "failed to relay AddClientToShard client {} to topic {}: {}",
                 client_id,
                 topic_to_string(&topic),
                 error
