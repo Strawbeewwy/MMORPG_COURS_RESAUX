@@ -10,9 +10,18 @@ use shared::protocol::broker::{
 };
 use std::collections::HashMap;
 
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PeerRole {
+    Client,
+    Shard,
+    SpatialService,
+}
+
 pub struct BrokerNetwork {
     peer: GamePeer,
     reliable_streams: HashMap<GameConnection, GameStream>,
+    peer_roles: HashMap<GameConnection, PeerRole>,
 }
 
 impl BrokerNetwork {
@@ -26,6 +35,7 @@ impl BrokerNetwork {
         Ok(Self {
             peer,
             reliable_streams: HashMap::new(),
+            peer_roles: HashMap::new(),
         })
     }
 
@@ -69,6 +79,7 @@ impl BrokerNetwork {
                 tracing::info!("peer disconnected from broker: {}", connection.connection_id);
 
                 self.reliable_streams.remove(&connection);
+                self.peer_roles.remove(&connection);
                 state.remove_connection(connection);
             }
 
@@ -131,20 +142,73 @@ impl BrokerNetwork {
         };
 
         match message {
+            BrokerMessage::RegisterClient { client_id } => {
+                if !self.register_peer_role(connection, PeerRole::Client, "RegisterClient") {
+                    return;
+                }
+
+                state.register_client_connection(client_id, connection);
+            }
+
+            BrokerMessage::RegisterShard { topic } => {
+                if !self.register_peer_role(connection, PeerRole::Shard, "RegisterShard") {
+                    return;
+                }
+
+                state.register_shard_topic(topic, connection, stream);
+
+                tracing::info!(
+                    "registered shard connection={} topic={}",
+                    connection.connection_id,
+                    topic_to_string(&topic)
+                );
+            }
+
+            BrokerMessage::RegisterSpatialService => {
+                if !self.register_peer_role(
+                    connection,
+                    PeerRole::SpatialService,
+                    "RegisterSpatialService",
+                ) {
+                    return;
+                }
+
+                tracing::info!(
+                    "registered spatial service connection={}",
+                    connection.connection_id
+                );
+            }
+
             BrokerMessage::Subscribe { client_id, topic } => {
-                state.subscribe_client(client_id, topic, connection);
+                if !self.ensure_peer_role(connection, PeerRole::SpatialService, "Subscribe") {
+                    return;
+                }
+
+                state.subscribe_registered_client(client_id, topic);
             }
 
             BrokerMessage::Unsubscribe { client_id, topic } => {
+                if !self.ensure_peer_role(connection, PeerRole::SpatialService, "Unsubscribe") {
+                    return;
+                }
+
                 state.unsubscribe_client(client_id, topic);
             }
 
             BrokerMessage::Publish { topic, payload } => {
+                if !self.ensure_peer_role(connection, PeerRole::Shard, "Publish") {
+                    return;
+                }
+
                 state.register_shard_topic(topic, connection, stream);
                 self.publish_to_subscribers(state, topic, &payload);
             }
 
             BrokerMessage::ClientInput { client_id, input } => {
+                if !self.ensure_peer_role(connection, PeerRole::Client, "ClientInput") {
+                    return;
+                }
+
                 state.register_client_connection(client_id, connection);
                 self.relay_client_input_to_shard(state, client_id, input);
             }
@@ -154,6 +218,76 @@ impl BrokerNetwork {
                     "broker received unexpected Broadcast message from connection {}",
                     connection.connection_id
                 );
+            }
+        }
+    }
+
+    fn register_peer_role(
+        &mut self,
+        connection: GameConnection,
+        role: PeerRole,
+        message_name: &str,
+    ) -> bool {
+        match self.peer_roles.get(&connection).copied() {
+            Some(current_role) if current_role == role => true,
+
+            Some(current_role) => {
+                tracing::warn!(
+                    "rejected {} from connection {}: already registered as {:?}, cannot become {:?}",
+                    message_name,
+                    connection.connection_id,
+                    current_role,
+                    role
+                );
+
+                false
+            }
+
+            None => {
+                self.peer_roles.insert(connection, role);
+
+                tracing::info!(
+                    "connection {} registered as {:?} via {}",
+                    connection.connection_id,
+                    role,
+                    message_name
+                );
+
+                true
+            }
+        }
+    }
+
+    fn ensure_peer_role(
+        &self,
+        connection: GameConnection,
+        expected_role: PeerRole,
+        message_name: &str,
+    ) -> bool {
+        match self.peer_roles.get(&connection).copied() {
+            Some(current_role) if current_role == expected_role => true,
+
+            Some(current_role) => {
+                tracing::warn!(
+                    "rejected {} from connection {}: role mismatch current={:?} expected={:?}",
+                    message_name,
+                    connection.connection_id,
+                    current_role,
+                    expected_role
+                );
+
+                false
+            }
+
+            None => {
+                tracing::warn!(
+                    "rejected {} from unregistered connection {}: expected role {:?}",
+                    message_name,
+                    connection.connection_id,
+                    expected_role
+                );
+
+                false
             }
         }
     }

@@ -3,6 +3,9 @@ pub const TAG_UNSUBSCRIBE: u8 = 0x02;
 pub const TAG_PUBLISH: u8 = 0x03;
 pub const TAG_BROADCAST: u8 = 0x04;
 pub const TAG_CLIENT_INPUT: u8 = 0x05;
+pub const TAG_REGISTER_CLIENT: u8 = 0x06;
+pub const TAG_REGISTER_SHARD: u8 = 0x07;
+pub const TAG_REGISTER_SPATIAL_SERVICE: u8 = 0x08;
 
 pub const TOPIC_LEN: usize = 32;
 pub const CLIENT_INPUT_LEN: usize = 16;
@@ -31,6 +34,35 @@ pub enum BrokerMessage {
         client_id: ClientId,
         input: [u8; CLIENT_INPUT_LEN],
     },
+    RegisterClient {
+        client_id: ClientId,
+    },
+    RegisterShard {
+        topic: Topic,
+    },
+    RegisterSpatialService,
+}
+
+pub fn encode_register_client(client_id: ClientId) -> Vec<u8> {
+    let mut packet = Vec::with_capacity(1 + 4);
+
+    packet.push(TAG_REGISTER_CLIENT);
+    packet.extend_from_slice(&client_id.to_le_bytes());
+
+    packet
+}
+
+pub fn encode_register_shard(topic: Topic) -> Vec<u8> {
+    let mut packet = Vec::with_capacity(1 + TOPIC_LEN);
+
+    packet.push(TAG_REGISTER_SHARD);
+    packet.extend_from_slice(&topic);
+
+    packet
+}
+
+pub fn encode_register_spatial_service() -> Vec<u8> {
+    vec![TAG_REGISTER_SPATIAL_SERVICE]
 }
 
 pub fn encode_subscribe(client_id: ClientId, topic: Topic) -> Vec<u8> {
@@ -42,6 +74,7 @@ pub fn encode_subscribe(client_id: ClientId, topic: Topic) -> Vec<u8> {
 
     packet
 }
+
 
 pub fn encode_unsubscribe(client_id: ClientId, topic: Topic) -> Vec<u8> {
     let mut packet = Vec::with_capacity(1 + 4 + TOPIC_LEN);
@@ -102,8 +135,42 @@ pub fn decode_message(data: &[u8]) -> anyhow::Result<BrokerMessage> {
         TAG_PUBLISH => decode_publish(body),
         TAG_BROADCAST => decode_broadcast(body),
         TAG_CLIENT_INPUT => decode_client_input(body),
+        TAG_REGISTER_CLIENT => decode_register_client(body),
+        TAG_REGISTER_SHARD => decode_register_shard(body),
+        TAG_REGISTER_SPATIAL_SERVICE => decode_register_spatial_service(body),
         unknown => anyhow::bail!("unknown broker message tag: 0x{unknown:02x}"),
     }
+}
+
+fn decode_register_client(body: &[u8]) -> anyhow::Result<BrokerMessage> {
+    if body.len() != 4 {
+        anyhow::bail!("invalid RegisterClient length: {}", body.len());
+    }
+
+    let client_id = read_u32_le(&body[0..4]);
+
+    Ok(BrokerMessage::RegisterClient { client_id })
+}
+
+fn decode_register_shard(body: &[u8]) -> anyhow::Result<BrokerMessage> {
+    if body.len() != TOPIC_LEN {
+        anyhow::bail!("invalid RegisterShard length: {}", body.len());
+    }
+
+    let topic = read_topic(&body[0..TOPIC_LEN]);
+
+    Ok(BrokerMessage::RegisterShard { topic })
+}
+
+fn decode_register_spatial_service(body: &[u8]) -> anyhow::Result<BrokerMessage> {
+    if !body.is_empty() {
+        anyhow::bail!(
+            "invalid RegisterSpatialService length: {}",
+            body.len()
+        );
+    }
+
+    Ok(BrokerMessage::RegisterSpatialService)
 }
 
 fn decode_subscribe(body: &[u8]) -> anyhow::Result<BrokerMessage> {

@@ -19,64 +19,92 @@ pub struct PubSubState {
     pub shard_streams_by_topic: HashMap<Topic, (GameConnection, GameStream)>,
 }
 impl PubSubState {
-    pub fn subscribe_client(
-        &mut self,
-        client_id: ClientId,
-        topic: Topic,
-        connection: GameConnection,
-    ) {
-        tracing::info!(
+        pub fn register_client_connection(
+            &mut self,
+            client_id: ClientId,
+            connection: GameConnection,
+        ) {
+            tracing::info!(
+            "register client={} connection={}",
+            client_id,
+            connection.connection_id
+        );
+
+            self.client_connections.insert(client_id, connection);
+            self.connection_clients.insert(connection, client_id);
+        }
+
+        pub fn subscribe_client(
+            &mut self,
+            client_id: ClientId,
+            topic: Topic,
+            connection: GameConnection,
+        ) {
+            tracing::info!(
             "subscribe client={} topic={}",
             client_id,
             topic_to_string(&topic)
         );
 
-        self.client_connections.insert(client_id, connection);
-        self.connection_clients.insert(connection, client_id);
+            self.register_client_connection(client_id, connection);
 
-        self.topic_subscribers
-            .entry(topic)
-            .or_default()
-            .insert(client_id);
+            self.topic_subscribers
+                .entry(topic)
+                .or_default()
+                .insert(client_id);
 
-        self.client_topics
-            .entry(client_id)
-            .or_default()
-            .insert(topic);
-    }
+            self.client_topics
+                .entry(client_id)
+                .or_default()
+                .insert(topic);
+        }
 
-    pub fn unsubscribe_client(&mut self, client_id: ClientId, topic: Topic) {
-        tracing::info!(
-            "unsubscribe client={} topic={}",
+        pub fn subscribe_registered_client(
+            &mut self,
+            client_id: ClientId,
+            topic: Topic,
+        ) {
+            tracing::info!(
+            "subscribe registered client={} topic={}",
             client_id,
             topic_to_string(&topic)
         );
 
-        if let Some(subscribers) = self.topic_subscribers.get_mut(&topic) {
-            subscribers.remove(&client_id);
+            self.topic_subscribers
+                .entry(topic)
+                .or_default()
+                .insert(client_id);
 
-            if subscribers.is_empty() {
-                self.topic_subscribers.remove(&topic);
-            }
+            self.client_topics
+                .entry(client_id)
+                .or_default()
+                .insert(topic);
         }
 
-        if let Some(topics) = self.client_topics.get_mut(&client_id) {
-            topics.remove(&topic);
 
-            if topics.is_empty() {
-                self.client_topics.remove(&client_id);
+        pub fn unsubscribe_client(&mut self, client_id: ClientId, topic: Topic) {
+            tracing::info!(
+                "unsubscribe client={} topic={}",
+                client_id,
+                topic_to_string(&topic)
+            );
+
+            if let Some(subscribers) = self.topic_subscribers.get_mut(&topic) {
+                subscribers.remove(&client_id);
+
+                if subscribers.is_empty() {
+                    self.topic_subscribers.remove(&topic);
+                }
+            }
+
+            if let Some(topics) = self.client_topics.get_mut(&client_id) {
+                topics.remove(&topic);
+
+                if topics.is_empty() {
+                    self.client_topics.remove(&client_id);
+                }
             }
         }
-    }
-
-    pub fn register_client_connection(
-        &mut self,
-        client_id: ClientId,
-        connection: GameConnection,
-    ) {
-        self.client_connections.insert(client_id, connection);
-        self.connection_clients.insert(connection, client_id);
-    }
 
     pub fn register_shard_topic(
         &mut self,

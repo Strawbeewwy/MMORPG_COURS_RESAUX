@@ -1,13 +1,14 @@
 use crate::config::ClientConfig;
 use crate::net::broker_client::BrokerClient;
 use crate::net::broker_message::decode_and_handle_broker_message;
-use crate::net::broker_subscription::subscribe_to_configured_topics;
 use crate::world::state::LocalWorldState;
 use bevy::prelude::*;
 use shared::game_sockets::protocols::QuicBackend;
 use shared::game_sockets::{
     GameNetworkEvent, GamePeer, GameStreamReliability,
 };
+use shared::protocol::broker::encode_register_client;
+
 
 pub fn connect_to_broker(
     config: Res<ClientConfig>,
@@ -156,10 +157,12 @@ fn handle_broker_event(
                     config.broker_addr()
                 );
 
-                subscribe_to_configured_topics(
-                    broker_client,
-                    config.client_id(),
-                    &config.broker_topics,
+                let packet = encode_register_client(config.client_id());
+                broker_client.send_raw(packet);
+
+                tracing::info!(
+                    "registered client {} with broker; waiting for spatial service subscriptions",
+                    config.client_id()
                 );
             }
         }
