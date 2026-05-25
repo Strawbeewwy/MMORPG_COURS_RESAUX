@@ -9,6 +9,7 @@ use std::collections::{
     HashMap, HashSet
 };
 
+
 #[derive(Default)]
 pub struct PubSubState {
     pub topic_subscribers: HashMap<Topic, HashSet<ClientId>>,
@@ -115,9 +116,15 @@ impl PubSubState {
             .retain(|_, (shard_connection, _)| *shard_connection != connection);
     }
 
-    pub fn first_topic_for_client(&self, client_id: ClientId) -> Option<Topic> {
+    pub fn first_shard_topic_for_client(&self, client_id: ClientId) -> Option<Topic> {
         self.client_topics
-            .get(&client_id)
-            .and_then(|topics| topics.iter().next().copied())
+            .get(&client_id)?
+            .iter()
+            .copied()
+            .find(is_shard_topic)
     }
+}
+
+fn is_shard_topic(topic: &Topic) -> bool {
+    topic_to_string(topic).starts_with("shard:")
 }

@@ -202,8 +202,11 @@ impl BrokerNetwork {
         client_id: u32,
         input: [u8; CLIENT_INPUT_LEN],
     ) {
-        let Some(topic) = state.first_topic_for_client(client_id) else {
-            tracing::warn!("cannot relay input: client {} has no topic", client_id);
+        let Some(topic) = state.first_shard_topic_for_client(client_id) else {
+            tracing::warn!(
+                "cannot relay input: client {} has no subscribed shard topic",
+                client_id
+            );
             return;
         };
 
