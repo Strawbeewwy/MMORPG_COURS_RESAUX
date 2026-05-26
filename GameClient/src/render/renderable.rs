@@ -1,9 +1,9 @@
 use bevy::prelude::*;
-use shared::protocol::NetVec2;
+use shared::protocol::{EntityId, NetVec2};
 
 #[derive(Debug, Clone)]
 pub struct ClientRenderEntity {
-    pub entity_id: String,
+    pub entity_id: EntityId,
     pub entity_type: RenderedEntityType,
     pub position: NetVec2,
     pub color: Color,
@@ -13,7 +13,7 @@ pub struct ClientRenderEntity {
 
 #[derive(Component)]
 pub struct RenderedEntity {
-    pub entity_id: String,
+    pub entity_id: EntityId,
     pub entity_type: RenderedEntityType,
 }
 

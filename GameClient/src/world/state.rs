@@ -2,19 +2,17 @@ use bevy::prelude::*;
 use crate::render::renderable::ClientRenderEntity;
 use crate::world::player::ClientPlayer;
 use std::collections::HashMap;
-use shared::protocol::{
-    PlayerSnapshot, ZoneId
-};
+use shared::protocol::{EntityId, PlayerId, PlayerSnapshot, ZoneId};
 
 
 #[derive(Resource, Default)]
 pub struct LocalWorldState {
-    pub player_id: Option<String>,
+    pub player_id: Option<PlayerId>,
     pub zone: Option<ZoneId>,
     pub last_movement_x: f32,
     pub last_movement_y: f32,
-    pub players: HashMap<String, ClientPlayer>,
-    pub render_entities: HashMap<String, ClientRenderEntity>,
+    pub players: HashMap<PlayerId, ClientPlayer>,
+    pub render_entities: HashMap<EntityId, ClientRenderEntity>,
 }
 
 

@@ -13,7 +13,7 @@ pub fn handle_broker_client_input(
     let movement_x = read_f32_le(&input[0..4]);
     let movement_y = read_f32_le(&input[4..8]);
 
-    let player_id = client_id.to_string();
+    let player_id = client_id;
 
     let Ok(mut registry) = registry.inner.try_lock() else {
         tracing::warn!("could not lock player registry for client input");

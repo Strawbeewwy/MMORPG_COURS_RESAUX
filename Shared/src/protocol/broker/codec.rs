@@ -8,10 +8,13 @@ pub const TAG_REGISTER_SHARD: u8 = 0x07;
 pub const TAG_REGISTER_SPATIAL_SERVICE: u8 = 0x08;
 pub const TAG_ADD_CLIENT_TO_SHARD: u8 = 0x09;
 
+pub const TAG_LEN: usize = size_of::<u8>();
+pub const MAX_PAYLOAD_LEN_IN_BYTE: usize = size_of::<u16>();
 pub const TOPIC_LEN: usize = 32;
 pub const CLIENT_INPUT_LEN: usize = 16;
 
 pub type ClientId = u32;
+pub const CLIENT_ID_LEN: usize = size_of::<ClientId>();
 pub type Topic = [u8; TOPIC_LEN];
 
 #[derive(Debug, Clone)]
@@ -50,7 +53,7 @@ pub enum BrokerMessage {
 }
 
 pub fn encode_register_client(client_id: ClientId) -> Vec<u8> {
-    let mut packet = Vec::with_capacity(1 + 4);
+    let mut packet = Vec::with_capacity(TAG_LEN + CLIENT_ID_LEN);
 
     packet.push(TAG_REGISTER_CLIENT);
     packet.extend_from_slice(&client_id.to_le_bytes());
@@ -59,7 +62,7 @@ pub fn encode_register_client(client_id: ClientId) -> Vec<u8> {
 }
 
 pub fn encode_register_shard(topic: Topic) -> Vec<u8> {
-    let mut packet = Vec::with_capacity(1 + TOPIC_LEN);
+    let mut packet = Vec::with_capacity(TAG_LEN + TOPIC_LEN);
 
     packet.push(TAG_REGISTER_SHARD);
     packet.extend_from_slice(&topic);
@@ -72,7 +75,7 @@ pub fn encode_register_spatial_service() -> Vec<u8> {
 }
 
 pub fn encode_subscribe(client_id: ClientId, topic: Topic) -> Vec<u8> {
-    let mut packet = Vec::with_capacity(1 + 4 + TOPIC_LEN);
+    let mut packet = Vec::with_capacity(TAG_LEN + CLIENT_ID_LEN + TOPIC_LEN);
 
     packet.push(TAG_SUBSCRIBE);
     packet.extend_from_slice(&client_id.to_le_bytes());
@@ -83,7 +86,7 @@ pub fn encode_subscribe(client_id: ClientId, topic: Topic) -> Vec<u8> {
 
 
 pub fn encode_unsubscribe(client_id: ClientId, topic: Topic) -> Vec<u8> {
-    let mut packet = Vec::with_capacity(1 + 4 + TOPIC_LEN);
+    let mut packet = Vec::with_capacity(TAG_LEN + CLIENT_ID_LEN + TOPIC_LEN);
 
     packet.push(TAG_UNSUBSCRIBE);
     packet.extend_from_slice(&client_id.to_le_bytes());
@@ -95,7 +98,7 @@ pub fn encode_unsubscribe(client_id: ClientId, topic: Topic) -> Vec<u8> {
 pub fn encode_publish(topic: Topic, payload: &[u8]) -> anyhow::Result<Vec<u8>> {
     let payload_len = u16::try_from(payload.len())?;
 
-    let mut packet = Vec::with_capacity(1 + TOPIC_LEN + 2 + payload.len());
+    let mut packet = Vec::with_capacity(TAG_LEN + TOPIC_LEN + MAX_PAYLOAD_LEN_IN_BYTE + payload.len());
 
     packet.push(TAG_PUBLISH);
     packet.extend_from_slice(&topic);
@@ -108,7 +111,7 @@ pub fn encode_publish(topic: Topic, payload: &[u8]) -> anyhow::Result<Vec<u8>> {
 pub fn encode_broadcast(payload: &[u8]) -> anyhow::Result<Vec<u8>> {
     let payload_len = u16::try_from(payload.len())?;
 
-    let mut packet = Vec::with_capacity(1 + 2 + payload.len());
+    let mut packet = Vec::with_capacity(TAG_LEN + MAX_PAYLOAD_LEN_IN_BYTE + payload.len());
 
     packet.push(TAG_BROADCAST);
     packet.extend_from_slice(&payload_len.to_le_bytes());
@@ -121,7 +124,7 @@ pub fn encode_client_input(
     client_id: ClientId,
     input: [u8; CLIENT_INPUT_LEN],
 ) -> Vec<u8> {
-    let mut packet = Vec::with_capacity(1 + 4 + CLIENT_INPUT_LEN);
+    let mut packet = Vec::with_capacity(TAG_LEN + CLIENT_ID_LEN + CLIENT_INPUT_LEN);
 
     packet.push(TAG_CLIENT_INPUT);
     packet.extend_from_slice(&client_id.to_le_bytes());
@@ -137,7 +140,7 @@ pub fn encode_add_client_to_shard(
 ) -> anyhow::Result<Vec<u8>> {
     let payload_len = u16::try_from(payload.len())?;
 
-    let mut packet = Vec::with_capacity(1 + TOPIC_LEN + 4 + 2 + payload.len());
+    let mut packet = Vec::with_capacity(TAG_LEN + TOPIC_LEN + CLIENT_ID_LEN + MAX_PAYLOAD_LEN_IN_BYTE + payload.len());
 
     packet.push(TAG_ADD_CLIENT_TO_SHARD);
     packet.extend_from_slice(&topic);
@@ -169,11 +172,11 @@ pub fn decode_message(data: &[u8]) -> anyhow::Result<BrokerMessage> {
 }
 
 fn decode_register_client(body: &[u8]) -> anyhow::Result<BrokerMessage> {
-    if body.len() != 4 {
+    if body.len() != CLIENT_ID_LEN {
         anyhow::bail!("invalid RegisterClient length: {}", body.len());
     }
 
-    let client_id = read_u32_le(&body[0..4]);
+    let client_id = read_u32_le(&body[0..CLIENT_ID_LEN]);
 
     Ok(BrokerMessage::RegisterClient { client_id })
 }
@@ -200,44 +203,44 @@ fn decode_register_spatial_service(body: &[u8]) -> anyhow::Result<BrokerMessage>
 }
 
 fn decode_subscribe(body: &[u8]) -> anyhow::Result<BrokerMessage> {
-    if body.len() != 4 + TOPIC_LEN {
+    if body.len() != CLIENT_ID_LEN + TOPIC_LEN {
         anyhow::bail!("invalid Subscribe length: {}", body.len());
     }
 
-    let client_id = read_u32_le(&body[0..4]);
-    let topic = read_topic(&body[4..4 + TOPIC_LEN]);
+    let client_id = read_u32_le(&body[0..CLIENT_ID_LEN]);
+    let topic = read_topic(&body[CLIENT_ID_LEN..CLIENT_ID_LEN + TOPIC_LEN]);
 
     Ok(BrokerMessage::Subscribe { client_id, topic })
 }
 
 fn decode_unsubscribe(body: &[u8]) -> anyhow::Result<BrokerMessage> {
-    if body.len() != 4 + TOPIC_LEN {
+    if body.len() != CLIENT_ID_LEN + TOPIC_LEN {
         anyhow::bail!("invalid Unsubscribe length: {}", body.len());
     }
 
-    let client_id = read_u32_le(&body[0..4]);
-    let topic = read_topic(&body[4..4 + TOPIC_LEN]);
+    let client_id = read_u32_le(&body[0..CLIENT_ID_LEN]);
+    let topic = read_topic(&body[CLIENT_ID_LEN..CLIENT_ID_LEN + TOPIC_LEN]);
 
     Ok(BrokerMessage::Unsubscribe { client_id, topic })
 }
 
 fn decode_publish(body: &[u8]) -> anyhow::Result<BrokerMessage> {
-    if body.len() < TOPIC_LEN + 2 {
+    if body.len() < TOPIC_LEN + MAX_PAYLOAD_LEN_IN_BYTE {
         anyhow::bail!("Publish too short: {}", body.len());
     }
 
     let topic = read_topic(&body[0..TOPIC_LEN]);
     let payload_len_start = TOPIC_LEN;
-    let payload_len_end = TOPIC_LEN + 2;
+    let payload_len_end = TOPIC_LEN + MAX_PAYLOAD_LEN_IN_BYTE;
     let payload_len = read_u16_le(&body[payload_len_start..payload_len_end]) as usize;
 
-    let expected_len = TOPIC_LEN + 2 + payload_len;
+    let expected_len = TOPIC_LEN + MAX_PAYLOAD_LEN_IN_BYTE + payload_len;
 
     if body.len() != expected_len {
         anyhow::bail!(
             "invalid Publish payload length: declared={}, actual={}",
             payload_len,
-            body.len().saturating_sub(TOPIC_LEN + 2)
+            body.len().saturating_sub(TOPIC_LEN + MAX_PAYLOAD_LEN_IN_BYTE)
         );
     }
 
@@ -247,60 +250,60 @@ fn decode_publish(body: &[u8]) -> anyhow::Result<BrokerMessage> {
 }
 
 fn decode_broadcast(body: &[u8]) -> anyhow::Result<BrokerMessage> {
-    if body.len() < 2 {
+    if body.len() < MAX_PAYLOAD_LEN_IN_BYTE {
         anyhow::bail!("Broadcast too short: {}", body.len());
     }
 
-    let payload_len = read_u16_le(&body[0..2]) as usize;
-    let expected_len = 2 + payload_len;
+    let payload_len = read_u16_le(&body[0..MAX_PAYLOAD_LEN_IN_BYTE]) as usize;
+    let expected_len = MAX_PAYLOAD_LEN_IN_BYTE + payload_len;
 
     if body.len() != expected_len {
         anyhow::bail!(
             "invalid Broadcast payload length: declared={}, actual={}",
             payload_len,
-            body.len().saturating_sub(2)
+            body.len().saturating_sub(MAX_PAYLOAD_LEN_IN_BYTE)
         );
     }
 
-    let payload = body[2..].to_vec();
+    let payload = body[MAX_PAYLOAD_LEN_IN_BYTE..].to_vec();
 
     Ok(BrokerMessage::Broadcast { payload })
 }
 
 fn decode_client_input(body: &[u8]) -> anyhow::Result<BrokerMessage> {
-    if body.len() != 4 + CLIENT_INPUT_LEN {
+    if body.len() != CLIENT_ID_LEN + CLIENT_INPUT_LEN {
         anyhow::bail!("invalid ClientInput length: {}", body.len());
     }
 
-    let client_id = read_u32_le(&body[0..4]);
+    let client_id = read_u32_le(&body[0..CLIENT_ID_LEN]);
 
     let mut input = [0_u8; CLIENT_INPUT_LEN];
-    input.copy_from_slice(&body[4..4 + CLIENT_INPUT_LEN]);
+    input.copy_from_slice(&body[CLIENT_ID_LEN..CLIENT_ID_LEN + CLIENT_INPUT_LEN]);
 
     Ok(BrokerMessage::ClientInput { client_id, input })
 }
 
 fn decode_add_client_to_shard(body: &[u8]) -> anyhow::Result<BrokerMessage> {
-    if body.len() < TOPIC_LEN + 4 + 2 {
+    if body.len() < TOPIC_LEN + CLIENT_ID_LEN + MAX_PAYLOAD_LEN_IN_BYTE {
         anyhow::bail!("AddClientToShard too short: {}", body.len());
     }
 
     let topic = read_topic(&body[0..TOPIC_LEN]);
     let client_id_start = TOPIC_LEN;
-    let client_id_end = client_id_start + 4;
+    let client_id_end = client_id_start + CLIENT_ID_LEN;
     let payload_len_start = client_id_end;
-    let payload_len_end = payload_len_start + 2;
+    let payload_len_end = payload_len_start + MAX_PAYLOAD_LEN_IN_BYTE;
 
     let client_id = read_u32_le(&body[client_id_start..client_id_end]);
     let payload_len = read_u16_le(&body[payload_len_start..payload_len_end]) as usize;
 
-    let expected_len = TOPIC_LEN + 4 + 2 + payload_len;
+    let expected_len = TOPIC_LEN + CLIENT_ID_LEN + MAX_PAYLOAD_LEN_IN_BYTE + payload_len;
 
     if body.len() != expected_len {
         anyhow::bail!(
             "invalid AddClientToShard payload length: declared={}, actual={}",
             payload_len,
-            body.len().saturating_sub(TOPIC_LEN + 4 + 2)
+            body.len().saturating_sub(TOPIC_LEN + CLIENT_ID_LEN + MAX_PAYLOAD_LEN_IN_BYTE)
         );
     }
 
