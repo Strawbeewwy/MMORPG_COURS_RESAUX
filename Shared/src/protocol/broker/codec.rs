@@ -7,6 +7,9 @@ pub const TAG_REGISTER_CLIENT: u8 = 0x06;
 pub const TAG_REGISTER_SHARD: u8 = 0x07;
 pub const TAG_REGISTER_SPATIAL_SERVICE: u8 = 0x08;
 pub const TAG_ADD_CLIENT_TO_SHARD: u8 = 0x09;
+pub const TAG_SET_CLIENT_AUTHORITY: u8 = 0x0A;
+pub const TAG_CLIENT_HELLO: u8 = 0x0B;
+pub const TAG_CLIENT_ACCEPTED: u8 = 0x0C;
 
 pub const TAG_LEN: usize = size_of::<u8>();
 pub const MAX_PAYLOAD_LEN_IN_BYTE: usize = size_of::<u16>();
@@ -49,6 +52,14 @@ pub enum BrokerMessage {
         topic: Topic,
         client_id: ClientId,
         payload: Vec<u8>,
+    },
+    SetClientAuthority {
+        client_id: ClientId,
+        topic: Topic,
+    },
+    ClientHello,
+    ClientAccepted {
+        client_id: ClientId,
     },
 }
 
@@ -151,6 +162,31 @@ pub fn encode_add_client_to_shard(
     Ok(packet)
 }
 
+pub fn encode_set_client_authority(
+    client_id: ClientId,
+    topic: Topic,
+) -> Vec<u8> {
+    let mut packet = Vec::with_capacity(TAG_LEN + CLIENT_ID_LEN + TOPIC_LEN);
+
+    packet.push(TAG_SET_CLIENT_AUTHORITY);
+    packet.extend_from_slice(&client_id.to_le_bytes());
+    packet.extend_from_slice(&topic);
+
+    packet
+}
+
+pub fn encode_client_hello() -> Vec<u8> {
+    vec![TAG_CLIENT_HELLO]
+}
+
+pub fn encode_client_accepted(client_id: ClientId) -> Vec<u8> {
+    let mut packet = Vec::with_capacity(TAG_LEN + CLIENT_ID_LEN);
+
+    packet.push(TAG_CLIENT_ACCEPTED);
+    packet.extend_from_slice(&client_id.to_le_bytes());
+
+    packet
+}
 
 pub fn decode_message(data: &[u8]) -> anyhow::Result<BrokerMessage> {
     let Some((&tag, body)) = data.split_first() else {
@@ -167,10 +203,12 @@ pub fn decode_message(data: &[u8]) -> anyhow::Result<BrokerMessage> {
         TAG_REGISTER_SHARD => decode_register_shard(body),
         TAG_REGISTER_SPATIAL_SERVICE => decode_register_spatial_service(body),
         TAG_ADD_CLIENT_TO_SHARD => decode_add_client_to_shard(body),
+        TAG_SET_CLIENT_AUTHORITY => decode_set_client_authority(body),
+        TAG_CLIENT_HELLO => decode_client_hello(body),
+        TAG_CLIENT_ACCEPTED => decode_client_accepted(body),
         unknown => anyhow::bail!("unknown broker message tag: 0x{unknown:02x}"),
     }
 }
-
 fn decode_register_client(body: &[u8]) -> anyhow::Result<BrokerMessage> {
     if body.len() != CLIENT_ID_LEN {
         anyhow::bail!("invalid RegisterClient length: {}", body.len());
@@ -314,6 +352,35 @@ fn decode_add_client_to_shard(body: &[u8]) -> anyhow::Result<BrokerMessage> {
         client_id,
         payload,
     })
+}
+
+fn decode_set_client_authority(body: &[u8]) -> anyhow::Result<BrokerMessage> {
+    if body.len() != CLIENT_ID_LEN + TOPIC_LEN {
+        anyhow::bail!("invalid SetClientAuthority length: {}", body.len());
+    }
+
+    let client_id = read_u32_le(&body[0..CLIENT_ID_LEN]);
+    let topic = read_topic(&body[CLIENT_ID_LEN..CLIENT_ID_LEN + TOPIC_LEN]);
+
+    Ok(BrokerMessage::SetClientAuthority { client_id, topic })
+}
+
+fn decode_client_hello(body: &[u8]) -> anyhow::Result<BrokerMessage> {
+    if !body.is_empty() {
+        anyhow::bail!("invalid ClientHello length: {}", body.len());
+    }
+
+    Ok(BrokerMessage::ClientHello)
+}
+
+fn decode_client_accepted(body: &[u8]) -> anyhow::Result<BrokerMessage> {
+    if body.len() != CLIENT_ID_LEN {
+        anyhow::bail!("invalid ClientAccepted length: {}", body.len());
+    }
+
+    let client_id = read_u32_le(&body[0..CLIENT_ID_LEN]);
+
+    Ok(BrokerMessage::ClientAccepted { client_id })
 }
 
 fn read_u16_le(bytes: &[u8]) -> u16 {

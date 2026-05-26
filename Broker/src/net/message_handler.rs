@@ -1,11 +1,20 @@
-use crate::net::peer_roles::{PeerRole, PeerRoles};
-use crate::net::relay::{
-    publish_to_subscribers, relay_add_client_to_shard, relay_client_input_to_shard,
+use crate::net::peer_roles::{
+    PeerRole, PeerRoles
 };
+use crate::net::relay::{
+    publish_to_subscribers, relay_add_client_to_shard,
+    relay_client_input_to_shard,
+};
+use bytes::Bytes;
 use crate::pubsub::state::PubSubState;
-use shared::game_sockets::{GameConnection, GamePeer, GameStream};
-use shared::protocol::broker::{BrokerMessage, decode_message, topic_to_string};
+use shared::game_sockets::{
+    GameConnection, GamePeer, GameStream
+};
+use shared::protocol::broker::{
+    BrokerMessage, decode_message, topic_to_string
+};
 use std::collections::HashMap;
+use shared::protocol::encode_client_accepted;
 
 pub fn handle_message(
     peer: &GamePeer,
@@ -28,7 +37,40 @@ pub fn handle_message(
     };
 
     match message {
+
+        BrokerMessage::ClientHello => {
+            if !peer_roles.register(connection, PeerRole::Client, "ClientHello") {
+                return;
+            }
+
+            let client_id = state.allocate_client_id();
+            state.register_client_connection(client_id, connection);
+
+            let packet = encode_client_accepted(client_id);
+
+            if let Err(error) = peer.send(&connection, &stream, Bytes::from(packet)) {
+                tracing::warn!(
+                    "failed to send ClientAccepted to connection {}: {}",
+                    connection.connection_id,
+                    error
+                );
+                return;
+            }
+
+            tracing::info!(
+                "accepted client connection={} client_id={}",
+                connection.connection_id,
+                client_id
+            );
+        }
+
         BrokerMessage::RegisterClient { client_id } => {
+            tracing::warn!(
+                "legacy RegisterClient received from connection {}; assigning requested client_id={}",
+                connection.connection_id,
+                client_id
+            );
+
             if !peer_roles.register(connection, PeerRole::Client, "RegisterClient") {
                 return;
             }
@@ -40,14 +82,6 @@ pub fn handle_message(
             if !peer_roles.register(connection, PeerRole::Shard, "RegisterShard") {
                 return;
             }
-
-            state.register_shard_topic(topic, connection, stream);
-
-            tracing::info!(
-                "registered shard connection={} topic={}",
-                connection.connection_id,
-                topic_to_string(&topic)
-            );
         }
 
         BrokerMessage::RegisterSpatialService => {
@@ -116,7 +150,36 @@ pub fn handle_message(
             }
 
             state.subscribe_registered_client(client_id, topic);
+            state.set_client_authority(client_id, topic);
             relay_add_client_to_shard(peer, state, topic, client_id, &payload);
         }
+
+        BrokerMessage::SetClientAuthority { client_id, topic } => {
+            if !peer_roles.ensure(connection, PeerRole::SpatialService, "SetClientAuthority") {
+                return;
+            }
+
+            if !state.shard_streams_by_topic.contains_key(&topic) {
+                tracing::warn!(
+                    "rejected SetClientAuthority for client {}: unknown shard topic {}",
+                    client_id,
+                    topic_to_string(&topic)
+                );
+                return;
+            }
+
+            state.subscribe_registered_client(client_id, topic);
+            state.set_client_authority(client_id, topic);
+        }
+
+        BrokerMessage::ClientAccepted { client_id } => {
+            tracing::warn!(
+                "broker received unexpected ClientAccepted from connection {} for client_id={}",
+                connection.connection_id,
+                client_id
+            );
+        }
+
+
     }
 }

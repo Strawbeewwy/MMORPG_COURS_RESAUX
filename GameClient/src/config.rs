@@ -2,14 +2,12 @@ use anyhow::{Context, Result};
 use bevy::prelude::*;
 use shared::protocol::broker::{Topic, topic_from_str};
 use std::env;
-use shared::protocol::PlayerId;
 
 pub const DEFAULT_RECONNECT_INTERVAL: u64 = 5;
 pub const DEFAULT_BROKER_TOPIC: &str = "shard:0";
 
 #[derive(Resource, Debug, Clone)]
 pub struct ClientConfig {
-    pub player_id: PlayerId,
     pub username: String,
     pub broker_ip: String,
     pub broker_port: u16,
@@ -19,11 +17,6 @@ pub struct ClientConfig {
 
 impl ClientConfig {
     pub fn from_env() -> Result<Self> {
-        let player_id = env::var("PLAYER_ID")
-            .context("missing PLAYER_ID env var")?
-            .parse::<PlayerId>()
-            .context("invalid PLAYER_ID env var")?;
-
         let username = env::var("USERNAME")
             .context("missing USERNAME env var")?;
 
@@ -41,7 +34,6 @@ impl ClientConfig {
         let broker_topics = broker_topics_from_env();
 
         Ok(Self {
-            player_id,
             username,
             broker_ip,
             broker_port,
@@ -52,10 +44,6 @@ impl ClientConfig {
 
     pub fn broker_addr(&self) -> String {
         format!("{}:{}", self.broker_ip, self.broker_port)
-    }
-
-    pub fn client_id(&self) -> u32 {
-        self.player_id
     }
 }
 
@@ -75,15 +63,4 @@ fn broker_topics_from_env() -> Vec<Topic> {
     } else {
         parsed_topics
     }
-}
-
-fn stable_client_id_from_string(value: &str) -> u32 {
-    let mut hash = 2_166_136_261_u32;
-
-    for byte in value.as_bytes() {
-        hash ^= *byte as u32;
-        hash = hash.wrapping_mul(16_777_619);
-    }
-
-    hash
 }

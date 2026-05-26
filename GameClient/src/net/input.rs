@@ -1,13 +1,12 @@
-use crate::config::ClientConfig;
 use crate::net::broker_client::BrokerClient;
 use crate::world::state::LocalWorldState;
 use bevy::app::AppExit;
 use bevy::prelude::*;
 use shared::protocol::broker::{CLIENT_INPUT_LEN, encode_client_input};
+use shared::protocol::ClientId;
 
 pub fn keyboard_input_system(
     keyboard: Res<ButtonInput<KeyCode>>,
-    config: Res<ClientConfig>,
     mut broker_client: ResMut<BrokerClient>,
     mut app_exit: MessageWriter<AppExit>,
     mut world_state: ResMut<LocalWorldState>,
@@ -17,13 +16,17 @@ pub fn keyboard_input_system(
         return;
     }
 
+    let Some(client_id) = broker_client.client_id else {
+        return;
+    };
+
     let movement_x = get_input_x_axis(&keyboard);
     let movement_y = get_input_y_axis(&keyboard);
 
     if movement_x != world_state.last_movement_x || movement_y != world_state.last_movement_y {
         send_player_input(
             &mut broker_client,
-            config.client_id(),
+            client_id,
             movement_x,
             movement_y,
         );
@@ -35,7 +38,7 @@ pub fn keyboard_input_system(
 
 pub fn send_player_input(
     broker_client: &mut BrokerClient,
-    client_id: u32,
+    client_id: ClientId,
     movement_x: f32,
     movement_y: f32,
 ) {

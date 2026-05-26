@@ -7,6 +7,7 @@ use shared::protocol::broker::{
 };
 use std::collections::HashMap;
 
+
 pub fn publish_to_subscribers(
     peer: &GamePeer,
     reliable_streams: &HashMap<GameConnection, GameStream>,
@@ -52,9 +53,9 @@ pub fn relay_client_input_to_shard(
     client_id: ClientId,
     input: [u8; CLIENT_INPUT_LEN],
 ) {
-    let Some(topic) = state.first_shard_topic_for_client(client_id) else {
+    let Some(topic) = state.input_topic_for_client(client_id) else {
         tracing::warn!(
-            "cannot relay input: client {} has no subscribed shard topic",
+            "cannot relay input: client {} has no authoritative or subscribed shard topic",
             client_id
         );
         return;

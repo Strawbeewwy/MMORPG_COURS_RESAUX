@@ -7,7 +7,7 @@ use shared::game_sockets::protocols::QuicBackend;
 use shared::game_sockets::{
     GameNetworkEvent, GamePeer, GameStreamReliability,
 };
-use shared::protocol::broker::encode_register_client;
+use shared::protocol::broker::encode_client_hello;
 
 
 pub fn connect_to_broker(
@@ -16,14 +16,13 @@ pub fn connect_to_broker(
     mut world_state: ResMut<LocalWorldState>,
 ) {
     tracing::info!(
-        "starting GameClient for username={} player_id={} broker={} zone={}",
+        "starting GameClient for username={} broker={} zone={}",
         config.username,
-        config.player_id,
         config.broker_addr(),
         config.zone
     );
 
-    world_state.player_id = Some(config.player_id.clone());
+    world_state.player_id = None;
     world_state.zone = Some(config.zone.clone());
 
     try_connect_to_broker(&config, &mut broker_client);
@@ -152,17 +151,15 @@ fn handle_broker_event(
                 broker_client.connected = true;
 
                 tracing::info!(
-                    "GameClient is ready; client_id={} broker={}",
-                    config.client_id(),
+                    "GameClient connected to broker={}; sending ClientHello",
                     config.broker_addr()
                 );
 
-                let packet = encode_register_client(config.client_id());
+                let packet = encode_client_hello();
                 broker_client.send_raw(packet);
 
                 tracing::info!(
-                    "registered client {} with broker; waiting for spatial service subscriptions",
-                    config.client_id()
+                    "sent ClientHello; waiting for broker-assigned client_id"
                 );
             }
         }

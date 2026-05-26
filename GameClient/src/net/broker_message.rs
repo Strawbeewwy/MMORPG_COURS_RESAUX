@@ -20,6 +20,13 @@ pub fn decode_and_handle_broker_message(
     };
 
     match broker_message {
+        BrokerMessage::ClientAccepted { client_id } => {
+            broker_client.client_id = Some(client_id);
+            world_state.player_id = Some(client_id);
+
+            tracing::info!("broker assigned client_id={}", client_id);
+        }
+
         BrokerMessage::Broadcast { payload } => {
             decode_and_handle_world_update(broker_client, world_state, &payload);
         }

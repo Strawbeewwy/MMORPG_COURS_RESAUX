@@ -5,6 +5,7 @@ use shared::game_sockets::{GameConnection, GamePeer, GameStream};
 use shared::protocol::broker::Topic;
 use std::collections::HashSet;
 use std::time::Duration;
+use shared::protocol::ClientId;
 
 #[derive(Resource)]
 pub struct BrokerClient {
@@ -12,6 +13,7 @@ pub struct BrokerClient {
     pub connection: Option<GameConnection>,
     pub reliable_stream: Option<GameStream>,
     pub connected: bool,
+    pub client_id: Option<ClientId>,
     pub subscribed_topics: HashSet<Topic>,
     pub reconnect_timer: Timer,
 }
@@ -23,6 +25,7 @@ impl Default for BrokerClient {
             connection: None,
             reliable_stream: None,
             connected: false,
+            client_id: None,
             subscribed_topics: HashSet::new(),
             reconnect_timer: Timer::new(
                 Duration::from_secs(DEFAULT_RECONNECT_INTERVAL),
@@ -38,6 +41,7 @@ impl BrokerClient {
         self.connection = None;
         self.reliable_stream = None;
         self.connected = false;
+        self.client_id = None;
         self.subscribed_topics.clear();
     }
 
@@ -45,6 +49,7 @@ impl BrokerClient {
         self.connection = None;
         self.reliable_stream = None;
         self.connected = false;
+        self.client_id = None;
         self.subscribed_topics.clear();
     }
 
@@ -53,6 +58,7 @@ impl BrokerClient {
             && self.connection.is_some()
             && self.reliable_stream.is_some()
             && self.connected
+            && self.client_id.is_some()
     }
 
     pub fn send_raw(&self, payload: Vec<u8>) -> bool {
