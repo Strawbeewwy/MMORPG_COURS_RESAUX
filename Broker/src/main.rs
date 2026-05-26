@@ -3,6 +3,7 @@ mod config;
 mod net;
 mod pubsub;
 
-fn main() {
-    app::run();
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    app::run().await
 }

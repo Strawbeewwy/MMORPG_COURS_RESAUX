@@ -9,6 +9,7 @@ dependencies = [
  "anyhow",
  "bytes",
  "shared",
+ "tokio",
  "tracing",
  "tracing-subscriber",
 ]

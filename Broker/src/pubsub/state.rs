@@ -38,7 +38,6 @@ impl PubSubState {
             &mut self,
             client_id: ClientId,
             topic: Topic,
-            connection: GameConnection,
         ) {
             tracing::info!(
             "subscribe client={} topic={}",
@@ -46,17 +45,11 @@ impl PubSubState {
             topic_to_string(&topic)
         );
 
-            self.register_client_connection(client_id, connection);
+            if let Some(connection) = self.client_connections.get_mut(&client_id) {
 
-            self.topic_subscribers
-                .entry(topic)
-                .or_default()
-                .insert(client_id);
+                self.subscribe_registered_client(client_id, topic);
+            }
 
-            self.client_topics
-                .entry(client_id)
-                .or_default()
-                .insert(topic);
         }
 
         pub fn subscribe_registered_client(

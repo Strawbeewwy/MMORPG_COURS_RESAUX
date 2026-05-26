@@ -2,6 +2,7 @@ use crate::config::BrokerConfig;
 use crate::net::network_event::BrokerNetwork;
 use crate::pubsub::state::PubSubState;
 use std::time::Duration;
+use tokio::time::sleep;
 
 pub struct BrokerApp {
     config: BrokerConfig,
@@ -20,19 +21,19 @@ impl BrokerApp {
         })
     }
 
-    pub fn run(&mut self) -> anyhow::Result<()> {
+    pub async fn run(&mut self) -> anyhow::Result<()> {
         tracing::info!("broker started");
 
-        let tick_duration = Duration::from_millis(self.config.tick_ms);
+        let mut ticker = tokio::time::interval(Duration::from_millis(self.config.tick_ms));
 
         loop {
+            ticker.tick().await;
             self.network.poll_events(&mut self.pubsub_state);
-            std::thread::sleep(tick_duration);
         }
     }
 }
 
-pub fn run() -> anyhow::Result<()> {
+pub async fn run() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_target(false)
         .compact()
@@ -41,5 +42,5 @@ pub fn run() -> anyhow::Result<()> {
     let config = BrokerConfig::from_env();
     let mut app = BrokerApp::new(config)?;
 
-    app.run()
+    app.run().await
 }
