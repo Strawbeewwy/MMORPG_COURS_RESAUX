@@ -5997,6 +5997,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "spatial_service"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "game_sockets",
+ "shared",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "spin"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

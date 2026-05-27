@@ -29,4 +29,16 @@ pub const DEFAULT_MAX_PLAYERS: usize = 100;
 
 pub const DEFAULT_HEARTBEAT_BUFFER_SIZE: usize = 1024;
 
+// Spatial service
+pub const DEFAULT_SPATIAL_LISTEN_PORT: u16 = 9500;
+pub const DEFAULT_BROKER_PORT: u16 = 9600;
+pub const DEFAULT_BROKER_HOST: &str = "127.0.0.1";
+pub const DEFAULT_SPATIAL_HOST: &str = "127.0.0.1";
+/// Radius (world units) triggering a CrossingAlert when a client nears a shard boundary.
+pub const DEFAULT_CROSSING_MARGIN: f32 = 50.0;
+/// World half-extent — the world spans [-WORLD_HALF_SIZE, WORLD_HALF_SIZE] on both axes.
+pub const DEFAULT_WORLD_HALF_SIZE: f32 = 1000.0;
+/// Maximum Quad Tree subdivision depth.
+pub const DEFAULT_QUAD_TREE_MAX_DEPTH: u8 = 4;
+
 pub const DEFAULT_DEBUG_PASSWORD: &str = "1234";
