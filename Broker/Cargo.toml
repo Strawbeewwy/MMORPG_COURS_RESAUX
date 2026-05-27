@@ -1,5 +1,5 @@
 [package]
-name = "Broker"
+name = "broker"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,6 +7,7 @@ edition = "2021"
 anyhow = { workspace = true }
 bytes = { workspace = true }
 shared = { workspace = true }
+tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-tokio = { workspace = true }
+game_sockets = { git = "https://github.com/VALERE91/game_sockets.git", branch = "master", default-features = false, features = ["quic"] }
