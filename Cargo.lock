@@ -3,18 +3,6 @@
 version = 4
 
 [[package]]
-name = "Broker"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bytes",
- "shared",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "ab_glyph"
 version = "0.2.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1886,6 +1874,19 @@ dependencies = [
  "futures-io",
  "futures-lite",
  "piper",
+]
+
+[[package]]
+name = "broker"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "game_sockets",
+ "shared",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -6006,6 +6007,19 @@ checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "spatial_service"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "game_sockets",
+ "shared",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

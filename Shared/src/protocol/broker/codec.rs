@@ -397,6 +397,31 @@ fn read_topic(bytes: &[u8]) -> Topic {
     topic
 }
 
+/// Build a Topic from a shard id (e.g. 0 → "shard:0").
+/// Uses a small inline buffer to avoid heap allocation on every call.
+pub fn topic_for_shard(shard_id: u32) -> Topic {
+    let mut topic = [0u8; TOPIC_LEN];
+    // Write "shard:" prefix then the decimal digits directly into the buffer.
+    let prefix = b"shard:";
+    topic[..prefix.len()].copy_from_slice(prefix);
+    let mut n = shard_id;
+    let mut digits = [0u8; 10]; // u32::MAX is 10 digits
+    let mut len = 0usize;
+    if n == 0 {
+        digits[0] = b'0';
+        len = 1;
+    } else {
+        while n > 0 {
+            digits[len] = b'0' + (n % 10) as u8;
+            n /= 10;
+            len += 1;
+        }
+        digits[..len].reverse();
+    }
+    topic[prefix.len()..prefix.len() + len].copy_from_slice(&digits[..len]);
+    topic
+}
+
 pub fn topic_from_str(value: &str) -> Topic {
     let mut topic = [0_u8; TOPIC_LEN];
     let bytes = value.as_bytes();
