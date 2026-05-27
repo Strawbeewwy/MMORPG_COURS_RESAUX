@@ -4,6 +4,6 @@ mod net;
 mod world;
 mod render;
 
-fn main() {
+fn main(){
     app::run();
 }

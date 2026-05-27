@@ -1,9 +1,34 @@
 use serde::{Deserialize, Serialize};
 
-pub type PlayerId = String;
-pub type EntityId = String;
+pub type PlayerId = u32;
+pub type EntityId = u32;
 pub type ZoneId = String;
 pub type Username = String;
+
+/// Numeric client identifier assigned by the broker on connection.
+pub type ClientId = u32;
+
+
+
+/// Spawn information sent by the broker to a shard when placing a new client.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlayerSpawnInfo {
+    pub player_id: PlayerId,
+    pub username: Username,
+    pub zone: ZoneId,
+    pub spawn_position: NetVec2,
+}
+
+/// World-state update broadcast by the broker to subscribed clients.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum WorldUpdate {
+    /// Full world snapshot for initial sync or re-sync.
+    Snapshot { snapshot: WorldSnapshot },
+    /// A new player appeared in the zone.
+    PlayerJoined { player: PlayerPublicInfo },
+    /// A player left the zone.
+    PlayerLeft { player_id: PlayerId },
+}
 
 /**
 2D vector sent on the network, not used for math

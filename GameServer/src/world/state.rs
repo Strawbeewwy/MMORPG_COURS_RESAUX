@@ -1,15 +1,21 @@
 use crate::net::network_event::SharedPlayerRegistry;
-use crate::world::player::PlayerInfo;
+use crate::world::player::{
+    PlayerInfo, PLAYER_DEFAULT_MOVE_SPEED
+};
 use bevy::prelude::{
     Res, Resource, Time
 };
 use shared::protocol::{
-    PlayerId, PlayerSnapshot, WorldSnapshot, ZoneId
+    NetVec2, PlayerId, PlayerSnapshot, WorldSnapshot, ZoneId,
+    PlayerSpawnInfo, ClientId,
 };
 use crate::net::area_of_interest::{
     is_inside_area_of_interest, DEFAULT_AREA_OF_INTEREST_RADIUS,
 };
 use std::collections::HashMap;
+use shared::protocol::transport::codec;
+use crate::config::ServerConfig;
+
 #[derive(Debug, Default, Resource)]
 pub struct PlayerRegistry {
     pub players: HashMap<PlayerId, PlayerInfo>,
@@ -94,4 +100,47 @@ pub fn update_players_registry(
     };
 
     registry.update_players(time.delta_secs());
+}
+
+pub fn handle_add_client_to_shard(
+    config: &ServerConfig,
+    registry: &SharedPlayerRegistry,
+    client_id: ClientId,
+    payload: &[u8],
+) {
+    let spawn_info = match codec::decode::<PlayerSpawnInfo>(payload) {
+        Ok(spawn_info) => spawn_info,
+        Err(error) => {
+            tracing::warn!(
+                "failed to decode PlayerSpawnInfo for client {}: {error:#}",
+                client_id
+            );
+            return;
+        }
+    };
+
+    let Ok(mut registry) = registry.inner.try_lock() else {
+        tracing::warn!("could not lock player registry for AddClientToShard");
+        return;
+    };
+
+    let player = PlayerInfo {
+        player_id: spawn_info.player_id.clone(),
+        username: spawn_info.username.clone(),
+        zone: spawn_info.zone.clone(),
+        position: spawn_info.spawn_position,
+        velocity: NetVec2::ZERO,
+        movement_speed: PLAYER_DEFAULT_MOVE_SPEED,
+    };
+
+    registry.players.insert(spawn_info.player_id.clone(), player);
+
+    tracing::info!(
+        "added client {} to shard topic={} as player_id={} username={} zone={}",
+        client_id,
+        shared::protocol::broker::topic_to_string(&config.shard_topic),
+        spawn_info.player_id,
+        spawn_info.username,
+        spawn_info.zone
+    );
 }

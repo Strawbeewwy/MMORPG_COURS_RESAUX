@@ -1,19 +1,21 @@
 use crate::config::ServerConfig;
-use crate::net::gameplay_message::handle_client_message;
-use crate::net::login::remove_player_for_connection;
 use crate::net::area_of_interest::DEFAULT_AREA_OF_INTEREST_RADIUS;
-use crate::world::state::PlayerRegistry;
+use crate::net::input::handle_broker_client_input;
+use crate::world::state::{
+    PlayerRegistry, handle_add_client_to_shard,
+};
 use bevy::prelude::*;
 use bytes::Bytes;
 use shared::game_sockets::protocols::QuicBackend;
 use shared::game_sockets::{
     GameConnection, GameNetworkEvent, GamePeer, GameStream, GameStreamReliability,
 };
-use shared::protocol::transport::codec;
-use shared::protocol::{
-    ClientGameMessage, PlayerId, ServerGameMessage
+use shared::protocol::broker::{
+    BrokerMessage, Topic, decode_message, encode_publish,
+    encode_register_shard, topic_to_string,
 };
-use std::collections::HashMap;
+use shared::protocol::transport::codec;
+use shared::protocol::WorldUpdate;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -23,67 +25,76 @@ pub struct SharedPlayerRegistry {
 }
 
 #[derive(Resource)]
-pub struct GameplayPeer {
+pub struct BrokerShardPeer {
     pub peer: GamePeer,
-    pub reliable_streams: HashMap<GameConnection, GameStream>,
-    pub connection_players: HashMap<GameConnection, PlayerId>,
+    pub connection: Option<GameConnection>,
+    pub reliable_stream: Option<GameStream>,
+    pub registered: bool,
 }
 
-pub fn start_quic_server(mut commands: Commands, config: Res<ServerConfig>) {
+pub fn connect_to_broker(mut commands: Commands, config: Res<ServerConfig>) {
     let peer = GamePeer::new(QuicBackend::new());
 
-    peer.listen("0.0.0.0", config.port)
-        .expect("failed to start game_sockets QUIC listener");
+    if let Err(error) = peer.connect(&config.broker_ip, config.broker_port) {
+        tracing::error!(
+            "failed to connect shard to broker {}: {}",
+            config.broker_addr(),
+            error
+        );
+    }
 
     tracing::info!(
-        "game_sockets QUIC gameplay server listening on 0.0.0.0:{} zone={} max_players={}",
-        config.port,
+        "shard connecting to broker={} zone={} topic={}",
+        config.broker_addr(),
         config.zone,
-        config.max_players
+        topic_to_string(&config.shard_topic)
     );
 
-    commands.insert_resource(GameplayPeer {
+    commands.insert_resource(BrokerShardPeer {
         peer,
-        reliable_streams: HashMap::new(),
-        connection_players: HashMap::new(),
+        connection: None,
+        reliable_stream: None,
+        registered: false,
     });
 }
 
-pub fn poll_network_events(
+pub fn poll_broker_events(
     config: Res<ServerConfig>,
-    mut gameplay_peer: ResMut<GameplayPeer>,
+    mut broker_peer: ResMut<BrokerShardPeer>,
     registry: Res<SharedPlayerRegistry>,
 ) {
     loop {
-        let event = match gameplay_peer.peer.poll() {
+        let event = match broker_peer.peer.poll() {
             Ok(Some(event)) => event,
             Ok(None) => break,
             Err(error) => {
-                tracing::error!("failed to poll gameplay peer: {error}");
+                tracing::error!("failed to poll shard broker connection: {error}");
                 break;
             }
         };
 
-        handle_network_event(&config, &mut gameplay_peer, &registry, event);
+        handle_broker_event(&config, &mut broker_peer, &registry, event);
     }
 }
 
-fn handle_network_event(
+fn handle_broker_event(
     config: &ServerConfig,
-    gameplay_peer: &mut GameplayPeer,
+    broker_peer: &mut BrokerShardPeer,
     registry: &SharedPlayerRegistry,
     event: GameNetworkEvent,
 ) {
     match event {
         GameNetworkEvent::Connected(connection) => {
-            tracing::info!("client connected: {}", connection.connection_id);
+            tracing::info!("shard connected to broker: {}", connection.connection_id);
 
-            if let Err(error) = gameplay_peer
+            broker_peer.connection = Some(connection);
+
+            if let Err(error) = broker_peer
                 .peer
                 .create_stream(connection, GameStreamReliability::Reliable)
             {
                 tracing::error!(
-                    "failed to create reliable stream for {}: {}",
+                    "failed to create reliable stream to broker on connection {}: {}",
                     connection.connection_id,
                     error
                 );
@@ -91,32 +102,36 @@ fn handle_network_event(
         }
 
         GameNetworkEvent::Disconnected(connection) => {
-            tracing::info!("client disconnected: {}", connection.connection_id);
+            tracing::warn!("shard disconnected from broker: {}", connection.connection_id);
 
-            gameplay_peer.reliable_streams.remove(&connection);
-            remove_player_for_connection(gameplay_peer, registry, connection);
+            broker_peer.connection = None;
+            broker_peer.reliable_stream = None;
+            broker_peer.registered = false;
         }
 
         GameNetworkEvent::StreamCreated(connection, stream) => {
             tracing::info!(
-                "stream created: connection={} stream={}",
+                "broker stream created for shard: connection={} stream={}",
                 connection.connection_id,
                 stream.stream_id
             );
 
             if stream.is_reliable() {
-                gameplay_peer.reliable_streams.insert(connection, stream);
+                broker_peer.connection = Some(connection);
+                broker_peer.reliable_stream = Some(stream);
+                register_shard_with_broker(config, broker_peer);
             }
         }
 
         GameNetworkEvent::StreamClosed(connection, stream) => {
             tracing::info!(
-                "stream closed: connection={} stream={}",
+                "broker stream closed for shard: connection={} stream={}",
                 connection.connection_id,
                 stream.stream_id
             );
 
-            gameplay_peer.reliable_streams.remove(&connection);
+            broker_peer.reliable_stream = None;
+            broker_peer.registered = false;
         }
 
         GameNetworkEvent::Message {
@@ -124,98 +139,159 @@ fn handle_network_event(
             stream,
             data,
         } => {
-            handle_network_message(config, gameplay_peer, registry, connection, stream, data);
+            tracing::debug!(
+                "broker message received by shard: connection={} stream={} bytes={}",
+                connection.connection_id,
+                stream.stream_id,
+                data.len()
+            );
+
+            handle_broker_message(config, broker_peer, registry, &data);
         }
 
         GameNetworkEvent::Error { connection, inner } => {
             tracing::warn!(
-                "game socket error on connection {}: {}",
+                "broker socket error for shard on connection {}: {}",
                 connection.connection_id,
                 inner
             );
+
+            broker_peer.connection = None;
+            broker_peer.reliable_stream = None;
+            broker_peer.registered = false;
         }
     }
 }
 
-fn handle_network_message(
+fn register_shard_with_broker(
     config: &ServerConfig,
-    gameplay_peer: &mut GameplayPeer,
-    registry: &SharedPlayerRegistry,
-    connection: GameConnection,
-    stream: GameStream,
-    data: Bytes,
+    broker_peer: &mut BrokerShardPeer,
 ) {
-    let request = match codec::decode::<ClientGameMessage>(&data) {
-        Ok(request) => request,
-        Err(error) => {
-            tracing::warn!(
-                "failed to decode ClientGameMessage from {}: {error:#}",
-                connection.connection_id
-            );
+    if broker_peer.registered {
+        return;
+    }
 
-            let response = ServerGameMessage::JoinRejected {
-                reason: "invalid_message".to_string(),
-            };
+    let packet = encode_register_shard(config.shard_topic);
 
-            send_server_message(gameplay_peer, connection, stream, &response);
-            return;
-        }
-    };
+    if !send_raw_to_broker(broker_peer, packet, "RegisterShard") {
+        return;
+    }
 
-    let response = handle_client_message(config, registry, gameplay_peer, connection, request);
+    broker_peer.registered = true;
 
-    send_server_message(gameplay_peer, connection, stream, &response);
+    tracing::info!(
+        "registered shard with broker topic={}",
+        topic_to_string(&config.shard_topic)
+    );
 }
 
-fn send_server_message(
-    gameplay_peer: &GameplayPeer,
-    connection: GameConnection,
-    stream: GameStream,
-    response: &ServerGameMessage,
+fn handle_broker_message(
+    config: &ServerConfig,
+    broker_peer: &BrokerShardPeer,
+    registry: &SharedPlayerRegistry,
+    data: &[u8],
 ) {
-    let payload = match codec::encode(response) {
-        Ok(payload) => payload,
+    let message = match decode_message(data) {
+        Ok(message) => message,
         Err(error) => {
-            tracing::error!("failed to encode ServerGameMessage: {error:#}");
+            tracing::warn!("failed to decode broker message in shard: {error:#}");
             return;
         }
     };
 
-    if let Err(error) = gameplay_peer.peer.send(&connection, &stream, payload.into()) {
-        tracing::error!(
-            "failed to send response to player {}: {}",
-            connection.connection_id,
-            error
-        );
+    match message {
+        BrokerMessage::AddClientToShard {
+            topic,
+            client_id,
+            payload,
+        } => {
+            if topic != config.shard_topic {
+                tracing::warn!(
+                    "received AddClientToShard for wrong topic: got={} expected={}",
+                    topic_to_string(&topic),
+                    topic_to_string(&config.shard_topic)
+                );
+                return;
+            }
+
+            handle_add_client_to_shard(config, registry, client_id, &payload);
+        }
+
+        BrokerMessage::ClientInput { client_id, input } => {
+            handle_broker_client_input(config, registry, client_id, input);
+        }
+
+        other => {
+            tracing::warn!("unexpected broker message received by shard: {:?}", other);
+        }
     }
 }
 
-
-pub fn broadcast_world_snapshots(
+pub fn publish_world_snapshots(
     config: Res<ServerConfig>,
-    gameplay_peer: Res<GameplayPeer>,
+    broker_peer: Res<BrokerShardPeer>,
     registry: Res<SharedPlayerRegistry>,
 ) {
+    if !broker_peer.registered {
+        return;
+    }
+
     let Ok(registry) = registry.inner.try_lock() else {
-        tracing::warn!("could not lock player registry for world snapshot broadcast");
+        tracing::warn!("could not lock player registry for shard world snapshot publish");
         return;
     };
 
-    for (connection, player_id) in gameplay_peer.connection_players.iter() {
-        let Some(stream) = gameplay_peer.reliable_streams.get(connection) else {
-            continue;
-        };
+    let snapshot = registry.snapshot(config.zone.clone());
 
-        let Some(snapshot) = registry.snapshot_for_player(
-            config.zone.clone(),
-            player_id,
-            DEFAULT_AREA_OF_INTEREST_RADIUS,
-        ) else {
-            continue;
-        };
+    let update = WorldUpdate::Snapshot { snapshot };
 
-        let message = ServerGameMessage::WorldSnapshot { snapshot };
+    publish_world_update(&broker_peer, config.shard_topic, update);
+}
 
-        send_server_message(&gameplay_peer, *connection, stream.clone(), &message);
+fn publish_world_update(
+    broker_peer: &BrokerShardPeer,
+    topic: Topic,
+    update: WorldUpdate,
+) {
+    let payload = match codec::encode(&update) {
+        Ok(payload) => payload,
+        Err(error) => {
+            tracing::error!("failed to encode WorldUpdate: {error:#}");
+            return;
+        }
+    };
+
+    let packet = match encode_publish(topic, &payload) {
+        Ok(packet) => packet,
+        Err(error) => {
+            tracing::error!("failed to encode broker Publish: {error:#}");
+            return;
+        }
+    };
+
+    send_raw_to_broker(broker_peer, packet, "Publish");
+}
+
+fn send_raw_to_broker(
+    broker_peer: &BrokerShardPeer,
+    packet: Vec<u8>,
+    label: &str,
+) -> bool {
+    let Some(connection) = broker_peer.connection else {
+        tracing::warn!("cannot send {label}: shard is not connected to broker");
+        return false;
+    };
+
+    let Some(stream) = broker_peer.reliable_stream.as_ref() else {
+        tracing::warn!("cannot send {label}: shard reliable stream is not ready");
+        return false;
+    };
+
+    match broker_peer.peer.send(&connection, stream, Bytes::from(packet)) {
+        Ok(()) => true,
+        Err(error) => {
+            tracing::error!("failed to send {label} to broker: {}", error);
+            false
+        }
     }
 }

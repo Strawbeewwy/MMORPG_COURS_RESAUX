@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use shared::protocol::broker::{Subscribe, Unsubscribe};
+use shared::protocol::broker::{encode_subscribe, encode_unsubscribe, topic_for_shard};
 use crate::messages::{CrossingAlertMsg, PositionUpdateMsg};
 use crate::resources::client_map::ClientMap;
 use crate::resources::config::SpatialConfig;
@@ -24,12 +24,12 @@ pub fn handle_subscriptions(
         // Unsubscribe from the previous shard, subscribe to the new one
         if new_shard != old_shard {
             if let Some(old) = old_shard {
-                broker.send(Unsubscribe::new(update.client_id, old).to_bytes());
+                broker.send(encode_unsubscribe(update.client_id, topic_for_shard(old)));
                 tracing::debug!("client {} unsubscribed from shard:{old}", update.client_id);
             }
 
             if let Some(new) = new_shard {
-                broker.send(Subscribe::new(update.client_id, new).to_bytes());
+                broker.send(encode_subscribe(update.client_id, topic_for_shard(new)));
                 client_map.0.insert(update.client_id, new);
                 tracing::debug!("client {} subscribed to shard:{new}", update.client_id);
             }
