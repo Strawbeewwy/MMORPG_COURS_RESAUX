@@ -11,6 +11,19 @@ pub struct ShardListener {
     pub streams: HashMap<GameConnection, GameStream>,
 }
 
+/// Tracks the lifecycle of the outbound broker connection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BrokerConnectionState {
+    /// Initial connect attempt in progress (no Connected event yet).
+    Connecting,
+    /// QUIC handshake done, waiting for the reliable stream to be created.
+    Connected,
+    /// Stream ready — messages can be sent.
+    Ready,
+    /// Connection was lost; reconnect should be attempted.
+    Disconnected,
+}
+
 /// Outbound QUIC connection to the broker.
 /// Used to send Subscribe / Unsubscribe messages.
 #[derive(Resource)]
@@ -19,23 +32,40 @@ pub struct BrokerClient {
     pub connection: Option<GameConnection>,
     /// Reliable stream used to send broker control messages.
     pub stream: Option<GameStream>,
+    /// Explicit connection state — never ambiguous between "not yet" and "lost".
+    pub state: BrokerConnectionState,
 }
 
 impl BrokerClient {
-    /// True once the handshake is complete and a stream is ready.
-    pub fn is_ready(&self) -> bool {
-        self.connection.is_some() && self.stream.is_some()
+    pub fn new(peer: GamePeer) -> Self {
+        Self {
+            peer,
+            connection: None,
+            stream: None,
+            state: BrokerConnectionState::Connecting,
+        }
     }
 
-    /// Send raw bytes over the reliable broker stream if available.
+    pub fn is_ready(&self) -> bool {
+        self.state == BrokerConnectionState::Ready
+    }
+
+    /// Send raw bytes over the reliable broker stream if ready.
     pub fn send(&self, payload: Vec<u8>) {
         let (Some(conn), Some(stream)) = (self.connection.as_ref(), self.stream.as_ref()) else {
-            tracing::warn!("BrokerClient not ready — dropping message");
+            tracing::warn!("BrokerClient not ready (state={:?}) — dropping message", self.state);
             return;
         };
         if let Err(e) = self.peer.send(conn, stream, payload.into()) {
             tracing::error!("failed to send to broker: {e}");
         }
+    }
+
+    /// Reset state for a reconnect attempt.
+    pub fn reset_for_reconnect(&mut self) {
+        self.connection = None;
+        self.stream = None;
+        self.state = BrokerConnectionState::Connecting;
     }
 }
 

@@ -110,6 +110,15 @@ impl QuadTree {
         result
     }
 
+    /// Zero-allocation variant — caller provides a reusable buffer (cleared on entry).
+    /// Prefer this in hot paths (called once per client per tick).
+    pub fn shards_near_into(&self, x: f32, y: f32, margin: f32, out: &mut Vec<u32>) {
+        out.clear();
+        self.collect_shards_near(x, y, margin, out);
+        out.sort_unstable();
+        out.dedup();
+    }
+
     fn collect_shards_near(&self, x: f32, y: f32, margin: f32, out: &mut Vec<u32>) {
         if !self.bounds.intersects_circle(x, y, margin) {
             return;
