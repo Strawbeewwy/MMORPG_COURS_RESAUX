@@ -1,22 +1,7 @@
-pub mod discovery;
-pub mod game;
-pub mod http;
-pub mod transport;
-pub mod broker;
+pub mod codec;
 
-pub use discovery::{
-    Heartbeat, ServerInfo
-};
-pub use game::{
-    EntityId, PlayerId, PlayerPublicInfo, PlayerSnapshot,
-    Username, NetVec2, WorldSnapshot, WorldUpdate, ZoneId,
-    PlayerSpawnInfo,
-};
-pub use http::{
-    ErrorResponse, HealthResponse, LoginHttpRequest,
-    LoginHttpResponse
-};
-pub use broker::{
+
+pub use codec::{
     BrokerMessage, ClientId, Topic, CLIENT_INPUT_LEN, TOPIC_LEN,
     decode_message, encode_add_client_to_shard, encode_broadcast, encode_client_accepted,
     encode_client_hello, encode_client_input, encode_publish, encode_register_client,

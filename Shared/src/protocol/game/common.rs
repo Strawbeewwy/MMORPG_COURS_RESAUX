@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-pub type PlayerId = String;
-pub type EntityId = String;
+pub type PlayerId = u32;
+pub type EntityId = u32;
 pub type ZoneId = String;
 pub type Username = String;
 
