@@ -10,10 +10,7 @@ use shared::game_sockets::protocols::QuicBackend;
 use shared::game_sockets::{
     GameConnection, GameNetworkEvent, GamePeer, GameStream, GameStreamReliability,
 };
-use shared::protocol::broker::{
-    BrokerMessage, Topic, decode_message, encode_publish,
-    encode_register_shard, topic_to_string,
-};
+use shared::protocol::broker::{broker_message, Topic, decode_message, encode_message, topic_to_string, BrokerMessage};
 use shared::protocol::transport::codec;
 use shared::protocol::WorldUpdate;
 use std::sync::Arc;
@@ -171,7 +168,21 @@ fn register_shard_with_broker(
         return;
     }
 
-    let packet = encode_register_shard(config.shard_topic);
+
+    let packet = match encode_message(&BrokerMessage::RegisterShard {
+       topic: config.shard_topic,
+    }) {
+        Ok(packet) => packet,
+        Err(error) => {
+            tracing::warn!(
+                "cannot encode RegisterShard for topic {}: {}",
+                topic_to_string(&config.shard_topic),
+                error
+            );
+            return;
+        }
+    };
+
 
     if !send_raw_to_broker(broker_peer, packet, "RegisterShard") {
         return;
@@ -261,10 +272,17 @@ fn publish_world_update(
         }
     };
 
-    let packet = match encode_publish(topic, &payload) {
+    let packet = match encode_message(&BrokerMessage::Publish {
+        topic,
+        payload: Vec::from(payload),
+    }) {
         Ok(packet) => packet,
         Err(error) => {
-            tracing::error!("failed to encode broker Publish: {error:#}");
+            tracing::warn!(
+                "cannot encode Publish for topic {}: {}",
+                topic_to_string(&topic),
+                error
+            );
             return;
         }
     };

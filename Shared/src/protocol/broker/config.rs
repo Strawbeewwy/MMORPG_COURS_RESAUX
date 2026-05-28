@@ -1,0 +1,16 @@
+pub const TAG_SUBSCRIBE: u8 = 0x01;
+pub const TAG_UNSUBSCRIBE: u8 = 0x02;
+pub const TAG_PUBLISH: u8 = 0x03;
+pub const TAG_BROADCAST: u8 = 0x04;
+pub const TAG_CLIENT_INPUT: u8 = 0x05;
+pub const TAG_REGISTER_CLIENT: u8 = 0x06;
+pub const TAG_REGISTER_SHARD: u8 = 0x07;
+pub const TAG_REGISTER_SPATIAL_SERVICE: u8 = 0x08;
+pub const TAG_ADD_CLIENT_TO_SHARD: u8 = 0x09;
+pub const TAG_SET_CLIENT_AUTHORITY: u8 = 0x0A;
+pub const TAG_CLIENT_HELLO: u8 = 0x0B;
+pub const TAG_CLIENT_ACCEPTED: u8 = 0x0C;
+pub const TAG_POSITION_UPDATE: u8 = 0x10;
+pub const TAG_LEN: usize = size_of::<u8>();
+pub const MAX_PAYLOAD_LEN_IN_BYTE: usize = size_of::<u16>();
+pub const CLIENT_INPUT_LEN: usize = 16;

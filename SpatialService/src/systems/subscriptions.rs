@@ -1,5 +1,7 @@
 use bevy::prelude::*;
-use shared::protocol::broker::{encode_subscribe, encode_unsubscribe, topic_for_shard};
+use shared::protocol::broker::{
+    encode_message, topic_for_shard, BrokerMessage,
+};
 use crate::messages::{CrossingAlertMsg, PositionUpdateMsg};
 use crate::resources::client_map::ClientMap;
 use crate::resources::config::SpatialConfig;
@@ -36,12 +38,35 @@ pub fn handle_subscriptions(
         // Unsubscribe from the previous shard, subscribe to the new one.
         if new_shard != old_shard {
             if let Some(old) = old_shard {
-                broker.send(encode_unsubscribe(update.client_id, topic_for_shard(old)));
+
+                let packet = match encode_message(&BrokerMessage::Unsubscribe {
+                    client_id: 42,
+                    topic: topic_for_shard(old),
+                }) {
+                    Ok(packet) => packet,
+                    Err(error) => {
+                        eprintln!("failed to encode subscribe message: {error}");
+                        return;
+                    }
+                };
+
+                broker.send(packet);
                 tracing::debug!("client {} unsubscribed from shard:{old}", update.client_id);
             }
 
             if let Some(new) = new_shard {
-                broker.send(encode_subscribe(update.client_id, topic_for_shard(new)));
+                let packet = match encode_message(&BrokerMessage::Subscribe {
+                    client_id: 42,
+                    topic: topic_for_shard(new),
+                }) {
+                    Ok(packet) => packet,
+                    Err(error) => {
+                        eprintln!("failed to encode subscribe message: {error}");
+                        return;
+                    }
+                };
+
+                broker.send(packet);
                 // TODO: pass real GameConnection when shard-to-connection tracking is wired up.
                 // For now we store without connection key — cleanup will happen via shard disconnect.
                 client_map.shard_by_client.insert(update.client_id, new);

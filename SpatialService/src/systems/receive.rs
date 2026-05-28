@@ -1,6 +1,7 @@
+use std::collections::HashMap;
 use bevy::prelude::*;
-use game_sockets::{GameNetworkEvent, GameStreamReliability};
-use shared::protocol::spatial::PositionUpdate as WirePositionUpdate;
+use game_sockets::{GameConnection, GameNetworkEvent, GamePeer, GameStream, GameStreamReliability};
+use shared::protocol::broker::{decode_message, encode_message, BrokerMessage};
 use crate::messages::PositionUpdateMsg;
 use crate::resources::client_map::ClientMap;
 use crate::resources::net_handles::{BrokerClient, BrokerConnectionState, ShardListener};
@@ -52,29 +53,22 @@ fn handle_shard_event(
         StreamClosed(conn, _stream) => {
             listener.streams.remove(&conn);
         }
-        Message { data, .. } => {
-            match WirePositionUpdate::from_bytes(&data) {
-                Ok(u) => {
-                    ev_writer.write(PositionUpdateMsg {
-                        client_id: u.client_id,
-                        x: u.x as f64,
-                        y: u.y as f64,
-                    });
-                }
-                Err(e) => tracing::warn!("invalid PositionUpdate from shard: {e}"),
-            }
-        }
+
         Error { connection, inner } => {
             tracing::warn!("shard socket error on {}: {inner}", connection.connection_id);
         }
+        _ => {}
     }
 }
 
 /// Poll the broker peer to advance handshake state and maintain the connection.
-pub fn poll_broker_connection(mut broker: ResMut<BrokerClient>) {
+pub fn poll_broker_connection(
+    mut broker: ResMut<BrokerClient>,
+    mut ev_writer: MessageWriter<PositionUpdateMsg>,
+) {
     loop {
         match broker.peer.poll() {
-            Ok(Some(event)) => handle_broker_event(&mut broker, event),
+            Ok(Some(event)) => handle_broker_event(&mut broker, event, &mut ev_writer),
             Ok(None) => break,
             Err(e) => {
                 tracing::error!("broker client poll error: {e}");
@@ -84,7 +78,12 @@ pub fn poll_broker_connection(mut broker: ResMut<BrokerClient>) {
     }
 }
 
-fn handle_broker_event(broker: &mut BrokerClient, event: GameNetworkEvent) {
+fn handle_broker_event(
+    broker: &mut BrokerClient,
+    event: GameNetworkEvent,
+    ev_writer: &mut MessageWriter<PositionUpdateMsg>,
+)
+{
     use game_sockets::GameNetworkEvent::*;
     match event {
         Connected(conn) => {
@@ -113,6 +112,46 @@ fn handle_broker_event(broker: &mut BrokerClient, event: GameNetworkEvent) {
         Error { connection, inner } => {
             tracing::warn!("broker error on {}: {inner}", connection.connection_id);
             broker.state = BrokerConnectionState::Disconnected;
+        }
+        Message {
+            connection,
+            data, ..
+        } => {
+            handle_broker_message(
+                connection,
+                &data,
+                ev_writer,
+            );
+        }
+    }
+}
+
+
+pub fn handle_broker_message(
+    connection: GameConnection,
+    data: &[u8],
+    ev_writer: &mut MessageWriter<PositionUpdateMsg>,
+) {
+    let message = match decode_message(data) {
+        Ok(message) => message,
+        Err(error) => {
+            tracing::warn!(
+                "invalid broker message from connection {}: {error}",
+                connection.connection_id
+            );
+            return;
+        }
+    };
+
+    match message {
+
+        BrokerMessage::PositionUpdate { client_id , position} => {
+            let x = f64::try_from(position[0]).unwrap();
+            let y = f64::try_from(position[1]).unwrap();
+            let message = PositionUpdateMsg { client_id, x, y };
+
+            ev_writer.write(message);
+
         }
         _ => {}
     }

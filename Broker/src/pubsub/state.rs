@@ -18,6 +18,7 @@ pub struct PubSubState {
     pub connection_clients: HashMap<GameConnection, ClientId>,
     pub shard_streams_by_topic: HashMap<Topic, (GameConnection, GameStream)>,
     pub client_authoritative_topics: HashMap<ClientId, Topic>,
+    pub spatial_service_streams: HashMap<GameConnection, GameStream>,
     next_client_id: ClientId,
 }
 impl PubSubState {
@@ -60,6 +61,21 @@ impl PubSubState {
 
         self.connection_clients.insert(connection, client_id);
     }
+
+    pub fn register_spatial_service(
+        &mut self,
+        connection: GameConnection,
+        stream: GameStream,
+    ) {
+        tracing::info!(
+            "register spatial service stream connection={} stream={}",
+            connection.connection_id,
+            stream.stream_id
+        );
+
+        self.spatial_service_streams.insert(connection, stream);
+    }
+
 
     pub fn subscribe_client(
         &mut self,

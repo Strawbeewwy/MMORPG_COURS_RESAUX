@@ -2,11 +2,10 @@ use crate::pubsub::state::PubSubState;
 use bytes::Bytes;
 use shared::game_sockets::{GameConnection, GamePeer, GameStream};
 use shared::protocol::broker::{
-    CLIENT_INPUT_LEN, ClientId, Topic, encode_add_client_to_shard, encode_broadcast,
-    encode_client_input, topic_to_string,
-};
+    CLIENT_INPUT_LEN, ClientId, Topic, encode_message,
+    topic_to_string, BrokerMessage, };
 use std::collections::HashMap;
-
+use std::vec;
 
 pub fn publish_to_subscribers(
     peer: &GamePeer,
@@ -19,7 +18,9 @@ pub fn publish_to_subscribers(
         return;
     };
 
-    let packet = match encode_broadcast(payload) {
+    let packet = match encode_message(&BrokerMessage::Broadcast {
+        payload: Vec::from(payload),
+    }) {
         Ok(packet) => packet,
         Err(error) => {
             tracing::warn!("cannot encode broadcast: {error}");
@@ -69,7 +70,17 @@ pub fn relay_client_input_to_shard(
         return;
     };
 
-    let packet = encode_client_input(client_id, input);
+    let packet = match encode_message(&BrokerMessage::ClientInput {
+        client_id,
+        input,
+    }) {
+        Ok(packet) => packet,
+        Err(error) => {
+            tracing::warn!("cannot encode broadcast: {error}");
+            return;
+        }
+    };
+
 
     if let Err(error) = peer.send(shard_connection, shard_stream, Bytes::from(packet)) {
         tracing::warn!(
@@ -97,7 +108,11 @@ pub fn relay_add_client_to_shard(
         return;
     };
 
-    let packet = match encode_add_client_to_shard(topic, client_id, payload) {
+    let packet = match encode_message(&BrokerMessage::AddClientToShard {
+        topic,
+        client_id,
+        payload: Vec::from(payload),
+    }) {
         Ok(packet) => packet,
         Err(error) => {
             tracing::warn!(
@@ -119,3 +134,59 @@ pub fn relay_add_client_to_shard(
         );
     }
 }
+
+pub fn relay_position_update_to_spatial_services(
+    peer : &GamePeer,
+    state: &PubSubState,
+    client_id: ClientId,
+    position: [f32;2],
+){
+
+    if state.spatial_service_streams.is_empty() {
+        tracing::warn!(
+                    "cannot forward PositionUpdate for client {}: no spatial service registered",
+                    client_id
+                );
+        return;
+    }
+
+    let packet = match encode_message(&BrokerMessage::PositionUpdate {
+        client_id,
+        position,
+    }) {
+        Ok(packet) => packet,
+        Err(error) => {
+            tracing::warn!(
+                        "failed to encode PositionUpdate for client {}: {}",
+                        client_id,
+                        error
+                    );
+            return;
+        }
+    };
+
+    for (spatial_connection, spatial_stream) in &state.spatial_service_streams {
+        if let Err(error) = peer.send(
+            spatial_connection,
+            spatial_stream,
+            Bytes::from(packet.clone()),
+        ) {
+            tracing::warn!(
+                "failed to forward PositionUpdate for client {} to spatial service connection {}: {}",
+                client_id,
+                spatial_connection.connection_id,
+                error
+            );
+        }
+    }
+
+    tracing::debug!(
+        "forwarded PositionUpdate client_id={} position=({}, {}) to {} spatial service(s)",
+        client_id,
+        position[0],
+        position[1],
+        state.spatial_service_streams.len()
+    );
+
+}
+

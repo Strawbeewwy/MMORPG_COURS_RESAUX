@@ -1,20 +1,14 @@
 use crate::net::peer_roles::{
     PeerRole, PeerRoles
 };
-use crate::net::relay::{
-    publish_to_subscribers, relay_add_client_to_shard,
-    relay_client_input_to_shard,
-};
+use crate::net::relay::*;
 use bytes::Bytes;
 use crate::pubsub::state::PubSubState;
 use shared::game_sockets::{
     GameConnection, GamePeer, GameStream
 };
-use shared::protocol::broker::{
-    BrokerMessage, decode_message, topic_to_string
-};
+use shared::protocol::broker::{BrokerMessage, decode_message, topic_to_string, encode_message, topic_for_shard};
 use std::collections::HashMap;
-use shared::protocol::encode_client_accepted;
 
 pub fn handle_message(
     peer: &GamePeer,
@@ -38,30 +32,47 @@ pub fn handle_message(
 
     match message {
 
-        BrokerMessage::ClientHello => {
+        BrokerMessage::ClientHello { username: _ } => {
             if !peer_roles.register(connection, PeerRole::Client, "ClientHello") {
                 return;
             }
 
+
             let client_id = state.allocate_client_id();
             state.register_client_connection(client_id, connection);
 
-            let packet = encode_client_accepted(client_id);
+            let packet = match encode_message(&BrokerMessage::ClientAccepted {
+                client_id,
+            }) {
+                Ok(packet) => packet,
+                Err(error) => {
+                    tracing::warn!(
+                            "failed to encode ClientAccepted for connection {}: {}",
+                            connection.connection_id,
+                            error
+                        );
+                    return;
+                }
+            };
 
-            if let Err(error) = peer.send(&connection, &stream, Bytes::from(packet)) {
+            if let Err(error) = peer.send(
+                &connection,
+                &stream,
+                Bytes::from(packet)
+            ) {
                 tracing::warn!(
-                    "failed to send ClientAccepted to connection {}: {}",
-                    connection.connection_id,
-                    error
-                );
+                        "failed to send ClientAccepted to connection {}: {}",
+                        connection.connection_id,
+                        error
+                    );
                 return;
             }
 
             tracing::info!(
-                "accepted client connection={} client_id={}",
-                connection.connection_id,
-                client_id
-            );
+                    "accepted client connection={} client_id={}",
+                    connection.connection_id,
+                    client_id
+                );
         }
 
         BrokerMessage::RegisterClient { client_id } => {
@@ -92,6 +103,9 @@ pub fn handle_message(
             ) {
                 return;
             }
+
+            state.register_spatial_service(connection, stream);
+
 
             tracing::info!(
                 "registered spatial service connection={}",
@@ -178,8 +192,19 @@ pub fn handle_message(
                 connection.connection_id,
                 client_id
             );
+        },
+        BrokerMessage::PositionUpdate { client_id , position} => {
+
+            if !peer_roles.ensure(connection, PeerRole::Shard, "PositionUpdate") {
+                return;
+            }
+
+            relay_position_update_to_spatial_services(
+                peer,
+                state,
+                client_id,
+                position,
+            );
         }
-
-
     }
 }
