@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use shared::protocol::broker::{encode_message, BrokerMessage, ClientId, ShardId};
+use shared::protocol::broker::{encode_message, BrokerMessage, ShardId};
 use crate::messages::{CrossingAlertMsg, PositionUpdateMsg};
 use crate::resources::client_map::ClientMap;
 use crate::resources::config::SpatialConfig;
@@ -36,31 +36,29 @@ pub fn handle_subscriptions(
         // Unsubscribe from the previous shard, subscribe to the new one.
         if new_shard != old_shard {
             if let Some(old) = old_shard {
-
                 let packet = match encode_message(&BrokerMessage::Unsubscribe {
-                    client_id: ClientId(42),
+                    client_id: update.client_id,
                     shard_id: ShardId(old),
                 }) {
                     Ok(packet) => packet,
                     Err(error) => {
-                        eprintln!("failed to encode subscribe message: {error}");
-                        return;
+                        tracing::error!("failed to encode Unsubscribe for client {}: {error}", update.client_id.0);
+                        continue;
                     }
                 };
-
                 broker.send(packet);
                 tracing::debug!("client {} unsubscribed from shard:{old}", update.client_id.0);
             }
 
             if let Some(new) = new_shard {
                 let packet = match encode_message(&BrokerMessage::Subscribe {
-                    client_id: ClientId(42),
+                    client_id: update.client_id,
                     shard_id: ShardId(new),
                 }) {
                     Ok(packet) => packet,
                     Err(error) => {
-                        eprintln!("failed to encode subscribe message: {error}");
-                        return;
+                        tracing::error!("failed to encode Subscribe for client {}: {error}", update.client_id.0);
+                        continue;
                     }
                 };
 

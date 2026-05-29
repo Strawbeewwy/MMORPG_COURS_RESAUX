@@ -104,6 +104,7 @@ fn handle_broker_event(
             tracing::info!("broker stream ready");
             broker.stream = Some(stream);
             broker.state = BrokerConnectionState::Ready;
+            broker.reset_backoff();
         }
         StreamClosed(_conn, _stream) => {
             broker.stream = None;

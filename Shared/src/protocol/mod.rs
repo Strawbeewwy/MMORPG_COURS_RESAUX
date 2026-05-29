@@ -2,7 +2,6 @@ pub mod broker;
 pub mod discovery;
 pub mod game;
 pub mod http;
-pub mod spatial;
 pub mod transport;
 
 pub use discovery::{Heartbeat, ServerInfo};

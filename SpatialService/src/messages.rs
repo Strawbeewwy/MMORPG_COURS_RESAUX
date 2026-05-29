@@ -5,7 +5,12 @@ use bevy::prelude::*;
 use shared::protocol::broker::{ClientId, ShardId};
 
 /// Bevy message produced by `poll_shard_events` from an incoming PositionUpdate wire packet.
-/// Uses f64 for position to avoid floating-point precision issues near large world boundaries.
+///
+/// # Why f64 when the wire protocol uses f32?
+/// The wire format (tag `0x10`) transmits positions as `f32` to minimise bandwidth.
+/// Internally we widen to `f64` to avoid precision loss near large world boundaries
+/// (e.g. ±1000 world units). The cast `f32 → f64` in `handle_broker_message` is lossless;
+/// the reverse `f64 → f32` cast in `handle_subscriptions` is intentional and documented there.
 #[derive(Message, Debug, Clone, Copy)]
 pub struct PositionUpdateMsg {
     pub client_id: ClientId,
@@ -29,8 +34,17 @@ pub struct CrossingAlertMsg {
 }
 
 impl CrossingAlertMsg {
-    /// Build from a slice (truncates silently beyond MAX_CROSSING_SHARDS).
+    /// Build from a slice (truncates beyond MAX_CROSSING_SHARDS with a warning).
     pub fn from_slice(client_id: u32, ids: &[u32]) -> Self {
+        if ids.len() > MAX_CROSSING_SHARDS {
+            tracing::warn!(
+                "CrossingAlertMsg: client {} has {} crossing shards but only {} can be tracked — \
+                 excess shards silently dropped (QuadTree depth may be too shallow)",
+                client_id,
+                ids.len(),
+                MAX_CROSSING_SHARDS,
+            );
+        }
         let mut shards = [ShardId::default(); MAX_CROSSING_SHARDS];
 
         let shard_count = ids.len().min(MAX_CROSSING_SHARDS);

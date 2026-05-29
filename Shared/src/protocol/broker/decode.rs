@@ -47,8 +47,8 @@ fn decode_position_update(body: &[u8]) -> anyhow::Result<BrokerMessage> {
     let y_end = y_start + size_of::<f32>();
 
     let position = [
-        f32::from_be_bytes(body[x_start..x_end].try_into()?),
-        f32::from_be_bytes(body[y_start..y_end].try_into()?),
+        f32::from_le_bytes(body[x_start..x_end].try_into()?),
+        f32::from_le_bytes(body[y_start..y_end].try_into()?),
     ];
     Ok(BrokerMessage::PositionUpdate { client_id, position })
 }
@@ -168,12 +168,13 @@ fn decode_client_input(body: &[u8]) -> anyhow::Result<BrokerMessage> {
 }
 
 fn decode_client_hello(body: &[u8]) -> anyhow::Result<BrokerMessage> {
-    if !body.is_empty() {
-        anyhow::bail!("invalid ClientHello length: {}", body.len());
+    // body carries the UTF-8 encoded username; empty username is invalid.
+    if body.is_empty() {
+        anyhow::bail!("invalid ClientHello: empty username");
     }
-    let username = String::from_utf8(body.to_vec()).map_err(|_| anyhow::anyhow!("invalid username encoding"))?;
-
-    Ok(BrokerMessage::ClientHello{username})
+    let username = String::from_utf8(body.to_vec())
+        .map_err(|_| anyhow::anyhow!("invalid ClientHello: non-UTF8 username"))?;
+    Ok(BrokerMessage::ClientHello { username })
 }
 
 fn decode_client_accepted(body: &[u8]) -> anyhow::Result<BrokerMessage> {

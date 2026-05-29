@@ -1,11 +1,6 @@
-/// CrossingAlert is internal (Bevy event) — triggers handoff logic in Part 3.
-
-/// Internal Bevy event — emitted when a client is near a shard boundary.
-/// Consumed by the crossing system; will trigger HandoffRequest in Part 3.
-#[derive(Debug, Clone)]
-pub struct CrossingAlert {
-    pub client_id: u32,
-    /// All distinct shard ids covering the margin area around the client position.
-    pub shards: Vec<u32>,
-}
+// This module is intentionally empty.
+//
+// `CrossingAlert` was removed from `shared` because it is a Bevy-internal event
+// and the `shared` crate must not depend on Bevy.
+// The equivalent type lives in `SpatialService::messages::CrossingAlertMsg`.
 
