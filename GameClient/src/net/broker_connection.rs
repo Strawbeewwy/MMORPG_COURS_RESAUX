@@ -8,7 +8,7 @@ use shared::game_sockets::{
     GameNetworkEvent, GamePeer, GameStreamReliability,
 };
 use shared::protocol::broker::{
-    BrokerMessage, topic_to_string, encode_message
+    BrokerMessage, encode_message
 };
 
 

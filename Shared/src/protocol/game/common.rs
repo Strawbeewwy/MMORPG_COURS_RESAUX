@@ -5,9 +5,6 @@ pub type EntityId = u32;
 pub type ZoneId = String;
 pub type Username = String;
 
-/// Numeric client identifier assigned by the broker on connection.
-pub type ClientId = u32;
-
 
 
 /// Spawn information sent by the broker to a shard when placing a new client.

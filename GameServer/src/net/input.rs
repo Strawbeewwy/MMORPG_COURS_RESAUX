@@ -13,7 +13,7 @@ pub fn handle_broker_client_input(
     let movement_x = read_f32_le(&input[0..4]);
     let movement_y = read_f32_le(&input[4..8]);
 
-    let player_id = client_id;
+    let player_id: u32 = client_id.into();
 
     let Ok(mut registry) = registry.inner.try_lock() else {
         tracing::warn!("could not lock player registry for client input");
@@ -26,13 +26,13 @@ pub fn handle_broker_client_input(
         .or_insert_with(|| {
             tracing::info!(
                 "creating shard player from broker client_id={} zone={}",
-                client_id,
+                client_id.0,
                 config.zone
             );
 
             PlayerInfo {
                 player_id: player_id.clone(),
-                username: format!("player_{client_id}"),
+                username: format!("player_{}", client_id.0),
                 zone: config.zone.clone(),
                 position: NetVec2::ZERO,
                 velocity: NetVec2::ZERO,
@@ -44,7 +44,7 @@ pub fn handle_broker_client_input(
 
     tracing::debug!(
         "client input applied: client_id={} movement_x={} movement_y={}",
-        client_id,
+        client_id.0,
         movement_x,
         movement_y
     );

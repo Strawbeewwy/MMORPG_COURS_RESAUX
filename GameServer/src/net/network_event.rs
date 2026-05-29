@@ -1,5 +1,4 @@
 use crate::config::ServerConfig;
-use crate::net::area_of_interest::DEFAULT_AREA_OF_INTEREST_RADIUS;
 use crate::net::input::handle_broker_client_input;
 use crate::world::state::{
     PlayerRegistry, handle_add_client_to_shard,
@@ -10,7 +9,7 @@ use shared::game_sockets::protocols::QuicBackend;
 use shared::game_sockets::{
     GameConnection, GameNetworkEvent, GamePeer, GameStream, GameStreamReliability,
 };
-use shared::protocol::broker::{broker_message, Topic, decode_message, encode_message, topic_to_string, BrokerMessage};
+use shared::protocol::broker::{BrokerMessage, Topic, decode_message, encode_message,};
 use shared::protocol::transport::codec;
 use shared::protocol::WorldUpdate;
 use std::sync::Arc;
@@ -44,7 +43,7 @@ pub fn connect_to_broker(mut commands: Commands, config: Res<ServerConfig>) {
         "shard connecting to broker={} zone={} topic={}",
         config.broker_addr(),
         config.zone,
-        topic_to_string(&config.shard_topic)
+        &config.shard_topic.to_string()
     );
 
     commands.insert_resource(BrokerShardPeer {
@@ -143,7 +142,7 @@ fn handle_broker_event(
                 data.len()
             );
 
-            handle_broker_message(config, broker_peer, registry, &data);
+            handle_broker_message(config, registry, &data);
         }
 
         GameNetworkEvent::Error { connection, inner } => {
@@ -168,37 +167,36 @@ fn register_shard_with_broker(
         return;
     }
 
-
-    let packet = match encode_message(&BrokerMessage::RegisterShard {
-       topic: config.shard_topic,
-    }) {
-        Ok(packet) => packet,
-        Err(error) => {
-            tracing::warn!(
+    if let Topic::ShardInstance(shard_id) = config.shard_topic {
+        let packet = match encode_message(&BrokerMessage::RegisterShard {
+           shard_id,
+        }) {
+            Ok(packet) => packet,
+            Err(error) => {
+                tracing::warn!(
                 "cannot encode RegisterShard for topic {}: {}",
-                topic_to_string(&config.shard_topic),
+                &config.shard_topic.to_string(),
                 error
             );
+                return;
+            }
+        };
+
+        if !send_raw_to_broker(broker_peer, packet, "RegisterShard") {
             return;
         }
-    };
-
-
-    if !send_raw_to_broker(broker_peer, packet, "RegisterShard") {
-        return;
     }
 
     broker_peer.registered = true;
 
     tracing::info!(
         "registered shard with broker topic={}",
-        topic_to_string(&config.shard_topic)
+        &config.shard_topic.to_string()
     );
 }
 
 fn handle_broker_message(
     config: &ServerConfig,
-    broker_peer: &BrokerShardPeer,
     registry: &SharedPlayerRegistry,
     data: &[u8],
 ) {
@@ -211,22 +209,6 @@ fn handle_broker_message(
     };
 
     match message {
-        BrokerMessage::AddClientToShard {
-            topic,
-            client_id,
-            payload,
-        } => {
-            if topic != config.shard_topic {
-                tracing::warn!(
-                    "received AddClientToShard for wrong topic: got={} expected={}",
-                    topic_to_string(&topic),
-                    topic_to_string(&config.shard_topic)
-                );
-                return;
-            }
-
-            handle_add_client_to_shard(config, registry, client_id, &payload);
-        }
 
         BrokerMessage::ClientInput { client_id, input } => {
             handle_broker_client_input(config, registry, client_id, input);
@@ -272,22 +254,26 @@ fn publish_world_update(
         }
     };
 
-    let packet = match encode_message(&BrokerMessage::Publish {
-        topic,
-        payload: Vec::from(payload),
-    }) {
-        Ok(packet) => packet,
-        Err(error) => {
-            tracing::warn!(
-                "cannot encode Publish for topic {}: {}",
-                topic_to_string(&topic),
+    if let Topic::ShardInstance(shard_id) = topic {
+        let packet = match encode_message(&BrokerMessage::Publish {
+            shard_id,
+            payload: Vec::from(payload),
+        }) {
+            Ok(packet) => packet,
+            Err(error) => {
+                tracing::warn!(
+                "cannot encode RegisterShard for topic {}: {}",
+                &topic.to_string(),
                 error
             );
+                return;
+            }
+        };
+
+        if !send_raw_to_broker(broker_peer, packet, "Publish") {
             return;
         }
-    };
-
-    send_raw_to_broker(broker_peer, packet, "Publish");
+    }
 }
 
 fn send_raw_to_broker(

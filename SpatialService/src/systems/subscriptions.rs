@@ -1,7 +1,5 @@
 use bevy::prelude::*;
-use shared::protocol::broker::{
-    encode_message, topic_for_shard, BrokerMessage,
-};
+use shared::protocol::broker::{encode_message, BrokerMessage, ClientId, ShardId};
 use crate::messages::{CrossingAlertMsg, PositionUpdateMsg};
 use crate::resources::client_map::ClientMap;
 use crate::resources::config::SpatialConfig;
@@ -33,15 +31,15 @@ pub fn handle_subscriptions(
         let y = update.y as f32;
 
         let new_shard = quad_tree.shard_for(x, y);
-        let old_shard = client_map.get(update.client_id);
+        let old_shard = client_map.get(update.client_id.into());
 
         // Unsubscribe from the previous shard, subscribe to the new one.
         if new_shard != old_shard {
             if let Some(old) = old_shard {
 
                 let packet = match encode_message(&BrokerMessage::Unsubscribe {
-                    client_id: 42,
-                    topic: topic_for_shard(old),
+                    client_id: ClientId(42),
+                    shard_id: ShardId(old),
                 }) {
                     Ok(packet) => packet,
                     Err(error) => {
@@ -51,13 +49,13 @@ pub fn handle_subscriptions(
                 };
 
                 broker.send(packet);
-                tracing::debug!("client {} unsubscribed from shard:{old}", update.client_id);
+                tracing::debug!("client {} unsubscribed from shard:{old}", update.client_id.0);
             }
 
             if let Some(new) = new_shard {
                 let packet = match encode_message(&BrokerMessage::Subscribe {
-                    client_id: 42,
-                    topic: topic_for_shard(new),
+                    client_id: ClientId(42),
+                    shard_id: ShardId(new),
                 }) {
                     Ok(packet) => packet,
                     Err(error) => {
@@ -69,8 +67,8 @@ pub fn handle_subscriptions(
                 broker.send(packet);
                 // TODO: pass real GameConnection when shard-to-connection tracking is wired up.
                 // For now we store without connection key — cleanup will happen via shard disconnect.
-                client_map.shard_by_client.insert(update.client_id, new);
-                tracing::debug!("client {} subscribed to shard:{new}", update.client_id);
+                client_map.shard_by_client.insert(update.client_id.into(), new);
+                tracing::debug!("client {} subscribed to shard:{new}", update.client_id.0);
             }
         }
 
@@ -80,9 +78,9 @@ pub fn handle_subscriptions(
             // Emit one alert per unique (client, shard_pair) combo, suppressed for cooldown_ticks.
             for i in 0..nearby_buf.len() {
                 for j in (i + 1)..nearby_buf.len() {
-                    if cooldowns.should_emit(update.client_id, nearby_buf[i], nearby_buf[j]) {
+                    if cooldowns.should_emit(update.client_id.into(), nearby_buf[i], nearby_buf[j]) {
                         ev_crossings.write(CrossingAlertMsg::from_slice(
-                            update.client_id,
+                            update.client_id.into(),
                             &nearby_buf,
                         ));
                         // One alert per client per tick is sufficient.

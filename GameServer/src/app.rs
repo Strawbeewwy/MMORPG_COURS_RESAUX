@@ -21,11 +21,20 @@ pub fn run() {
         .compact()
         .init();
 
+
+    let config = match ServerConfig::from_env() {
+        Ok(config) => config,
+        Err(error) => {
+            tracing::error!("failed to start GameClient: {error:#}");
+            return;
+        }
+    };
+
     App::new()
         .add_plugins(MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(
             Duration::from_millis(1000 / DEFAULT_DS_TICK_RATE),
         )))
-        .insert_resource(ServerConfig::from_env())
+        .insert_resource(config)
         .insert_resource(SharedPlayerRegistry {
             inner: Arc::new(Mutex::new(PlayerRegistry::default())),
         })

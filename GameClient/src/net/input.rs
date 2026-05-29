@@ -2,8 +2,12 @@ use crate::net::broker_client::BrokerClient;
 use crate::world::state::LocalWorldState;
 use bevy::app::AppExit;
 use bevy::prelude::*;
-use shared::protocol::broker::{CLIENT_INPUT_LEN, encode_message, BrokerMessage};
-use shared::protocol::ClientId;
+use shared::protocol::broker::{
+    CLIENT_INPUT_LEN, encode_message, BrokerMessage,
+    ClientId,
+};
+
+
 
 pub fn keyboard_input_system(
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -52,7 +56,7 @@ pub fn send_player_input(
         Err(error) => {
             tracing::warn!(
                 "cannot encode ClientInput for client {}: {}",
-                client_id,
+                client_id.0,
                 error
             );
             return;

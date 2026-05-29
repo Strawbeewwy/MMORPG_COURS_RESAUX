@@ -3,16 +3,16 @@ pub mod encode;
 pub mod decode;
 pub mod config;
 pub mod utils;
+pub mod topic;
 
-pub use config::{
-    TAG_LEN, MAX_PAYLOAD_LEN_IN_BYTE, CLIENT_INPUT_LEN, TAG_BROADCAST,
-    TAG_PUBLISH, TAG_UNSUBSCRIBE, TAG_SUBSCRIBE, TAG_ADD_CLIENT_TO_SHARD,
-    TAG_REGISTER_CLIENT, TAG_REGISTER_SHARD, TAG_REGISTER_SPATIAL_SERVICE,
-    TAG_SET_CLIENT_AUTHORITY,TAG_CLIENT_ACCEPTED,
-};
+pub use config::*;
 
 pub use broker_message::{
-    ClientId, CLIENT_ID_LEN, TOPIC_LEN, Topic, BrokerMessage,
+    ClientId, CLIENT_ID_LEN, BrokerMessage,
+};
+
+pub use topic::{
+    ShardId,Topic,TOPIC_LEN,read_topic,
 };
 
 pub use encode::{
@@ -23,6 +23,3 @@ pub use decode::{
    decode_message,
 };
 
-pub use utils::{
-    read_topic, topic_to_string,topic_for_shard,topic_from_str,
-};

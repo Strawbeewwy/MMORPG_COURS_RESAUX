@@ -1,57 +1,63 @@
 
-pub type ClientId = u32;
+use crate::protocol::broker::config::CLIENT_INPUT_LEN;
+use crate::protocol::broker::topic::*;
+use crate::protocol::broker::utils::read_u32_le;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default , Hash)]
+pub struct ClientId(pub u32);
+
+impl From<ClientId> for u32 {
+    #[inline]
+    fn from(client_id: ClientId) -> Self {
+        client_id.0
+    }
+}
+
 pub const CLIENT_ID_LEN: usize = size_of::<ClientId>();
 
-pub const TOPIC_LEN: usize = 32;
-pub type Topic = [u8; TOPIC_LEN];
+pub fn read_client_id(bytes: &[u8]) -> ClientId {
+
+    let mut client_id_bytes = [0_u8; CLIENT_ID_LEN];
+
+    client_id_bytes[..bytes.len()].copy_from_slice(bytes);
+
+    ClientId(u32::from_le_bytes(client_id_bytes))
+}
 
 
-use crate::protocol::broker::config::CLIENT_INPUT_LEN;
 
 #[derive(Debug, Clone)]
 pub enum BrokerMessage {
-    Subscribe {
+    Subscribe { //from spatial to broker
         client_id: ClientId,
-        topic: Topic,
+        shard_id: ShardId,
     },
-    Unsubscribe {
+    Unsubscribe { // from spatial to broker
         client_id: ClientId,
-        topic: Topic,
+        shard_id: ShardId,
     },
-    Publish {
-        topic: Topic,
+    Publish { // from shard to broker
+        shard_id: ShardId,
         payload: Vec<u8>,
     },
-    Broadcast {
+    Broadcast { // from broker to client
         payload: Vec<u8>,
     },
-    ClientInput {
+    ClientInput { // from client to broker
         client_id: ClientId,
         input: [u8; CLIENT_INPUT_LEN],
     },
-    RegisterClient {
-        client_id: ClientId,
+    RegisterShard {// from spatial to broker
+        shard_id: ShardId,
     },
-    RegisterShard {
-        topic: Topic,
-    },
-    RegisterSpatialService,
-    AddClientToShard {
-        topic: Topic,
-        client_id: ClientId,
-        payload: Vec<u8>,
-    },
-    SetClientAuthority {
-        client_id: ClientId,
-        topic: Topic,
-    },
-    ClientHello{
+    RegisterSpatialService,//from spatial to broker
+    ClientHello{ // from client to broker
         username: String,
     },
-    ClientAccepted {
+    ClientAccepted { // from broker to client
         client_id: ClientId,
     },
-    PositionUpdate {
+    PositionUpdate { //from shard to spatial
         client_id: ClientId,
         position: [f32; 2],
     },
