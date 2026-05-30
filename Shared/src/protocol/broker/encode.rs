@@ -58,9 +58,9 @@ pub fn encode_message(message: &BrokerMessage) -> anyhow::Result<Vec<u8>> {
 fn encode_position_update(client_id: ClientId, positions: &[f32; 2]) -> Vec<u8> {
     let mut packet = Vec::with_capacity(TAG_LEN + CLIENT_ID_LEN + 2 * size_of::<f32>());
 
-
     let id: u32 = client_id.into();
-    packet.push(TAG_POSITION_UPDATE);
+    let tag= TAG_POSITION_UPDATE;
+    packet.extend_from_slice(&tag.to_le_bytes());
     packet.extend_from_slice(&id.to_le_bytes());
     packet.extend_from_slice(&positions[0].to_le_bytes());
     packet.extend_from_slice(&positions[1].to_le_bytes());
@@ -71,21 +71,28 @@ fn encode_position_update(client_id: ClientId, positions: &[f32; 2]) -> Vec<u8> 
 fn encode_register_shard(topic: Topic) -> Vec<u8> {
     let mut packet = Vec::with_capacity(TAG_LEN + TOPIC_LEN);
 
-    packet.push(TAG_REGISTER_SHARD);
+    let tag = TAG_REGISTER_SHARD;
+    packet.extend_from_slice(&tag.to_le_bytes());
     packet.extend_from_slice(&topic.to_bytes());
 
     packet
 }
 
 fn encode_register_spatial_service() -> Vec<u8> {
-    vec![TAG_REGISTER_SPATIAL_SERVICE]
+    let mut packet = Vec::with_capacity(TAG_LEN + CLIENT_ID_LEN + TOPIC_LEN);
+    
+    let tag: u8 = TAG_REGISTER_SPATIAL_SERVICE;
+    packet.extend_from_slice(&tag.to_le_bytes());
+
+    packet
 }
 
 fn encode_subscribe(client_id: ClientId, topic: Topic) -> Vec<u8> {
     let mut packet = Vec::with_capacity(TAG_LEN + CLIENT_ID_LEN + TOPIC_LEN);
 
     let id: u32 = client_id.into();
-    packet.push(TAG_SUBSCRIBE);
+    let tag: u8 = TAG_SUBSCRIBE;
+    packet.extend_from_slice(&tag.to_le_bytes());
     packet.extend_from_slice(&id.to_le_bytes());
     packet.extend_from_slice(&topic.to_bytes());
 
@@ -97,7 +104,8 @@ fn encode_unsubscribe(client_id: ClientId, topic: Topic) -> Vec<u8> {
     let mut packet = Vec::with_capacity(TAG_LEN + CLIENT_ID_LEN + TOPIC_LEN);
 
     let id: u32 = client_id.into();
-    packet.push(TAG_UNSUBSCRIBE);
+    let tag: u8 = TAG_UNSUBSCRIBE;
+    packet.extend_from_slice(&tag.to_le_bytes());
     packet.extend_from_slice(&id.to_le_bytes());
     packet.extend_from_slice(&topic.to_bytes());
 
@@ -109,7 +117,8 @@ fn encode_publish(topic: Topic, payload: &[u8]) -> anyhow::Result<Vec<u8>> {
 
     let mut packet = Vec::with_capacity(TAG_LEN + TOPIC_LEN + MAX_PAYLOAD_LEN + payload.len());
 
-    packet.push(TAG_PUBLISH);
+    let tag: u8 = TAG_PUBLISH;
+    packet.extend_from_slice(&tag.to_le_bytes());
     packet.extend_from_slice(&topic.to_bytes());
     packet.extend_from_slice(&payload_len.to_le_bytes());
     packet.extend_from_slice(payload);
@@ -122,7 +131,8 @@ fn encode_broadcast(payload: &[u8]) -> anyhow::Result<Vec<u8>> {
 
     let mut packet = Vec::with_capacity(TAG_LEN + MAX_PAYLOAD_LEN + payload.len());
 
-    packet.push(TAG_BROADCAST);
+    let tag: u8 = TAG_BROADCAST;
+    packet.extend_from_slice(&tag.to_le_bytes());
     packet.extend_from_slice(&payload_len.to_le_bytes());
     packet.extend_from_slice(payload);
 
@@ -136,7 +146,8 @@ fn encode_client_input(
     let mut packet = Vec::with_capacity(TAG_LEN + CLIENT_ID_LEN + CLIENT_INPUT_LEN);
 
     let id: u32 = client_id.into();
-    packet.push(TAG_CLIENT_INPUT);
+    let tag: u8 = TAG_CLIENT_INPUT;
+    packet.extend_from_slice(&tag.to_le_bytes());
     packet.extend_from_slice(&id.to_le_bytes());
     packet.extend_from_slice(&input);
 
@@ -151,7 +162,8 @@ fn encode_client_hello(
         TAG_LEN + size_of::<u16>() + username_bytes.len()
     );
 
-    packet.push(TAG_CLIENT_HELLO);
+    let tag: u8 = TAG_CLIENT_HELLO;
+    packet.extend_from_slice(&tag.to_le_bytes());
     packet.extend_from_slice(&(username_bytes.len() as u16).to_be_bytes());
     packet.extend_from_slice(username_bytes);
 
@@ -161,7 +173,8 @@ fn encode_client_hello(
 fn encode_client_accepted(client_id: ClientId) -> Vec<u8> {
     let mut packet = Vec::with_capacity(TAG_LEN + CLIENT_ID_LEN);
 
-    packet.push(TAG_CLIENT_ACCEPTED);
+    let tag: u8 = TAG_CLIENT_ACCEPTED;
+    packet.extend_from_slice(&tag.to_le_bytes());
     packet.extend_from_slice(&client_id.0.to_le_bytes());
 
     packet

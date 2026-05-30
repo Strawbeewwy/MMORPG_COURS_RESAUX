@@ -8,6 +8,7 @@ use std::env;
 use std::net::SocketAddr;
 use anyhow::Context;
 use uuid::Uuid;
+use shared::protocol::ZoneId;
 
 pub const DEFAULT_BROKER_IP: &str = "127.0.0.1";
 pub const DEFAULT_BROKER_PORT: u16 = 7000;
@@ -18,7 +19,7 @@ pub struct ServerConfig {
     pub id: String,
     pub ip: String,
     pub port: u16,
-    pub zone: String,
+    pub zone: ZoneId,
     pub max_players: usize,
     pub orchestrator_addr: SocketAddr,
     pub broker_ip: String,
@@ -37,7 +38,9 @@ impl ServerConfig {
             .and_then(|value| value.parse().ok())
             .unwrap_or(DEFAULT_FIRST_DS_PORT);
 
-        let zone = env::var("ZONE").unwrap_or_else(|_| DEFAULT_ZONE.to_string());
+        let zone = ZoneId::from(
+            env::var("ZONE").unwrap_or_else(|_| DEFAULT_ZONE.to_string())
+        );
 
         let max_players = env::var("MAX_PLAYERS")
             .ok()

@@ -21,7 +21,7 @@ pub fn read_client_id(bytes: &[u8]) -> ClientId {
 
     client_id_bytes[..bytes.len()].copy_from_slice(bytes);
 
-    ClientId(u32::from_le_bytes(client_id_bytes))
+    ClientId(read_u32_le(&client_id_bytes))
 }
 
 

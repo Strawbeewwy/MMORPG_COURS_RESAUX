@@ -15,9 +15,10 @@ pub use crate::protocol::broker::utils::{
 
 
 pub fn decode_message(data: &[u8]) -> anyhow::Result<BrokerMessage> {
-    let Some((&tag, body)) = data.split_first() else {
+    let Some((&tag_bytes, body)) = data.split_first() else {
         anyhow::bail!("empty broker message");
     };
+    let tag = u8::from_le(tag_bytes);
 
     match tag {
         TAG_SUBSCRIBE => decode_subscribe(body),
