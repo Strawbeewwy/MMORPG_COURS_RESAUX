@@ -125,11 +125,11 @@ fn decode_publish(body: &[u8]) -> anyhow::Result<BrokerMessage> {
             body.len().saturating_sub(MAX_PAYLOAD_LEN)
         );
     }
-
+    let payload_len = expected_len as u16;
     let payload = body[TOPIC_LEN + size_of::<u16>()..].to_vec();
 
     if let Topic::ShardInstance(shard_id) = topic {
-        Ok(BrokerMessage::Publish { shard_id, payload })
+        Ok(BrokerMessage::Publish { shard_id, payload_len, payload })
     } else {
         anyhow::bail!("Topic received is not a valid Shard instance")
     }
@@ -149,10 +149,10 @@ fn decode_broadcast(body: &[u8]) -> anyhow::Result<BrokerMessage> {
             body.len().saturating_sub(MAX_PAYLOAD_LEN)
         );
     }
-
+    let payload_len = expected_len as u16;
     let payload = body[size_of::<u16>()..].to_vec();
 
-    Ok(BrokerMessage::Broadcast { payload })
+    Ok(BrokerMessage::Broadcast {payload_len, payload })
 }
 
 fn decode_client_input(body: &[u8]) -> anyhow::Result<BrokerMessage> {

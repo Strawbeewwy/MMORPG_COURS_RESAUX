@@ -33,7 +33,7 @@ pub fn handle_message(
     match message {
 
         BrokerMessage::ClientHello { username: _ } => {
-            if !peer_roles.register(connection, PeerRole::Client, "ClientHello") {
+            if !peer_roles.registered(connection, PeerRole::Client, "ClientHello") {
                 return;
             }
 
@@ -76,13 +76,24 @@ pub fn handle_message(
         }
 
         BrokerMessage::RegisterShard { shard_id } => {
-            if !peer_roles.register(connection, PeerRole::Shard, "RegisterShard") {
+            if !peer_roles.registered(
+                connection,
+                PeerRole::Shard,
+                "RegisterShard"
+            ) {
                 return;
             }
+
+            state.register_shard_topic(shard_id, connection, stream);
+
+            tracing::info!(
+                "registered shard connection={}",
+                connection.connection_id
+            );
         }
 
         BrokerMessage::RegisterSpatialService => {
-            if !peer_roles.register(
+            if !peer_roles.registered(
                 connection,
                 PeerRole::SpatialService,
                 "RegisterSpatialService",
@@ -115,22 +126,45 @@ pub fn handle_message(
             state.unsubscribe_client(client_id, shard_id);
         }
 
-        BrokerMessage::Publish { shard_id, payload } => {
-            if !peer_roles.ensure(connection, PeerRole::Shard, "Publish") {
+        BrokerMessage::Publish { shard_id, payload_len,payload } => {
+            if !peer_roles.ensure(
+                connection,
+                PeerRole::Shard,
+                "Publish"
+            ) {
                 return;
             }
+
+            if payload.len() != payload_len.clone() as usize {
+                tracing::warn!("received payload does not match it's expected length");
+                return;
+            }
+
+
             let topic = Topic::ShardInstance(shard_id);
-            state.register_shard_topic(shard_id, connection, stream);
-            publish_to_subscribers(peer, reliable_streams, state, topic, &payload);
+
+            broadcast_to_subscribers(
+                peer,
+                reliable_streams,
+                state,
+                topic,
+                &payload_len,
+                &payload);
         }
 
         BrokerMessage::ClientInput { client_id, input } => {
-            if !peer_roles.ensure(connection, PeerRole::Client, "ClientInput") {
+            if !peer_roles.ensure(
+                connection,
+                PeerRole::Client,
+                "ClientInput") {
                 return;
             }
 
-            state.register_client_connection(client_id, connection);
-            relay_client_input_to_shard(peer, state, client_id, input);
+            relay_client_input_to_shard(
+                peer,
+                state,
+                client_id,
+                input);
         }
 
         BrokerMessage::Broadcast { .. } => {
@@ -149,7 +183,10 @@ pub fn handle_message(
         },
         BrokerMessage::PositionUpdate { client_id , position} => {
 
-            if !peer_roles.ensure(connection, PeerRole::Shard, "PositionUpdate") {
+            if !peer_roles.ensure(
+                connection,
+                PeerRole::Shard,
+                "PositionUpdate") {
                 return;
             }
 

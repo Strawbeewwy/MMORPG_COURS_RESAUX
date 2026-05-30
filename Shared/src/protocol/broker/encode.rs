@@ -19,12 +19,12 @@ pub fn encode_message(message: &BrokerMessage) -> anyhow::Result<Vec<u8>> {
             Ok(encode_unsubscribe(*client_id, Topic::ShardInstance(*shard_id)))
         }
 
-        BrokerMessage::Publish { shard_id, payload } => {
-            encode_publish(Topic::ShardInstance(*shard_id), payload)
+        BrokerMessage::Publish { shard_id,payload_len, payload } => {
+            encode_publish(Topic::ShardInstance(*shard_id),*payload_len, payload)
         }
 
-        BrokerMessage::Broadcast { payload } => {
-            encode_broadcast(payload)
+        BrokerMessage::Broadcast { payload_len, payload } => {
+            encode_broadcast(*payload_len,payload)
         }
 
         BrokerMessage::ClientInput { client_id, input } => {
@@ -112,8 +112,7 @@ fn encode_unsubscribe(client_id: ClientId, topic: Topic) -> Vec<u8> {
     packet
 }
 
-fn encode_publish(topic: Topic, payload: &[u8]) -> anyhow::Result<Vec<u8>> {
-    let payload_len = u16::try_from(payload.len())?;
+fn encode_publish(topic: Topic,payload_len: u16, payload: &[u8]) -> anyhow::Result<Vec<u8>> {
 
     let mut packet = Vec::with_capacity(TAG_LEN + TOPIC_LEN + MAX_PAYLOAD_LEN + payload.len());
 
@@ -126,8 +125,7 @@ fn encode_publish(topic: Topic, payload: &[u8]) -> anyhow::Result<Vec<u8>> {
     Ok(packet)
 }
 
-fn encode_broadcast(payload: &[u8]) -> anyhow::Result<Vec<u8>> {
-    let payload_len = u16::try_from(payload.len())?;
+fn encode_broadcast(payload_len:u16, payload: &[u8]) -> anyhow::Result<Vec<u8>> {
 
     let mut packet = Vec::with_capacity(TAG_LEN + MAX_PAYLOAD_LEN + payload.len());
 

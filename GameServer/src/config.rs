@@ -7,16 +7,13 @@ use shared::protocol::broker::{ShardId, Topic};
 use std::env;
 use std::net::SocketAddr;
 use anyhow::Context;
-use uuid::Uuid;
 use shared::protocol::ZoneId;
 
 pub const DEFAULT_BROKER_IP: &str = "127.0.0.1";
 pub const DEFAULT_BROKER_PORT: u16 = 7000;
-pub const DEFAULT_SHARD_TOPIC: &str = "shard:0";
 
 #[derive(Debug, Clone, Resource)]
 pub struct ServerConfig {
-    pub id: String,
     pub ip: String,
     pub port: u16,
     pub zone: ZoneId,
@@ -29,11 +26,14 @@ pub struct ServerConfig {
 
 impl ServerConfig {
     pub fn from_env() -> anyhow::Result<Self> {
-        let id = env::var("DS_ID").unwrap_or_else(|_| Uuid::new_v4().to_string());
+        let shard_id = env::var("SHARD_ID")
+            .context("missing SHARD_ID env var")?
+            .parse::<u32>()
+            .context("invalid SHARD_ID env var");
 
-        let ip = env::var("DS_IP").unwrap_or_else(|_| DEFAULT_DS_IP.to_string());
+        let ip = env::var("SHARD_IP").unwrap_or_else(|_| DEFAULT_DS_IP.to_string());
 
-        let port = env::var("DS_PORT")
+        let port = env::var("SHARD_PORT")
             .ok()
             .and_then(|value| value.parse().ok())
             .unwrap_or(DEFAULT_FIRST_DS_PORT);
@@ -60,15 +60,10 @@ impl ServerConfig {
             .and_then(|value| value.parse().ok())
             .unwrap_or(DEFAULT_BROKER_PORT);
 
-        let shard_id = env::var("SHARD_ID")
-            .context("missing SHARD_ID env var")?
-            .parse::<u32>()
-            .context("invalid SHARD_ID env var");
 
         let shard_topic = Topic::ShardInstance(ShardId(shard_id?));
 
         Ok(Self {
-            id,
             ip,
             port,
             zone,
