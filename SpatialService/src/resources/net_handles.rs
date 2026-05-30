@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use game_sockets::{GameConnection, GamePeer, GameStream};
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 /// Listens for incoming QUIC connections from shards.
 /// Shards connect here to push PositionUpdate messages.
@@ -34,6 +35,10 @@ pub struct BrokerClient {
     pub stream: Option<GameStream>,
     /// Explicit connection state — never ambiguous between "not yet" and "lost".
     pub state: BrokerConnectionState,
+    /// Number of consecutive failed reconnect attempts (used for exponential backoff).
+    pub reconnect_attempt: u32,
+    /// Earliest wall-clock time at which the next reconnect attempt may be made.
+    pub reconnect_after: Option<Instant>,
 }
 
 impl BrokerClient {
@@ -43,6 +48,26 @@ impl BrokerClient {
             connection: None,
             stream: None,
             state: BrokerConnectionState::Connecting,
+            reconnect_attempt: 0,
+            reconnect_after: None,
+        }
+    }
+
+    /// Construct with an explicit initial state (use `Disconnected` when the
+    /// startup connection attempt fails so `reconnect_broker_if_needed` retries).
+    pub fn with_state(peer: GamePeer, state: BrokerConnectionState) -> Self {
+        let reconnect_after = if state == BrokerConnectionState::Disconnected {
+            Some(Instant::now() + Duration::from_secs(1))
+        } else {
+            None
+        };
+        Self {
+            peer,
+            connection: None,
+            stream: None,
+            state,
+            reconnect_attempt: if reconnect_after.is_some() { 1 } else { 0 },
+            reconnect_after,
         }
     }
 
@@ -61,11 +86,17 @@ impl BrokerClient {
         }
     }
 
-    /// Reset state for a reconnect attempt.
+    /// Reset state for a reconnect attempt (does not touch backoff counters).
     pub fn reset_for_reconnect(&mut self) {
         self.connection = None;
         self.stream = None;
         self.state = BrokerConnectionState::Connecting;
+    }
+
+    /// Reset backoff on successful connection establishment.
+    pub fn reset_backoff(&mut self) {
+        self.reconnect_attempt = 0;
+        self.reconnect_after = None;
     }
 }
 

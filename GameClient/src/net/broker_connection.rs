@@ -7,7 +7,9 @@ use shared::game_sockets::protocols::QuicBackend;
 use shared::game_sockets::{
     GameNetworkEvent, GamePeer, GameStreamReliability,
 };
-use shared::protocol::broker::encode_client_hello;
+use shared::protocol::broker::{
+    BrokerMessage, encode_message
+};
 
 
 pub fn connect_to_broker(
@@ -155,7 +157,20 @@ fn handle_broker_event(
                     config.broker_addr()
                 );
 
-                let packet = encode_client_hello();
+                let packet = match encode_message(&BrokerMessage::ClientHello {
+                    username: config.username.clone(),
+                }) {
+                    Ok(packet) => packet,
+                    Err(error) => {
+                        tracing::warn!(
+                "cannot encode ClientHello for client {}: {}",
+                config.username,
+                error
+            );
+                        return;
+                    }
+                };
+
                 broker_client.send_raw(packet);
 
                 tracing::info!(

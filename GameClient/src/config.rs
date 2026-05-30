@@ -1,10 +1,9 @@
 use anyhow::{Context, Result};
 use bevy::prelude::*;
-use shared::protocol::broker::{Topic, topic_from_str};
+use shared::protocol::broker::{ShardId, Topic};
 use std::env;
 
 pub const DEFAULT_RECONNECT_INTERVAL: u64 = 5;
-pub const DEFAULT_BROKER_TOPIC: &str = "shard:0";
 
 #[derive(Resource, Debug, Clone)]
 pub struct ClientConfig {
@@ -31,7 +30,12 @@ impl ClientConfig {
         let zone = env::var("GAME_SERVER_ZONE")
             .context("missing GAME_SERVER_ZONE env var")?;
 
-        let broker_topics = broker_topics_from_env();
+        let shard_id = env::var("SHARD_ID")
+            .context("missing SHARD_ID env var")?
+            .parse::<u32>()
+            .context("invalid SHARD_ID env var")?;
+
+        let broker_topics = vec![Topic::ShardInstance(ShardId(shard_id))];
 
         Ok(Self {
             username,
@@ -44,23 +48,5 @@ impl ClientConfig {
 
     pub fn broker_addr(&self) -> String {
         format!("{}:{}", self.broker_ip, self.broker_port)
-    }
-}
-
-fn broker_topics_from_env() -> Vec<Topic> {
-    let topics = env::var("BROKER_TOPICS")
-        .unwrap_or_else(|_| DEFAULT_BROKER_TOPIC.to_string());
-
-    let parsed_topics: Vec<Topic> = topics
-        .split(',')
-        .map(str::trim)
-        .filter(|topic| !topic.is_empty())
-        .map(topic_from_str)
-        .collect();
-
-    if parsed_topics.is_empty() {
-        vec![topic_from_str(DEFAULT_BROKER_TOPIC)]
-    } else {
-        parsed_topics
     }
 }

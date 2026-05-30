@@ -2,13 +2,11 @@
 use shared::game_sockets::{
     GameConnection, GameStream
 };
-use shared::protocol::broker::{
-    ClientId, Topic, topic_to_string
-};
+use shared::protocol::broker::{ClientId, ShardId, Topic};
 use std::collections::{
     HashMap, HashSet
 };
-
+use std::ptr::null;
 
 #[derive(Default)]
 pub struct PubSubState {
@@ -17,19 +15,19 @@ pub struct PubSubState {
     pub client_connections: HashMap<ClientId, GameConnection>,
     pub connection_clients: HashMap<GameConnection, ClientId>,
     pub shard_streams_by_topic: HashMap<Topic, (GameConnection, GameStream)>,
-    pub client_authoritative_topics: HashMap<ClientId, Topic>,
+    pub spatial_service_streams: HashMap<GameConnection, GameStream>,
     next_client_id: ClientId,
 }
 impl PubSubState {
     pub fn allocate_client_id(&mut self) -> ClientId {
-        if self.next_client_id == 0 {
-            self.next_client_id = 1;
+        if self.next_client_id.0 == 0 {
+            self.next_client_id = ClientId(1);
         }
 
         let client_id = self.next_client_id;
-        self.next_client_id = self.next_client_id.saturating_add(1);
+        self.next_client_id = ClientId(self.next_client_id.0 + 1);
 
-        tracing::info!("allocated client_id={}", client_id);
+        tracing::info!("allocated client_id={}", client_id.0);
 
         client_id
     }
@@ -41,7 +39,7 @@ impl PubSubState {
     ) {
         tracing::info!(
             "register client={} connection={}",
-            client_id,
+            client_id.0,
             connection.connection_id
         );
 
@@ -49,7 +47,7 @@ impl PubSubState {
             if previous_connection != connection {
                 tracing::warn!(
                     "client={} was already registered on connection {}; replacing with connection {}",
-                    client_id,
+                    client_id.0,
                     previous_connection.connection_id,
                     connection.connection_id
                 );
@@ -61,31 +59,33 @@ impl PubSubState {
         self.connection_clients.insert(connection, client_id);
     }
 
-    pub fn subscribe_client(
+    pub fn register_spatial_service(
         &mut self,
-        client_id: ClientId,
-        topic: Topic,
+        connection: GameConnection,
+        stream: GameStream,
     ) {
         tracing::info!(
-            "subscribe client={} topic={}",
-            client_id,
-            topic_to_string(&topic)
+            "register spatial service stream connection={} stream={}",
+            connection.connection_id,
+            stream.stream_id
         );
 
-        if self.client_connections.contains_key(&client_id) {
-            self.subscribe_registered_client(client_id, topic);
-        }
+        self.spatial_service_streams.insert(connection, stream);
     }
+
 
     pub fn subscribe_registered_client(
         &mut self,
         client_id: ClientId,
-        topic: Topic,
+        shard_id: ShardId,
     ) {
+
+        let topic = Topic::ShardInstance(shard_id);
+
         tracing::info!(
             "subscribe registered client={} topic={}",
-            client_id,
-            topic_to_string(&topic)
+            client_id.0,
+            &topic.to_string()
         );
 
         self.topic_subscribers
@@ -99,11 +99,16 @@ impl PubSubState {
             .insert(topic);
     }
 
-    pub fn unsubscribe_client(&mut self, client_id: ClientId, topic: Topic) {
+    pub fn unsubscribe_client(
+        &mut self,
+        client_id: ClientId,
+        shard_id: ShardId) {
+
+        let topic = Topic::ShardInstance(shard_id);
         tracing::info!(
             "unsubscribe client={} topic={}",
-            client_id,
-            topic_to_string(&topic)
+            client_id.0,
+            &topic.to_string()
         );
 
         if let Some(subscribers) = self.topic_subscribers.get_mut(&topic) {
@@ -122,57 +127,27 @@ impl PubSubState {
             }
         }
 
-        if self.client_authoritative_topics.get(&client_id) == Some(&topic) {
-            self.client_authoritative_topics.remove(&client_id);
-
-            tracing::info!(
-                "cleared authority for client={} because topic={} was unsubscribed",
-                client_id,
-                topic_to_string(&topic)
-            );
-        }
-    }
-
-    pub fn set_client_authority(
-        &mut self,
-        client_id: ClientId,
-        topic: Topic,
-    ) {
-        tracing::info!(
-            "set client authority client={} topic={}",
-            client_id,
-            topic_to_string(&topic)
-        );
-
-        self.client_authoritative_topics.insert(client_id, topic);
-    }
-
-    pub fn authoritative_topic_for_client(
-        &self,
-        client_id: ClientId,
-    ) -> Option<Topic> {
-        self.client_authoritative_topics
-            .get(&client_id)
-            .copied()
     }
 
     pub fn input_topic_for_client(
         &self,
         client_id: ClientId,
     ) -> Option<Topic> {
-        self.authoritative_topic_for_client(client_id)
-            .or_else(|| self.first_shard_topic_for_client(client_id))
+        //TODO get the player active shard
+        let topic: Option<Topic> = Some(Topic::ShardInstance(ShardId(0)));
+        return topic;
     }
 
     pub fn register_shard_topic(
         &mut self,
-        topic: Topic,
+        shard_id: ShardId,
         connection: GameConnection,
         stream: GameStream,
     ) {
+        let topic = Topic::ShardInstance(shard_id);
         tracing::debug!(
             "register shard stream for topic={} connection={} stream={}",
-            topic_to_string(&topic),
+            &topic.to_string(),
             connection.connection_id,
             stream.stream_id
         );
@@ -184,7 +159,6 @@ impl PubSubState {
     pub fn remove_connection(&mut self, connection: GameConnection) {
         if let Some(client_id) = self.connection_clients.remove(&connection) {
             self.client_connections.remove(&client_id);
-            self.client_authoritative_topics.remove(&client_id);
 
             if let Some(topics) = self.client_topics.remove(&client_id) {
                 for topic in topics {
@@ -219,18 +193,10 @@ impl PubSubState {
         }
     }
 
-    pub fn first_shard_topic_for_client(&self, client_id: ClientId) -> Option<Topic> {
-        self.client_topics
-            .get(&client_id)?
-            .iter()
-            .copied()
-            .find(is_shard_topic)
-    }
-
     fn remove_dead_shard_topic(&mut self, topic: Topic) {
         tracing::warn!(
             "removing subscriptions and authorities for disconnected shard topic={}",
-            topic_to_string(&topic)
+            &topic.to_string()
         );
 
         if let Some(clients) = self.topic_subscribers.remove(&topic) {
@@ -243,17 +209,8 @@ impl PubSubState {
                     }
                 }
 
-                if self.client_authoritative_topics.get(&client_id) == Some(&topic) {
-                    self.client_authoritative_topics.remove(&client_id);
-                }
             }
         }
 
-        self.client_authoritative_topics
-            .retain(|_, authoritative_topic| *authoritative_topic != topic);
     }
-}
-
-fn is_shard_topic(topic: &Topic) -> bool {
-    topic_to_string(topic).starts_with("shard:")
 }

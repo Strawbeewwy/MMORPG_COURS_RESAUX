@@ -7,12 +7,13 @@ use bevy::prelude::{
 };
 use shared::protocol::{
     NetVec2, PlayerId, PlayerSnapshot, WorldSnapshot, ZoneId,
-    PlayerSpawnInfo, ClientId,
+    PlayerSpawnInfo,
 };
 use crate::net::area_of_interest::{
     is_inside_area_of_interest, DEFAULT_AREA_OF_INTEREST_RADIUS,
 };
 use std::collections::HashMap;
+use shared::protocol::broker::ClientId;
 use shared::protocol::transport::codec;
 use crate::config::ServerConfig;
 
@@ -113,7 +114,7 @@ pub fn handle_add_client_to_shard(
         Err(error) => {
             tracing::warn!(
                 "failed to decode PlayerSpawnInfo for client {}: {error:#}",
-                client_id
+                client_id.0
             );
             return;
         }
@@ -137,8 +138,8 @@ pub fn handle_add_client_to_shard(
 
     tracing::info!(
         "added client {} to shard topic={} as player_id={} username={} zone={}",
-        client_id,
-        shared::protocol::broker::topic_to_string(&config.shard_topic),
+        client_id.0,
+        &config.shard_topic.to_string(),
         spawn_info.player_id,
         spawn_info.username,
         spawn_info.zone

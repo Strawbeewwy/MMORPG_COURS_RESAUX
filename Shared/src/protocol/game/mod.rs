@@ -3,7 +3,7 @@ pub mod world_update;
 pub mod player_spawn;
 
 pub use common::{
-    ClientId, EntityId, PlayerId, PlayerPublicInfo, PlayerSnapshot, Username, NetVec2, WorldSnapshot, ZoneId,
+    EntityId, PlayerId, PlayerPublicInfo, PlayerSnapshot, Username, NetVec2, WorldSnapshot, ZoneId,
 };
 pub use world_update::WorldUpdate;
 

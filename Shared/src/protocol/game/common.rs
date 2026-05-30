@@ -1,12 +1,13 @@
+use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
+/// Shared zone identifier — uses `Arc<str>` instead of `String` to avoid repeated
+/// heap allocations when the same zone name is cloned across many network messages.
+/// Serde serialises/deserialises `Arc<str>` as a plain JSON string transparently.
 pub type PlayerId = u32;
 pub type EntityId = u32;
-pub type ZoneId = String;
-pub type Username = String;
-
-/// Numeric client identifier assigned by the broker on connection.
-pub type ClientId = u32;
+pub type ZoneId = Arc<str>;
+pub type Username = Arc<str>;
 
 
 

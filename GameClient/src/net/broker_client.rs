@@ -2,10 +2,10 @@ use crate::config::DEFAULT_RECONNECT_INTERVAL;
 use bevy::prelude::*;
 use bytes::Bytes;
 use shared::game_sockets::{GameConnection, GamePeer, GameStream};
-use shared::protocol::broker::Topic;
+use shared::protocol::broker::{Topic, ClientId};
 use std::collections::HashSet;
 use std::time::Duration;
-use shared::protocol::ClientId;
+
 
 #[derive(Resource)]
 pub struct BrokerClient {

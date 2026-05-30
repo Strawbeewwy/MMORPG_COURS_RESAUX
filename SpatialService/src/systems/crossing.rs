@@ -9,7 +9,7 @@ pub fn handle_crossing_alerts(mut ev_reader: MessageReader<CrossingAlertMsg>) {
     for alert in ev_reader.read() {
         tracing::info!(
             "CrossingAlert: client_id={} is near boundary between shards {:?}",
-            alert.client_id,
+            alert.client_id.0,
             alert.iter_shards(),
         );
         // Part 3: trigger HandoffRequest to destination shard here
