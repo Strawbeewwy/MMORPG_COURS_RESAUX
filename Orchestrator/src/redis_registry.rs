@@ -46,7 +46,7 @@ impl RedisRegistry {
             .hset(&key, "id", &heartbeat.id)
             .hset(&key, "ip", &heartbeat.ip)
             .hset(&key, "port", heartbeat.port)
-            .hset(&key, "zone", &heartbeat.zone)
+            .hset(&key, "zone", &heartbeat.zone.to_string())
             .hset(&key, "player_count", heartbeat.player_count)
             .hset(&key, "max_players", heartbeat.max_players)
             .hset(&key, "status", status)

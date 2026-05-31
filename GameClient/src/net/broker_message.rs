@@ -27,8 +27,8 @@ pub fn decode_and_handle_broker_message(
             tracing::info!("broker assigned client_id={}", client_id.0);
         }
 
-        BrokerMessage::Broadcast { payload } => {
-            decode_and_handle_world_update(broker_client, world_state, &payload);
+        BrokerMessage::Broadcast { payload_len, payload } => {
+            decode_and_handle_world_update(broker_client, world_state,&payload_len, &payload);
         }
 
         other => {
@@ -40,8 +40,16 @@ pub fn decode_and_handle_broker_message(
 fn decode_and_handle_world_update(
     _broker_client: &mut BrokerClient,
     world_state: &mut LocalWorldState,
+    payload_len: &u16,
     payload: &[u8],
 ) {
+
+    if payload.len() != payload_len.clone() as usize {
+        tracing::warn!("received payload does not match it's expected length");
+        return;
+    }
+    
+
     let update = match codec::decode::<WorldUpdate>(payload) {
         Ok(update) => update,
         Err(error) => {

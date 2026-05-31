@@ -21,7 +21,7 @@ pub fn read_client_id(bytes: &[u8]) -> ClientId {
 
     client_id_bytes[..bytes.len()].copy_from_slice(bytes);
 
-    ClientId(u32::from_le_bytes(client_id_bytes))
+    ClientId(read_u32_le(&client_id_bytes))
 }
 
 
@@ -38,9 +38,11 @@ pub enum BrokerMessage {
     },
     Publish { // from shard to broker
         shard_id: ShardId,
+        payload_len: u16,
         payload: Vec<u8>,
     },
     Broadcast { // from broker to client
+        payload_len: u16,
         payload: Vec<u8>,
     },
     ClientInput { // from client to broker
@@ -60,5 +62,21 @@ pub enum BrokerMessage {
     PositionUpdate { //from shard to spatial
         client_id: ClientId,
         position: [f32; 2],
+    },
+    /// Sent by a shard to the SpatialService immediately after connecting.
+    /// Registers shard_id ↔ GameConnection so HandoffRequest can be routed back.
+    ShardRegister {
+        shard_id: ShardId,
+    },
+    /// Sent by the SpatialService to the destination shard to initiate a handoff.
+    HandoffRequest {
+        client_id: ClientId,
+        from_shard: ShardId,
+        to_shard: ShardId,
+    },
+    /// Sent by the destination shard back to the SpatialService to confirm acceptance.
+    HandoffAck {
+        client_id: ClientId,
+        to_shard: ShardId,
     },
 }

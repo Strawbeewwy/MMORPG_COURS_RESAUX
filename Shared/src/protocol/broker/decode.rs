@@ -15,9 +15,10 @@ pub use crate::protocol::broker::utils::{
 
 
 pub fn decode_message(data: &[u8]) -> anyhow::Result<BrokerMessage> {
-    let Some((&tag, body)) = data.split_first() else {
+    let Some((&tag_bytes, body)) = data.split_first() else {
         anyhow::bail!("empty broker message");
     };
+    let tag = u8::from_le(tag_bytes);
 
     match tag {
         TAG_SUBSCRIBE => decode_subscribe(body),
@@ -30,6 +31,9 @@ pub fn decode_message(data: &[u8]) -> anyhow::Result<BrokerMessage> {
         TAG_CLIENT_HELLO => decode_client_hello(body),
         TAG_CLIENT_ACCEPTED => decode_client_accepted(body),
         TAG_POSITION_UPDATE => decode_position_update(body),
+        TAG_SHARD_REGISTER => decode_shard_register(body),
+        TAG_HANDOFF_REQUEST => decode_handoff_request(body),
+        TAG_HANDOFF_ACK => decode_handoff_ack(body),
         unknown => anyhow::bail!("unknown broker message tag: 0x{unknown:02x}"),
     }
 }
@@ -124,11 +128,11 @@ fn decode_publish(body: &[u8]) -> anyhow::Result<BrokerMessage> {
             body.len().saturating_sub(MAX_PAYLOAD_LEN)
         );
     }
-
+    let payload_len = expected_len as u16;
     let payload = body[TOPIC_LEN + size_of::<u16>()..].to_vec();
 
     if let Topic::ShardInstance(shard_id) = topic {
-        Ok(BrokerMessage::Publish { shard_id, payload })
+        Ok(BrokerMessage::Publish { shard_id, payload_len, payload })
     } else {
         anyhow::bail!("Topic received is not a valid Shard instance")
     }
@@ -148,10 +152,10 @@ fn decode_broadcast(body: &[u8]) -> anyhow::Result<BrokerMessage> {
             body.len().saturating_sub(MAX_PAYLOAD_LEN)
         );
     }
-
+    let payload_len = expected_len as u16;
     let payload = body[size_of::<u16>()..].to_vec();
 
-    Ok(BrokerMessage::Broadcast { payload })
+    Ok(BrokerMessage::Broadcast {payload_len, payload })
 }
 
 fn decode_client_input(body: &[u8]) -> anyhow::Result<BrokerMessage> {
@@ -185,6 +189,35 @@ fn decode_client_accepted(body: &[u8]) -> anyhow::Result<BrokerMessage> {
     let client_id = ClientId(read_u32_le(&body[0..CLIENT_ID_LEN]));
 
     Ok(BrokerMessage::ClientAccepted { client_id })
+}
+
+fn decode_shard_register(body: &[u8]) -> anyhow::Result<BrokerMessage> {
+    if body.len() != size_of::<u32>() {
+        anyhow::bail!("invalid ShardRegister length: {}", body.len());
+    }
+    let shard_id = ShardId(read_u32_le(&body[0..size_of::<u32>()]));
+    Ok(BrokerMessage::ShardRegister { shard_id })
+}
+
+fn decode_handoff_request(body: &[u8]) -> anyhow::Result<BrokerMessage> {
+    let expected = CLIENT_ID_LEN + 2 * size_of::<u32>();
+    if body.len() != expected {
+        anyhow::bail!("invalid HandoffRequest length: {} (expected {})", body.len(), expected);
+    }
+    let client_id = read_client_id(&body[0..CLIENT_ID_LEN]);
+    let from_shard = ShardId(read_u32_le(&body[CLIENT_ID_LEN..CLIENT_ID_LEN + size_of::<u32>()]));
+    let to_shard   = ShardId(read_u32_le(&body[CLIENT_ID_LEN + size_of::<u32>()..expected]));
+    Ok(BrokerMessage::HandoffRequest { client_id, from_shard, to_shard })
+}
+
+fn decode_handoff_ack(body: &[u8]) -> anyhow::Result<BrokerMessage> {
+    let expected = CLIENT_ID_LEN + size_of::<u32>();
+    if body.len() != expected {
+        anyhow::bail!("invalid HandoffAck length: {} (expected {})", body.len(), expected);
+    }
+    let client_id = read_client_id(&body[0..CLIENT_ID_LEN]);
+    let to_shard  = ShardId(read_u32_le(&body[CLIENT_ID_LEN..expected]));
+    Ok(BrokerMessage::HandoffAck { client_id, to_shard })
 }
 
 

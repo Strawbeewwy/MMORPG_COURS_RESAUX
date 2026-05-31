@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-
+use crate::protocol::ZoneId;
 
 /**
 Heartbeat message sent by the server to the orchestrator.
@@ -10,7 +10,7 @@ pub struct Heartbeat {
     pub id: String,
     pub ip: String,
     pub port: u16,
-    pub zone: String,
+    pub zone: ZoneId,
     pub player_count: usize,
     pub max_players: usize,
 }

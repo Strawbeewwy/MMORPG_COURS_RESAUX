@@ -7,11 +7,12 @@ use shared::protocol::broker::{
 use std::collections::HashMap;
 
 
-pub fn publish_to_subscribers(
+pub fn broadcast_to_subscribers(
     peer: &GamePeer,
     reliable_streams: &HashMap<GameConnection, GameStream>,
     state: &PubSubState,
     topic: Topic,
+    payload_len: &u16,
     payload: &[u8],
 ) {
     let Some(subscribers) = state.topic_subscribers.get(&topic) else {
@@ -19,6 +20,7 @@ pub fn publish_to_subscribers(
     };
 
     let packet = match encode_message(&BrokerMessage::Broadcast {
+        payload_len: payload_len.clone(),
         payload: Vec::from(payload),
     }) {
         Ok(packet) => packet,

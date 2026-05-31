@@ -257,6 +257,7 @@ fn publish_world_update(
     if let Topic::ShardInstance(shard_id) = topic {
         let packet = match encode_message(&BrokerMessage::Publish {
             shard_id,
+            payload_len:payload.len() as u16,
             payload: Vec::from(payload),
         }) {
             Ok(packet) => packet,

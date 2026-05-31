@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use bevy::prelude::*;
 use shared::protocol::broker::{ShardId, Topic};
 use std::env;
+use shared::protocol::ZoneId;
 
 pub const DEFAULT_RECONNECT_INTERVAL: u64 = 5;
 
@@ -10,7 +11,7 @@ pub struct ClientConfig {
     pub username: String,
     pub broker_ip: String,
     pub broker_port: u16,
-    pub zone: String,
+    pub zone: ZoneId,
     pub broker_topics: Vec<Topic>,
 }
 
@@ -27,8 +28,11 @@ impl ClientConfig {
             .parse::<u16>()
             .context("invalid BROKER_PORT or GAME_SERVER_PORT env var")?;
 
-        let zone = env::var("GAME_SERVER_ZONE")
-            .context("missing GAME_SERVER_ZONE env var")?;
+        let zone = ZoneId::from(
+            env::var("GAME_SERVER_ZONE")
+            .context("missing GAME_SERVER_ZONE env var")?
+        );
+
 
         let shard_id = env::var("SHARD_ID")
             .context("missing SHARD_ID env var")?
