@@ -52,6 +52,18 @@ pub fn encode_message(message: &BrokerMessage) -> anyhow::Result<Vec<u8>> {
         } => {
             Ok(encode_position_update(*client_id, position))
         },
+
+        BrokerMessage::ShardRegister { shard_id } => {
+            Ok(encode_shard_register(*shard_id))
+        },
+
+        BrokerMessage::HandoffRequest { client_id, from_shard, to_shard } => {
+            Ok(encode_handoff_request(*client_id, *from_shard, *to_shard))
+        },
+
+        BrokerMessage::HandoffAck { client_id, to_shard } => {
+            Ok(encode_handoff_ack(*client_id, *to_shard))
+        },
     }
 }
 
@@ -175,5 +187,29 @@ fn encode_client_accepted(client_id: ClientId) -> Vec<u8> {
     packet.extend_from_slice(&tag.to_le_bytes());
     packet.extend_from_slice(&client_id.0.to_le_bytes());
 
+    packet
+}
+
+fn encode_shard_register(shard_id: ShardId) -> Vec<u8> {
+    let mut packet = Vec::with_capacity(TAG_LEN + size_of::<u32>());
+    packet.push(TAG_SHARD_REGISTER);
+    packet.extend_from_slice(&shard_id.0.to_le_bytes());
+    packet
+}
+
+fn encode_handoff_request(client_id: ClientId, from_shard: ShardId, to_shard: ShardId) -> Vec<u8> {
+    let mut packet = Vec::with_capacity(TAG_LEN + CLIENT_ID_LEN + 2 * size_of::<u32>());
+    packet.push(TAG_HANDOFF_REQUEST);
+    packet.extend_from_slice(&client_id.0.to_le_bytes());
+    packet.extend_from_slice(&from_shard.0.to_le_bytes());
+    packet.extend_from_slice(&to_shard.0.to_le_bytes());
+    packet
+}
+
+fn encode_handoff_ack(client_id: ClientId, to_shard: ShardId) -> Vec<u8> {
+    let mut packet = Vec::with_capacity(TAG_LEN + CLIENT_ID_LEN + size_of::<u32>());
+    packet.push(TAG_HANDOFF_ACK);
+    packet.extend_from_slice(&client_id.0.to_le_bytes());
+    packet.extend_from_slice(&to_shard.0.to_le_bytes());
     packet
 }

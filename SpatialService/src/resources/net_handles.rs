@@ -4,12 +4,54 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 /// Listens for incoming QUIC connections from shards.
-/// Shards connect here to push PositionUpdate messages.
+/// Shards connect here to push PositionUpdate messages and receive HandoffRequest.
 #[derive(Resource)]
 pub struct ShardListener {
     pub peer: GamePeer,
     /// One reliable stream per connected shard connection.
     pub streams: HashMap<GameConnection, GameStream>,
+    /// shard_id → GameConnection (for routing HandoffRequest to the right shard).
+    pub connection_by_shard_id: HashMap<u32, GameConnection>,
+    /// GameConnection → shard_id (for fast lookup on message receipt).
+    pub shard_id_by_connection: HashMap<GameConnection, u32>,
+}
+
+impl ShardListener {
+    /// Register a shard's identity once it sends a ShardRegister message.
+    pub fn register_shard(&mut self, conn: GameConnection, shard_id: u32) {
+        self.connection_by_shard_id.insert(shard_id, conn);
+        self.shard_id_by_connection.insert(conn, shard_id);
+        tracing::info!("shard {} registered on connection {}", shard_id, conn.connection_id);
+    }
+
+    /// Remove a shard's registration on disconnect.
+    pub fn unregister_shard(&mut self, conn: GameConnection) {
+        if let Some(shard_id) = self.shard_id_by_connection.remove(&conn) {
+            self.connection_by_shard_id.remove(&shard_id);
+            tracing::info!("shard {} unregistered (connection {} closed)", shard_id, conn.connection_id);
+        }
+        self.streams.remove(&conn);
+    }
+
+    /// Send a raw payload to a specific shard by its id.
+    /// Returns `true` if the shard is connected and the send succeeded.
+    pub fn send_to_shard(&self, shard_id: u32, payload: Vec<u8>) -> bool {
+        let Some(conn) = self.connection_by_shard_id.get(&shard_id) else {
+            tracing::warn!("send_to_shard: shard {} not connected", shard_id);
+            return false;
+        };
+        let Some(stream) = self.streams.get(conn) else {
+            tracing::warn!("send_to_shard: shard {} has no stream yet", shard_id);
+            return false;
+        };
+        match self.peer.send(conn, stream, payload.into()) {
+            Ok(_) => true,
+            Err(e) => {
+                tracing::error!("send_to_shard: failed to send to shard {}: {e}", shard_id);
+                false
+            }
+        }
+    }
 }
 
 /// Tracks the lifecycle of the outbound broker connection.

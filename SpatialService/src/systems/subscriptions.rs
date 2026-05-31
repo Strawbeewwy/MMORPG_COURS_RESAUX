@@ -10,6 +10,7 @@ use crate::resources::quad_tree::QuadTree;
 /// Consume PositionUpdateMsg messages, resolve the shard via the QuadTree,
 /// and send Subscribe / Unsubscribe to the broker when the shard changes.
 /// Emits CrossingAlertMsg (deduplicated via cooldown) when near a boundary.
+/// Clients in `PendingHandoff` state are skipped to avoid conflicting sub changes.
 pub fn handle_subscriptions(
     mut ev_positions: MessageReader<PositionUpdateMsg>,
     mut ev_crossings: MessageWriter<CrossingAlertMsg>,
@@ -26,6 +27,11 @@ pub fn handle_subscriptions(
     let mut nearby_buf: Vec<u32> = Vec::with_capacity(4);
 
     for update in ev_positions.read() {
+        // Skip clients mid-handoff — their subscription will be updated by the handoff system.
+        if !client_map.is_stable(update.client_id.into()) {
+            continue;
+        }
+
         // f64 → f32 for QuadTree (tree is built from f32 world bounds).
         let x = update.x as f32;
         let y = update.y as f32;
@@ -61,11 +67,16 @@ pub fn handle_subscriptions(
                         continue;
                     }
                 };
-
                 broker.send(packet);
-                // TODO: pass real GameConnection when shard-to-connection tracking is wired up.
-                // For now we store without connection key — cleanup will happen via shard disconnect.
-                client_map.shard_by_client.insert(update.client_id.into(), new);
+
+                // Use the proper insert() method to maintain the connection_clients index
+                // so that remove_by_connection() correctly cleans up on shard disconnect.
+                if let Some(conn) = update.shard_connection {
+                    client_map.insert(update.client_id.into(), new, conn);
+                } else {
+                    // Broker-relayed path: no direct connection available, update shard only.
+                    client_map.shard_by_client.insert(update.client_id.into(), new);
+                }
                 tracing::debug!("client {} subscribed to shard:{new}", update.client_id.0);
             }
         }
@@ -89,5 +100,3 @@ pub fn handle_subscriptions(
         }
     }
 }
-
-

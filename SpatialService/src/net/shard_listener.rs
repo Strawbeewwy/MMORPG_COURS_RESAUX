@@ -21,6 +21,8 @@ pub fn bind_shard_listener(mut commands: Commands, config: Res<SpatialConfig>) {
     commands.insert_resource(ShardListener {
         peer,
         streams: HashMap::new(),
+        connection_by_shard_id: HashMap::new(),
+        shard_id_by_connection: HashMap::new(),
     });
 }
 
