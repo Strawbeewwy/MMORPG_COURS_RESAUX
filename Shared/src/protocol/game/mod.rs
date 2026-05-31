@@ -1,9 +1,16 @@
 mod common;
 pub mod world_update;
 pub mod player_spawn;
+pub mod player;
 
 pub use common::{
-    EntityId, PlayerId, PlayerPublicInfo, PlayerSnapshot, Username, NetVec2, WorldSnapshot, ZoneId,WorldUpdate
+    EntityId,
+    Username, NetVec2, WorldSnapshot, ZoneId,WorldUpdate,
+    EntityType,
+};
+
+pub use player::{
+    PlayerPublicInfo, PlayerSnapshot,Player,PlayerId
 };
 
 

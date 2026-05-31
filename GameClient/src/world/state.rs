@@ -2,8 +2,8 @@ use bevy::prelude::*;
 use crate::render::renderable::ClientRenderEntity;
 use crate::world::player::ClientPlayer;
 use std::collections::HashMap;
-use shared::protocol::{EntityId, PlayerId, PlayerSnapshot, ZoneId};
-
+use shared::protocol::{EntityId, PlayerSnapshot, ZoneId};
+use shared::protocol::game::player::PlayerId;
 
 #[derive(Resource, Default)]
 pub struct LocalWorldState {

@@ -6,7 +6,7 @@ pub mod transport;
 
 pub use discovery::{Heartbeat, ServerInfo};
 pub use game::{
-    EntityId, PlayerId, PlayerPublicInfo, PlayerSnapshot, PlayerSpawnInfo,
+    EntityId, PlayerPublicInfo, PlayerSnapshot, PlayerSpawnInfo,
     Username, NetVec2, WorldSnapshot, WorldUpdate, ZoneId,
 };
 pub use http::{ErrorResponse, HealthResponse, LoginHttpRequest, LoginHttpResponse};

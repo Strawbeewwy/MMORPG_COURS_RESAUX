@@ -1,11 +1,12 @@
 use bevy::prelude::*;
-use shared::protocol::{EntityId, NetVec2};
+use shared::protocol::EntityId;
+use shared::protocol::game::EntityType;
 
 #[derive(Debug, Clone)]
 pub struct ClientRenderEntity {
     pub entity_id: EntityId,
-    pub entity_type: RenderedEntityType,
-    pub position: NetVec2,
+    pub entity_type: EntityType,
+    pub position: Vec2,
     pub color: Color,
     pub size: Vec2,
     pub z_index: f32,
@@ -14,15 +15,6 @@ pub struct ClientRenderEntity {
 #[derive(Component)]
 pub struct RenderedEntity {
     pub entity_id: EntityId,
-    pub entity_type: RenderedEntityType,
+    pub entity_type: EntityType,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RenderedEntityType {
-    Player,
-    Enemy,
-    Npc,
-    Item,
-    Projectile,
-    Effect,
-}
