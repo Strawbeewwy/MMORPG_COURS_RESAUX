@@ -1,9 +1,9 @@
-
+use serde::{Deserialize, Serialize};
 use crate::protocol::broker::config::CLIENT_INPUT_LEN;
 use crate::protocol::broker::topic::*;
 use crate::protocol::broker::utils::read_u32_le;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default , Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default , Hash, Serialize, Deserialize)]
 pub struct ClientId(pub u32);
 
 impl From<ClientId> for u32 {

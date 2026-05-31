@@ -15,7 +15,7 @@ fn distance_squared(a: NetVec2, b: NetVec2) -> f32 {
     let dx = a.x - b.x;
     let dy = a.y - b.y;
 
-    dx * dx + dy * dy
+    (dx * dx + dy * dy) as f32
 }
 
 

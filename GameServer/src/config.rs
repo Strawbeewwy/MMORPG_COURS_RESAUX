@@ -22,6 +22,7 @@ pub struct ServerConfig {
     pub broker_ip: String,
     pub broker_port: u16,
     pub shard_topic: Topic,
+    pub server_tick: u64,
 }
 
 impl ServerConfig {
@@ -72,6 +73,7 @@ impl ServerConfig {
             broker_ip,
             broker_port,
             shard_topic,
+            server_tick: 0,
         })
     }
 

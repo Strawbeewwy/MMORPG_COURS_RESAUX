@@ -1,26 +1,33 @@
 use crate::net::network_event::SharedPlayerRegistry;
-use crate::world::player::{
-    PlayerInfo, PLAYER_DEFAULT_MOVE_SPEED
-};
-use bevy::prelude::{
-    Res, Resource, Time
-};
-use shared::protocol::{
-    NetVec2, PlayerId, PlayerSnapshot, WorldSnapshot, ZoneId,
-    PlayerSpawnInfo,
-};
+use bevy::prelude::*;
+use shared::protocol::{NetVec2, WorldSnapshot, ZoneId, PlayerSpawnInfo, EntityId};
 use crate::net::area_of_interest::{
     is_inside_area_of_interest, DEFAULT_AREA_OF_INTEREST_RADIUS,
 };
-use std::collections::HashMap;
+
+use bevy::platform::collections::HashMap;
 use shared::protocol::broker::ClientId;
+use shared::protocol::game::EntityType;
+use shared::protocol::game::player::{
+    Player, PlayerId, PLAYER_DEFAULT_MOVE_SPEED, PlayerSnapshot, PlayerPublicInfo,
+};
 use shared::protocol::transport::codec;
 use crate::config::ServerConfig;
 
 #[derive(Debug, Default, Resource)]
 pub struct PlayerRegistry {
-    pub players: HashMap<PlayerId, PlayerInfo>,
-    pub server_tick: u64,
+    // player id -> player
+    // used to perform actions on players
+    pub players: HashMap<PlayerId, Player>,
+    // player -> client
+    // used for shard-to-client communication
+    pub player_client: HashMap<PlayerId, ClientId>,
+    // client -> player
+    // used for client-to-shard communication
+    pub client_player: HashMap<ClientId, PlayerId>,
+    // entity -> type
+    pub entity_type: HashMap<EntityId, EntityType>,
+
 }
 
 impl PlayerRegistry {
@@ -35,57 +42,77 @@ impl PlayerRegistry {
     pub fn update_players(&mut self, delta_seconds: f32) {
         for player in self.players.values_mut() {
             player.update_movement(delta_seconds);
+            /*
+                we can add more stuff the players need updated on
+                like health, inventory, etc.
+             */
         }
 
-        self.server_tick += 1;
     }
+
+    pub fn register_player(&mut self, player: Player, client_id: ClientId) {
+        self.player_client.insert(player.player_id, client_id);
+    }
+
+    pub fn remove_player(&mut self, player: &Player) {
+        self.player_client.remove(&player.player_id);
+    }
+
+
+    pub fn remove_client(&mut self, player_id: &PlayerId) {
+        self.players.remove(player_id);
+    }
+
     pub fn snapshot(&self, zone: ZoneId) -> WorldSnapshot {
         let players = self
             .players
             .values()
             .map(|player| PlayerSnapshot {
+                client_id: self.player_client.get(&player.player_id).unwrap().clone(),
                 player_id: player.player_id.clone(),
                 username: player.username.clone(),
-                position: player.position,
-                velocity: player.velocity,
+                position: player.position.clone(),
+                velocity: player.velocity.clone(),
             })
             .collect();
 
         WorldSnapshot {
             zone,
             players,
-            server_tick: self.server_tick,
+            server_tick: 0,
         }
     }
 
     pub fn snapshot_for_player(
         &self,
         zone: ZoneId,
-        observer_player_id: &PlayerId,
+        observer_player: &ClientId,
         radius: f32,
     ) -> Option<WorldSnapshot> {
-        let observer = self.players.get(observer_player_id)?;
-
-        let players = self
-            .players
-            .values()
-            .filter(|player| {
-                player.player_id == observer.player_id
-                    || is_inside_area_of_interest(observer.position, player.position, radius)
-            })
-            .map(|player| PlayerSnapshot {
-                player_id: player.player_id.clone(),
-                username: player.username.clone(),
-                position: player.position,
-                velocity: player.velocity,
-            })
-            .collect();
-
-        Some(WorldSnapshot {
-            zone,
-            players,
-            server_tick: self.server_tick,
-        })
+        // let observer = self.client_player.get(observer_player)?;
+        //
+        // let players = self
+        //     .client_player
+        //     .values()
+        //     .filter(|player| {
+        //         player == observer
+        //             || is_inside_area_of_interest(observer.position, player.position, radius)
+        //     })
+        //     .map(|player| PlayerSnapshot {
+        //         client_id,
+        //         player_id:player.player_id,
+        //         username: player.username,
+        //         position: player.position,
+        //         velocity: player.velocity,
+        //     })
+        //     .collect();
+        //
+        // Some(WorldSnapshot {
+        //     zone,
+        //     players,
+        //     server_tick: 0,
+        // })
+        None
     }
 
 
@@ -125,23 +152,13 @@ pub fn handle_add_client_to_shard(
         return;
     };
 
-    let player = PlayerInfo {
-        player_id: spawn_info.player_id.clone(),
+    let player = Player {
+        player_id: Default::default(),
         username: spawn_info.username.clone(),
         zone: spawn_info.zone.clone(),
-        position: spawn_info.spawn_position,
+        position: NetVec2::ZERO,
         velocity: NetVec2::ZERO,
         movement_speed: PLAYER_DEFAULT_MOVE_SPEED,
     };
 
-    registry.players.insert(spawn_info.player_id.clone(), player);
-
-    tracing::info!(
-        "added client {} to shard topic={} as player_id={} username={} zone={}",
-        client_id.0,
-        &config.shard_topic.to_string(),
-        spawn_info.player_id,
-        spawn_info.username,
-        spawn_info.zone
-    );
 }

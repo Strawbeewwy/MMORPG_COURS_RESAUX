@@ -1,6 +1,8 @@
-use crate::render::renderable::{ClientRenderEntity, RenderedEntityType};
+use crate::render::renderable::{ClientRenderEntity, };
 use bevy::prelude::*;
-use shared::protocol::{PlayerId, PlayerSnapshot};
+use shared::protocol::game::EntityType;
+use shared::protocol::game::player::PlayerId;
+use shared::protocol::{EntityId, PlayerSnapshot};
 
 const PLAYER_SIZE: f32 = 32.0;
 const LOCAL_PLAYER_COLOR: Color = Color::srgb(0.2, 0.8, 1.0);
@@ -30,9 +32,9 @@ impl ClientPlayer {
 
     pub fn create_render_entity(&self) -> ClientRenderEntity {
         ClientRenderEntity {
-            entity_id: self.snapshot.player_id.clone(),
-            entity_type: RenderedEntityType::Player,
-            position: self.snapshot.position,
+            entity_id: EntityId(0),
+            entity_type: EntityType::Player,
+            position: Vec2::from(self.snapshot.position.to_f32()),
             color: self.color(),
             size: self.size(),
             z_index: self.z_index(),

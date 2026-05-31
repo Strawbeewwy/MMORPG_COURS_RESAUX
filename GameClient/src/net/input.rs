@@ -19,7 +19,7 @@ pub fn keyboard_input_system(
         app_exit.write(AppExit::Success);
         return;
     }
-
+    
     let Some(client_id) = broker_client.client_id else {
         return;
     };
