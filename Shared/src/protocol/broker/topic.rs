@@ -4,7 +4,8 @@ pub const TOPIC_LEN: usize = 32;
 pub const SHARD_ID_LEN: usize = size_of::<u32>();
 pub const ZONE_ID_LEN: usize = size_of::<u32>();
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq,
+    PartialOrd, Ord, Hash, Default)]
 pub struct ShardId(pub u32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

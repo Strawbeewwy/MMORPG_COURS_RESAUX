@@ -5,7 +5,7 @@ use shared::protocol::broker::{
     CLIENT_INPUT_LEN, ClientId, Topic, encode_message,
      BrokerMessage, };
 use std::collections::HashMap;
-
+use shared::protocol::NetVec2;
 
 pub fn broadcast_to_subscribers(
     peer: &GamePeer,
@@ -99,7 +99,7 @@ pub fn relay_position_update_to_spatial_services(
     peer : &GamePeer,
     state: &PubSubState,
     client_id: ClientId,
-    position: [f32;2],
+    position: NetVec2,
 ){
 
     if state.spatial_service_streams.is_empty() {
@@ -143,8 +143,8 @@ pub fn relay_position_update_to_spatial_services(
     tracing::debug!(
         "forwarded PositionUpdate client_id={} position=({}, {}) to {} spatial service(s)",
         client_id.0,
-        position[0],
-        position[1],
+        position.x,
+        position.y,
         state.spatial_service_streams.len()
     );
 

@@ -1,8 +1,7 @@
 use crate::config::ServerConfig;
 use crate::net::network_event::SharedPlayerRegistry;
-use crate::world::player::{PLAYER_DEFAULT_MOVE_SPEED, PlayerInfo};
 use shared::protocol::broker::{ClientId, CLIENT_INPUT_LEN};
-use shared::protocol::{NetVec2, Username};
+use shared::protocol::NetVec2;
 
 pub fn handle_broker_client_input(
     config: &ServerConfig,
@@ -10,41 +9,44 @@ pub fn handle_broker_client_input(
     client_id: ClientId,
     input: [u8; CLIENT_INPUT_LEN],
 ) {
+
     let movement_x = read_f32_le(&input[0..4]);
     let movement_y = read_f32_le(&input[4..8]);
 
-    let player_id: u32 = client_id.into();
+
+    if !movement_x.is_finite() || !movement_y.is_finite() {
+        tracing::warn!(
+           "invalid client input: client_id={} movement_x={} movement_y={}",
+           client_id.0,
+           movement_x,
+           movement_y
+       );
+        return;
+    }
+
+
 
     let Ok(mut registry) = registry.inner.try_lock() else {
         tracing::warn!("could not lock player registry for client input");
         return;
     };
 
-    let player = registry
-        .players
-        .entry(player_id.clone())
-        .or_insert_with(|| {
-            tracing::info!(
-                "creating shard player from broker client_id={} zone={}",
-                client_id.0,
-                config.zone
-            );
+    let Some(&player_id) = registry.client_player.get(&client_id) else {
+        tracing::warn!("player not found for client input with id: {}", client_id.0);
+        return;
+    };
 
-            PlayerInfo {
-                player_id: player_id.clone(),
-                username: Username::from(format!("player_{}", client_id.0)),
-                zone: config.zone.clone(),
-                position: NetVec2::ZERO,
-                velocity: NetVec2::ZERO,
-                movement_speed: PLAYER_DEFAULT_MOVE_SPEED,
-            }
-        });
 
-    player.velocity = NetVec2::new(movement_x, movement_y);
+    let Some(player) = registry.players.get_mut(&player_id) else {
+        tracing::warn!("player not found for client input with id: {}", player_id);
+        return;
+    };
+
+    player.velocity = NetVec2::from_f32(movement_x, movement_y, NetVec2::DEFAULT_PRECISION);
 
     tracing::debug!(
         "client input applied: client_id={} movement_x={} movement_y={}",
-        client_id.0,
+        player_id,
         movement_x,
         movement_y
     );

@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use game_sockets::GameConnection;
 use std::collections::{HashMap, HashSet};
+use shared::protocol::broker::{ClientId, ShardId};
 
 /// Tracks whether a client is idle or mid-handoff.
 /// Prevents duplicate HandoffRequest messages for the same client.
@@ -23,16 +24,17 @@ pub enum ClientTransferState {
 #[derive(Resource, Default, Debug)]
 pub struct ClientMap {
     /// client_id → current shard_id
-    pub shard_by_client: HashMap<u32, u32>,
+    pub shard_by_client: HashMap<ClientId, ShardId>,
     /// GameConnection (shard) → set of client_ids routed through it
-    connection_clients: HashMap<GameConnection, HashSet<u32>>,
+    connection_clients: HashMap<GameConnection, HashSet<ClientId>>,
     /// client_id → transfer state (absent = Stable, to avoid allocating per client)
-    client_states: HashMap<u32, ClientTransferState>,
+    client_states: HashMap<ClientId, ClientTransferState>,
+    
 }
 
 impl ClientMap {
     /// Insert or update a client's shard, recording the shard connection for cleanup.
-    pub fn insert(&mut self, client_id: u32, shard_id: u32, conn: GameConnection) {
+    pub fn insert(&mut self, client_id: ClientId, shard_id: ShardId, conn: GameConnection) {
         self.shard_by_client.insert(client_id, shard_id);
         self.connection_clients
             .entry(conn)
@@ -41,14 +43,14 @@ impl ClientMap {
     }
 
     /// Get the current shard for a client.
-    pub fn get(&self, client_id: u32) -> Option<u32> {
+    pub fn get(&self, client_id: ClientId) -> Option<ShardId> {
         self.shard_by_client.get(&client_id).copied()
     }
 
     /// Remove a single client (e.g. explicit logout).
     /// Cleans up both `shard_by_client` and the reverse `connection_clients` index
     /// to prevent unbounded memory growth on long-running servers.
-    pub fn remove(&mut self, client_id: u32) -> Option<u32> {
+    pub fn remove(&mut self, client_id: ClientId) -> Option<ShardId> {
         let shard = self.shard_by_client.remove(&client_id);
         self.client_states.remove(&client_id);
         // Remove client_id from every connection set and prune empty entries.
@@ -73,7 +75,7 @@ impl ClientMap {
     // ── Transfer state ─────────────────────────────────────────────────────
 
     /// Returns `true` if the client is in `Stable` state (no handoff in progress).
-    pub fn is_stable(&self, client_id: u32) -> bool {
+    pub fn is_stable(&self, client_id: ClientId) -> bool {
         !matches!(
             self.client_states.get(&client_id),
             Some(ClientTransferState::PendingHandoff { .. })
@@ -81,17 +83,17 @@ impl ClientMap {
     }
 
     /// Mark a client as pending handoff. Idempotent if called twice for the same destination.
-    pub fn set_state(&mut self, client_id: u32, state: ClientTransferState) {
+    pub fn set_state(&mut self, client_id: ClientId, state: ClientTransferState) {
         self.client_states.insert(client_id, state);
     }
 
     /// Clear the transfer state (called on HandoffAck or on client disconnect).
-    pub fn clear_state(&mut self, client_id: u32) {
+    pub fn clear_state(&mut self, client_id: ClientId) {
         self.client_states.remove(&client_id);
     }
 
     /// Read the transfer state for a client (absent = Stable).
-    pub fn get_state(&self, client_id: u32) -> ClientTransferState {
+    pub fn get_state(&self, client_id: ClientId) -> ClientTransferState {
         self.client_states
             .get(&client_id)
             .cloned()

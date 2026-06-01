@@ -22,7 +22,6 @@ pub fn decode_and_handle_broker_message(
     match broker_message {
         BrokerMessage::ClientAccepted { client_id } => {
             broker_client.client_id = Some(client_id);
-            world_state.player_id = Some(client_id.into());
 
             tracing::info!("broker assigned client_id={}", client_id.0);
         }
@@ -78,19 +77,22 @@ fn handle_world_update(
             );
         }
 
-        WorldUpdate::PlayerJoined { player } => {
+        WorldUpdate::PlayerJoined { player, client_id } => {
             tracing::info!(
                 "player joined: id={} username={}",
-                player.player_id,
+                client_id.0.clone(),
                 player.username
             );
         }
 
-        WorldUpdate::PlayerLeft { player_id } => {
-            world_state.players.remove(&player_id);
+        WorldUpdate::PlayerLeft { player, client_id } => {
+            //world_state.players.remove();
             world_state.rebuild_render_entities();
 
-            tracing::info!("player left: {}", player_id);
+            tracing::info!("player left: id = {} username={}",
+                client_id.0.clone(),
+                player.username
+            );
         }
     }
 }

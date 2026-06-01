@@ -78,7 +78,7 @@ fn handle_shard_message(
 
     match message {
         // Shard identifies itself — register the shard_id ↔ connection mapping.
-        BrokerMessage::ShardRegister { shard_id } => {
+        BrokerMessage::RegisterShard { shard_id } => {
             listener.register_shard(connection, shard_id.0);
         }
 
@@ -88,18 +88,20 @@ fn handle_shard_message(
                 client_id,
                 shard_connection: Some(connection),
                 // f32 → f64 widening: lossless, intentional (see PositionUpdateMsg doc).
-                x: f64::from(position[0]),
-                y: f64::from(position[1]),
+                x: f64::from(position.x),
+                y: f64::from(position.y),
             });
         }
 
         // Destination shard accepted the client — clear the pending handoff state.
-        BrokerMessage::HandoffAck { client_id, to_shard } => {
+        BrokerMessage::HandoffCompleted { entity_id } => {
             tracing::info!(
-                "HandoffAck received: client {} accepted by shard {}",
-                client_id.0, to_shard.0
+                "HandoffAck received: client {}",
+                entity_id.0,
             );
-            client_map.clear_state(client_id.into());
+            //TODO we need an entity map that will manage all entities
+            //we can then map entities to clients
+            //client_map.clear_state(client_id.into());
         }
 
         other => {
@@ -190,8 +192,8 @@ pub fn handle_broker_message(
                 client_id,
                 // Relayed via broker — no direct shard connection available.
                 shard_connection: None,
-                x: f64::from(position[0]),
-                y: f64::from(position[1]),
+                x: f64::from(position.x),
+                y: f64::from(position.y),
             });
         }
         _ => {}

@@ -40,12 +40,12 @@ pub struct CrossingAlertMsg {
 
 impl CrossingAlertMsg {
     /// Build from a slice (truncates beyond MAX_CROSSING_SHARDS with a warning).
-    pub fn from_slice(client_id: u32, ids: &[u32]) -> Self {
+    pub fn from_slice(client_id: ClientId, ids: &[ShardId]) -> Self {
         if ids.len() > MAX_CROSSING_SHARDS {
             tracing::warn!(
                 "CrossingAlertMsg: client {} has {} crossing shards but only {} can be tracked — \
                  excess shards silently dropped (QuadTree depth may be too shallow)",
-                client_id,
+                client_id.0,
                 ids.len(),
                 MAX_CROSSING_SHARDS,
             );
@@ -57,10 +57,10 @@ impl CrossingAlertMsg {
 
         shards.iter_mut()
             .zip(valid_ids.iter())
-            .for_each(|(slot, &id)| *slot = ShardId(id));
+            .for_each(|(slot, &id)| *slot = id);
 
         Self {
-            client_id: ClientId(client_id),
+            client_id,
             shards,
             shard_count
         }

@@ -24,7 +24,7 @@ pub fn handle_subscriptions(
     cooldowns.tick();
 
     // Reusable buffer — allocated once per frame, not once per client.
-    let mut nearby_buf: Vec<u32> = Vec::with_capacity(4);
+    let mut nearby_buf: Vec<ShardId> = Vec::with_capacity(4);
 
     for update in ev_positions.read() {
         // Skip clients mid-handoff — their subscription will be updated by the handoff system.
@@ -44,7 +44,7 @@ pub fn handle_subscriptions(
             if let Some(old) = old_shard {
                 let packet = match encode_message(&BrokerMessage::Unsubscribe {
                     client_id: update.client_id,
-                    shard_id: ShardId(old),
+                    shard_id: old,
                 }) {
                     Ok(packet) => packet,
                     Err(error) => {
@@ -53,13 +53,13 @@ pub fn handle_subscriptions(
                     }
                 };
                 broker.send(packet);
-                tracing::debug!("client {} unsubscribed from shard:{old}", update.client_id.0);
+                tracing::debug!("client {} unsubscribed from shard:{}", update.client_id.0, old.0);
             }
 
             if let Some(new) = new_shard {
                 let packet = match encode_message(&BrokerMessage::Subscribe {
                     client_id: update.client_id,
-                    shard_id: ShardId(new),
+                    shard_id: new,
                 }) {
                     Ok(packet) => packet,
                     Err(error) => {
@@ -77,7 +77,7 @@ pub fn handle_subscriptions(
                     // Broker-relayed path: no direct connection available, update shard only.
                     client_map.shard_by_client.insert(update.client_id.into(), new);
                 }
-                tracing::debug!("client {} subscribed to shard:{new}", update.client_id.0);
+                tracing::debug!("client {} subscribed to shard:{}", update.client_id.0, new.0);
             }
         }
 
@@ -87,7 +87,7 @@ pub fn handle_subscriptions(
             // Emit one alert per unique (client, shard_pair) combo, suppressed for cooldown_ticks.
             for i in 0..nearby_buf.len() {
                 for j in (i + 1)..nearby_buf.len() {
-                    if cooldowns.should_emit(update.client_id.into(), nearby_buf[i], nearby_buf[j]) {
+                    if cooldowns.should_emit(update.client_id.into(), nearby_buf[i].0, nearby_buf[j].0) {
                         ev_crossings.write(CrossingAlertMsg::from_slice(
                             update.client_id.into(),
                             &nearby_buf,

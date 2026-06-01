@@ -197,5 +197,11 @@ pub fn handle_message(
                 position,
             );
         }
+        BrokerMessage::RegisterClient { .. } => {}
+        BrokerMessage::HandoffRequest { .. } => {}
+        BrokerMessage::HandoffAccepted { .. } => {}
+        BrokerMessage::HandoffRejected { .. } => {}
+        BrokerMessage::GhostUpdate { .. } => {}
+        BrokerMessage::HandoffCompleted { .. } => {}
     }
 }
