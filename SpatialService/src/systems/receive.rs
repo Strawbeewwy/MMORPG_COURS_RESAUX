@@ -1,14 +1,12 @@
-use std::collections::HashMap;
 use bevy::prelude::*;
-use game_sockets::{GameConnection, GameNetworkEvent, GamePeer, GameStream, GameStreamReliability};
-use shared::protocol::broker::{decode_message, encode_message, BrokerMessage};
+use game_sockets::{GameConnection, GameNetworkEvent, GameStreamReliability};
+use shared::protocol::broker::{decode_message, BrokerMessage};
 use crate::messages::PositionUpdateMsg;
 use crate::resources::client_map::ClientMap;
 use crate::resources::net_handles::{BrokerClient, BrokerConnectionState, ShardListener};
 
 /// Poll the shard listener peer each frame (non-blocking).
-/// Decoded PositionUpdate wire packets are forwarded as Bevy messages.
-/// Clients are removed from ClientMap on shard disconnect to prevent memory leaks.
+/// Handles shard lifecycle events, ShardRegister identification, PositionUpdate and HandoffAck.
 pub fn poll_shard_events(
     mut listener: ResMut<ShardListener>,
     mut client_map: ResMut<ClientMap>,
@@ -42,7 +40,7 @@ fn handle_shard_event(
         }
         Disconnected(conn) => {
             tracing::info!("shard disconnected: {}", conn.connection_id);
-            listener.streams.remove(&conn);
+            listener.unregister_shard(conn);
             // Remove all clients that were tracked via this shard connection
             // to prevent unbounded growth of ClientMap.
             client_map.remove_by_connection(conn);
@@ -53,11 +51,63 @@ fn handle_shard_event(
         StreamClosed(conn, _stream) => {
             listener.streams.remove(&conn);
         }
-
         Error { connection, inner } => {
             tracing::warn!("shard socket error on {}: {inner}", connection.connection_id);
         }
-        _ => {}
+        Message { connection, data, .. } => {
+            handle_shard_message(listener, client_map, ev_writer, connection, &data);
+        }
+    }
+}
+
+/// Decode and dispatch a message received directly from a connected shard.
+fn handle_shard_message(
+    listener: &mut ShardListener,
+    client_map: &mut ClientMap,
+    ev_writer: &mut MessageWriter<PositionUpdateMsg>,
+    connection: GameConnection,
+    data: &[u8],
+) {
+    let message = match decode_message(data) {
+        Ok(msg) => msg,
+        Err(e) => {
+            tracing::warn!("invalid message from shard {}: {e}", connection.connection_id);
+            return;
+        }
+    };
+
+    match message {
+        // Shard identifies itself — register the shard_id ↔ connection mapping.
+        BrokerMessage::ShardRegister { shard_id } => {
+            listener.register_shard(connection, shard_id.0);
+        }
+
+        // Direct PositionUpdate from shard — propagate the source connection.
+        BrokerMessage::PositionUpdate { client_id, position } => {
+            ev_writer.write(PositionUpdateMsg {
+                client_id,
+                shard_connection: Some(connection),
+                // f32 → f64 widening: lossless, intentional (see PositionUpdateMsg doc).
+                x: f64::from(position[0]),
+                y: f64::from(position[1]),
+            });
+        }
+
+        // Destination shard accepted the client — clear the pending handoff state.
+        BrokerMessage::HandoffAck { client_id, to_shard } => {
+            tracing::info!(
+                "HandoffAck received: client {} accepted by shard {}",
+                client_id.0, to_shard.0
+            );
+            client_map.clear_state(client_id.into());
+        }
+
+        other => {
+            tracing::warn!(
+                "unexpected message from shard {}: {:?}",
+                connection.connection_id, other
+            );
+        }
     }
 }
 
@@ -82,8 +132,7 @@ fn handle_broker_event(
     broker: &mut BrokerClient,
     event: GameNetworkEvent,
     ev_writer: &mut MessageWriter<PositionUpdateMsg>,
-)
-{
+) {
     use game_sockets::GameNetworkEvent::*;
     match event {
         Connected(conn) => {
@@ -114,49 +163,37 @@ fn handle_broker_event(
             tracing::warn!("broker error on {}: {inner}", connection.connection_id);
             broker.state = BrokerConnectionState::Disconnected;
         }
-        Message {
-            connection,
-            data, ..
-        } => {
-            handle_broker_message(
-                connection,
-                &data,
-                ev_writer,
-            );
+        Message { connection, data, .. } => {
+            handle_broker_message(connection, &data, ev_writer);
         }
     }
 }
 
-
+/// Handle a message received via the broker relay path.
+/// PositionUpdates here have no direct shard connection — shard_connection is None.
 pub fn handle_broker_message(
     connection: GameConnection,
     data: &[u8],
     ev_writer: &mut MessageWriter<PositionUpdateMsg>,
 ) {
     let message = match decode_message(data) {
-        Ok(message) => message,
-        Err(error) => {
-            tracing::warn!(
-                "invalid broker message from connection {}: {error}",
-                connection.connection_id
-            );
+        Ok(msg) => msg,
+        Err(e) => {
+            tracing::warn!("invalid broker message from connection {}: {e}", connection.connection_id);
             return;
         }
     };
 
     match message {
-
-        BrokerMessage::PositionUpdate { client_id , position} => {
-            let x = f64::try_from(position[0]).unwrap();
-            let y = f64::try_from(position[1]).unwrap();
-            let message = PositionUpdateMsg { client_id, x, y };
-
-            ev_writer.write(message);
-
+        BrokerMessage::PositionUpdate { client_id, position } => {
+            ev_writer.write(PositionUpdateMsg {
+                client_id,
+                // Relayed via broker — no direct shard connection available.
+                shard_connection: None,
+                x: f64::from(position[0]),
+                y: f64::from(position[1]),
+            });
         }
         _ => {}
     }
 }
-
-
-

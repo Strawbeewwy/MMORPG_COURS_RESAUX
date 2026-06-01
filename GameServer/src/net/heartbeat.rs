@@ -53,7 +53,7 @@ pub fn send_heartbeat(
     };
 
     let heartbeat = Heartbeat {
-        id: config.id.clone(),
+        id: config.shard_topic.to_string(),
         ip: config.ip.clone(),
         port: config.port,
         zone: config.zone.clone(),

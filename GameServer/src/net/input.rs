@@ -2,7 +2,7 @@ use crate::config::ServerConfig;
 use crate::net::network_event::SharedPlayerRegistry;
 use crate::world::player::{PLAYER_DEFAULT_MOVE_SPEED, PlayerInfo};
 use shared::protocol::broker::{ClientId, CLIENT_INPUT_LEN};
-use shared::protocol::NetVec2;
+use shared::protocol::{NetVec2, Username};
 
 pub fn handle_broker_client_input(
     config: &ServerConfig,
@@ -32,7 +32,7 @@ pub fn handle_broker_client_input(
 
             PlayerInfo {
                 player_id: player_id.clone(),
-                username: format!("player_{}", client_id.0),
+                username: Username::from(format!("player_{}", client_id.0)),
                 zone: config.zone.clone(),
                 position: NetVec2::ZERO,
                 velocity: NetVec2::ZERO,

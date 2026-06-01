@@ -12,14 +12,9 @@ pub use broker_message::{
 };
 
 pub use topic::{
-    ShardId,Topic,TOPIC_LEN,read_topic,
+    ShardId, Topic, TOPIC_LEN, read_topic,
 };
 
-pub use encode::{
-    encode_message,
-};
-
-pub use decode::{
-   decode_message,
-};
+pub use encode::encode_message;
+pub use decode::decode_message;
 

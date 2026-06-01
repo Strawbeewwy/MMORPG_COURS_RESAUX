@@ -2,6 +2,7 @@
 /// These wrap or mirror the shared wire protocol structs,
 /// keeping the `shared` crate free of any Bevy dependency.
 use bevy::prelude::*;
+use game_sockets::GameConnection;
 use shared::protocol::broker::{ClientId, ShardId};
 
 /// Bevy message produced by `poll_shard_events` from an incoming PositionUpdate wire packet.
@@ -9,11 +10,15 @@ use shared::protocol::broker::{ClientId, ShardId};
 /// # Why f64 when the wire protocol uses f32?
 /// The wire format (tag `0x10`) transmits positions as `f32` to minimise bandwidth.
 /// Internally we widen to `f64` to avoid precision loss near large world boundaries
-/// (e.g. ±1000 world units). The cast `f32 → f64` in `handle_broker_message` is lossless;
+/// (e.g. ±1000 world units). The cast `f32 → f64` via `f64::from` is lossless;
 /// the reverse `f64 → f32` cast in `handle_subscriptions` is intentional and documented there.
 #[derive(Message, Debug, Clone, Copy)]
 pub struct PositionUpdateMsg {
     pub client_id: ClientId,
+    /// The direct QUIC connection of the shard that sent this update.
+    /// `Some` when received via the shard listener (direct shard → SpatialService path).
+    /// `None` when relayed through the broker.
+    pub shard_connection: Option<GameConnection>,
     pub x: f64,
     pub y: f64,
 }
@@ -67,3 +72,13 @@ impl CrossingAlertMsg {
     }
 }
 
+/// Bevy message emitted by `handle_crossing_alerts` when a client should be handed off
+/// to a neighbouring shard. Consumed by `handle_handoff_requests`.
+#[derive(Message, Debug, Clone, Copy)]
+pub struct HandoffRequestMsg {
+    pub client_id: ClientId,
+    /// The shard the client is currently subscribed to.
+    pub from_shard: ShardId,
+    /// The shard the client is crossing into.
+    pub to_shard: ShardId,
+}

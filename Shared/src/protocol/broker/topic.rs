@@ -1,6 +1,9 @@
-
+use crate::protocol::broker::utils::read_u32_le;
 
 pub const TOPIC_LEN: usize = 32;
+pub const SHARD_ID_LEN: usize = size_of::<u32>();
+pub const ZONE_ID_LEN: usize = size_of::<u32>();
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct ShardId(pub u32);
 
@@ -13,8 +16,8 @@ pub enum Topic {
 }
 
 impl Topic {
-    pub fn to_bytes(&self) -> [u8; 32] {
-        let mut bytes = [0u8; 32];
+    pub fn to_bytes(&self) -> [u8; TOPIC_LEN] {
+        let mut bytes = [0u8; TOPIC_LEN];
 
         match self {
             Topic::Global => {
@@ -31,14 +34,14 @@ impl Topic {
                 bytes[..prefix.len()].copy_from_slice(prefix);
 
                 let id_bytes = id.to_le_bytes();
-                bytes[prefix.len()..prefix.len() + 4].copy_from_slice(&id_bytes);
+                bytes[prefix.len()..prefix.len() + ZONE_ID_LEN].copy_from_slice(&id_bytes);
             }
             Topic::ShardInstance(id) => {
                 let prefix = b"shard_";
                 bytes[..prefix.len()].copy_from_slice(prefix);
 
                 let id_bytes = id.0.to_le_bytes();
-                bytes[prefix.len()..prefix.len() + 2].copy_from_slice(&id_bytes);
+                bytes[prefix.len()..prefix.len() + SHARD_ID_LEN].copy_from_slice(&id_bytes);
             }
         }
 
@@ -55,24 +58,50 @@ impl Topic {
     }
 }
 
-impl TryFrom<[u8; 32]> for Topic {
+impl TryFrom<[u8; TOPIC_LEN]> for Topic {
     type Error = &'static str;
 
-    fn try_from(bytes: [u8; 32]) -> Result<Self, Self::Error> {
-        if bytes.starts_with(b"global") {
+    fn try_from(bytes: [u8; TOPIC_LEN]) -> Result<Self, Self::Error> {
+
+       /*
+        this function checks if the bytes starting from a determined index are all zero
+        this prevents reading past the end of the buffer and ensures the topic is properly formatted
+        it also prevents any trailing data from being read as part of the topic
+        */
+        let is_zero_padded = |start_idx: usize| -> bool {
+
+            bytes.get(start_idx..).map_or(false, |slice| slice.iter().all(|&b| b == 0))
+        };
+
+        if bytes.starts_with(b"global") && is_zero_padded(b"global".len()) {
             Ok(Topic::Global)
-        } else if bytes.starts_with(b"chat") {
+        } else if bytes.starts_with(b"chat") && is_zero_padded(b"chat".len()) {
             Ok(Topic::Chat)
         } else if bytes.starts_with(b"sector_") {
-            let id_bytes = bytes[7..11].try_into().map_err(|_| "Format d'ID invalide")?;
-            let id = u32::from_le_bytes(id_bytes);
-            Ok(Topic::Zone(id))
+            let id_start = b"sector_".len();
+            let id_end = id_start + size_of::<u32>();
+
+            if let Some(id_slice) = bytes.get(id_start..id_end) {
+
+                if is_zero_padded(id_end) {
+                    let id = read_u32_le(id_slice);
+                    return Ok(Topic::Zone(id));
+                }
+            }
+            Err("Zone topic is malformed or contains trailing data")
         } else if bytes.starts_with(b"shard_") {
-            let id_bytes = bytes[6..8].try_into().map_err(|_| "Format d'ID invalide")?;
-            let id = u32::from_le_bytes(id_bytes);
-            Ok(Topic::ShardInstance(ShardId(id)))
+            let id_start = b"shard_".len();
+            let id_end = id_start + size_of::<u32>();
+
+            if let Some(id_slice) = bytes.get(id_start..id_end) {
+                if is_zero_padded(id_end) {
+                    let id = read_u32_le(id_slice);
+                    return Ok(Topic::ShardInstance(ShardId(id)));
+                }
+            }
+            Err("ShardInstance topic is malformed or contains trailing data")
         } else {
-            Err("Topic inconnu ou malformé")
+            Err("Topic unknown or malformed")
         }
     }
 }
