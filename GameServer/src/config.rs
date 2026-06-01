@@ -3,7 +3,7 @@ use shared::config::{
     DEFAULT_DS_IP, DEFAULT_FIRST_DS_PORT, DEFAULT_MAX_PLAYERS, DEFAULT_ORCHESTRATOR_HOST,
     DEFAULT_ORCHESTRATOR_PORT, DEFAULT_ZONE,
 };
-use shared::protocol::broker::{ShardId, Topic};
+use shared::protocol::{ShardId, Topic};
 use std::env;
 use std::net::SocketAddr;
 use anyhow::Context;

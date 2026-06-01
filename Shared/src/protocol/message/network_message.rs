@@ -1,61 +1,44 @@
-use serde::{Deserialize, Serialize};
-use crate::protocol::broker::config::CLIENT_INPUT_LEN;
-use crate::protocol::broker::topic::*;
-use crate::protocol::broker::utils::read_u32_le;
-use crate::protocol::{EntityId, NetVec2, Username};
+use crate::protocol::message::config::CLIENT_INPUT_LEN;
+use crate::protocol::public_types::topic::*;
+use crate::protocol::{ClientId, EntityId, NetVec2, Username};
 use crate::protocol::game::entity::EntityState;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default , Hash, Serialize, Deserialize)]
-pub struct ClientId(pub u32);
-
-impl From<ClientId> for u32 {
-    #[inline]
-    fn from(client_id: ClientId) -> Self {
-        client_id.0
-    }
-}
-
-pub const CLIENT_ID_LEN: usize = size_of::<ClientId>();
-
-
-
 
 
 #[derive(Debug, Clone)]
-pub enum BrokerMessage {
-    Subscribe { //from spatial to broker
+pub enum NetworkMessage {
+    Subscribe { //from spatial to utils
         client_id: ClientId,
         shard_id: ShardId,
     },
-    Unsubscribe { // from spatial to broker
+    Unsubscribe { // from spatial to utils
         client_id: ClientId,
         shard_id: ShardId,
     },
-    Publish { // from shard to broker
+    Publish { // from shard to utils
         shard_id: ShardId,
         payload_len: u16,
         payload: Vec<u8>,
     },
-    Broadcast { // from broker to client
+    Broadcast { // from utils to client
         payload_len: u16,
         payload: Vec<u8>,
     },
-    ClientInput { // from client to broker
+    ClientInput { // from client to utils
         client_id: ClientId,
         input: [u8; CLIENT_INPUT_LEN],
     },
-    RegisterShard {// from spatial to broker
+    RegisterShard {// from spatial to utils
         shard_id: ShardId,
     },
     RegisterClient {
         client_id: ClientId,
         username: Username,
     },
-    RegisterSpatialService,//from spatial to broker
+    RegisterSpatialService,//from spatial to utils
     ClientHello {
         username: Username,
     },
-    ClientAccepted { // from broker to client
+    ClientAccepted { // from utils to client
         client_id: ClientId,
     },
     PositionUpdate { //from shard to spatial

@@ -3,7 +3,7 @@
 /// keeping the `shared` crate free of any Bevy dependency.
 use bevy::prelude::*;
 use game_sockets::GameConnection;
-use shared::protocol::broker::{ClientId, ShardId};
+use shared::protocol::{ClientId, ShardId};
 
 /// Bevy message produced by `poll_shard_events` from an incoming PositionUpdate wire packet.
 ///
@@ -17,7 +17,7 @@ pub struct PositionUpdateMsg {
     pub client_id: ClientId,
     /// The direct QUIC connection of the shard that sent this update.
     /// `Some` when received via the shard listener (direct shard → SpatialService path).
-    /// `None` when relayed through the broker.
+    /// `None` when relayed through the utils.
     pub shard_connection: Option<GameConnection>,
     pub x: f64,
     pub y: f64,

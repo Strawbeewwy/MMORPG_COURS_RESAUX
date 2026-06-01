@@ -2,7 +2,7 @@
 use shared::game_sockets::{
     GameConnection, GameStream
 };
-use shared::protocol::broker::{ClientId, ShardId, Topic};
+use shared::protocol::{ClientId, ShardId, Topic};
 use std::collections::{
     HashMap, HashSet
 };

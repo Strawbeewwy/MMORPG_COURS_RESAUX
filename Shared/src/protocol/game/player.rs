@@ -1,7 +1,9 @@
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 use serde::{Deserialize, Serialize};
-use crate::protocol::{NetVec2, Username, ZoneId};
-use crate::protocol::broker::ClientId;
+use crate::protocol::{NetVec2, ZoneId, ClientId};
+
+pub type Username = Arc<str>;
 
 pub type PlayerId = u128;
 pub const PLAYER_DEFAULT_MOVE_SPEED: f32 = 5.0;
@@ -65,6 +67,13 @@ player info sent to the client and other players
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PlayerPublicInfo {
     pub username: Username,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlayerSpawnInfo {
+    pub username: Username,
+    pub zone: ZoneId,
+    pub spawn_position: NetVec2,
 }
 
 

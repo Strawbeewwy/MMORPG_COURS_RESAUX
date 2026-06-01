@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use shared::protocol::broker::{encode_message, BrokerMessage, ShardId};
+use shared::protocol::{encode_message, NetworkMessage, ShardId};
 use crate::messages::{CrossingAlertMsg, PositionUpdateMsg};
 use crate::resources::client_map::ClientMap;
 use crate::resources::config::SpatialConfig;
@@ -8,7 +8,7 @@ use crate::resources::net_handles::BrokerClient;
 use crate::resources::quad_tree::QuadTree;
 
 /// Consume PositionUpdateMsg messages, resolve the shard via the QuadTree,
-/// and send Subscribe / Unsubscribe to the broker when the shard changes.
+/// and send Subscribe / Unsubscribe to the utils when the shard changes.
 /// Emits CrossingAlertMsg (deduplicated via cooldown) when near a boundary.
 /// Clients in `PendingHandoff` state are skipped to avoid conflicting sub changes.
 pub fn handle_subscriptions(
@@ -42,7 +42,7 @@ pub fn handle_subscriptions(
         // Unsubscribe from the previous shard, subscribe to the new one.
         if new_shard != old_shard {
             if let Some(old) = old_shard {
-                let packet = match encode_message(&BrokerMessage::Unsubscribe {
+                let packet = match encode_message(&NetworkMessage::Unsubscribe {
                     client_id: update.client_id,
                     shard_id: old,
                 }) {
@@ -52,12 +52,12 @@ pub fn handle_subscriptions(
                         continue;
                     }
                 };
-                broker.send(packet);
+                broker.handle.send(packet);
                 tracing::debug!("client {} unsubscribed from shard:{}", update.client_id.0, old.0);
             }
 
             if let Some(new) = new_shard {
-                let packet = match encode_message(&BrokerMessage::Subscribe {
+                let packet = match encode_message(&NetworkMessage::Subscribe {
                     client_id: update.client_id,
                     shard_id: new,
                 }) {
@@ -67,7 +67,7 @@ pub fn handle_subscriptions(
                         continue;
                     }
                 };
-                broker.send(packet);
+                broker.handle.send(packet);
 
                 // Use the proper insert() method to maintain the connection_clients index
                 // so that remove_by_connection() correctly cleans up on shard disconnect.

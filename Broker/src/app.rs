@@ -22,7 +22,7 @@ impl BrokerApp {
     }
 
     pub async fn run(&mut self) -> anyhow::Result<()> {
-        tracing::info!("broker started");
+        tracing::info!("utils started");
 
         let mut ticker = tokio::time::interval(Duration::from_millis(self.config.tick_ms));
 

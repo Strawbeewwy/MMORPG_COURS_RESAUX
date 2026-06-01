@@ -1,6 +1,6 @@
 use crate::config::ServerConfig;
 use crate::net::network_event::SharedPlayerRegistry;
-use shared::protocol::broker::{ClientId, CLIENT_INPUT_LEN};
+use shared::protocol::{ClientId, CLIENT_INPUT_LEN};
 use shared::protocol::NetVec2;
 
 pub fn handle_broker_client_input(

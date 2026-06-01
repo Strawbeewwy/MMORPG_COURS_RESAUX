@@ -28,7 +28,7 @@ impl Plugin for SpatialPlugin {
                 Update,
                 (
                     poll_shard_events,           // decode PositionUpdate/ShardRegister/HandoffAck, clean ClientMap on disconnect
-                    poll_broker_connection,       // advance broker handshake state
+                    poll_broker_connection,       // advance utils handshake state
                     reconnect_broker_if_needed,   // retry on Disconnected state
                     handle_subscriptions,         // Subscribe/Unsubscribe + emit CrossingAlertMsg
                     handle_crossing_alerts,       // CrossingAlertMsg → HandoffRequestMsg

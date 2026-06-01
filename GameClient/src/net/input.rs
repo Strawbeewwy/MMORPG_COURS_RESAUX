@@ -2,8 +2,8 @@ use crate::net::broker_client::BrokerClient;
 use crate::world::state::LocalWorldState;
 use bevy::app::AppExit;
 use bevy::prelude::*;
-use shared::protocol::broker::{
-    CLIENT_INPUT_LEN, encode_message, BrokerMessage,
+use shared::protocol::{
+    CLIENT_INPUT_LEN, encode_message, NetworkMessage,
     ClientId,
 };
 
@@ -48,7 +48,7 @@ pub fn send_player_input(
 ) {
     let input = encode_movement_input(movement_x, movement_y);
 
-    let packet = match encode_message(&BrokerMessage::ClientInput {
+    let packet = match encode_message(&NetworkMessage::ClientInput {
         client_id,
         input,
     }) {

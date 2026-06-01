@@ -1,65 +1,65 @@
-use crate::protocol::broker::config::*;
-pub use crate::protocol::broker::broker_message::{
-    CLIENT_ID_LEN, ClientId, BrokerMessage,
+use crate::protocol::message::config::*;
+pub use crate::protocol::message::network_message::{
+    NetworkMessage,
 };
-pub use crate::protocol::broker::topic::{
+pub use crate::protocol::public_types::topic::{
     TOPIC_LEN, ShardId,Topic,
 };
 pub use crate::protocol::game::entity::{
     ENTITY_ID_LEN, EntityId,EntityType,EntityState,
     ENTITY_STATE_LEN,
 };
-use crate::protocol::{NetVec2, Username};
+use crate::protocol::{NetVec2, Username, ClientId,CLIENT_ID_LEN};
 
 
-pub fn encode_message(message: &BrokerMessage) -> anyhow::Result<Vec<u8>> {
+pub fn encode_message(message: &NetworkMessage) -> anyhow::Result<Vec<u8>> {
     match message {
-        BrokerMessage::Subscribe { client_id, shard_id } => {
+        NetworkMessage::Subscribe { client_id, shard_id } => {
             Ok(encode_subscribe(*client_id, Topic::ShardInstance(*shard_id)))
         }
-        BrokerMessage::Unsubscribe { client_id, shard_id } => {
+        NetworkMessage::Unsubscribe { client_id, shard_id } => {
             Ok(encode_unsubscribe(*client_id, Topic::ShardInstance(*shard_id)))
         }
-        BrokerMessage::Publish { shard_id,payload_len, payload } => {
+        NetworkMessage::Publish { shard_id,payload_len, payload } => {
             encode_publish(Topic::ShardInstance(*shard_id),*payload_len, payload)
         }
-        BrokerMessage::Broadcast { payload_len, payload } => {
+        NetworkMessage::Broadcast { payload_len, payload } => {
             encode_broadcast(*payload_len,payload)
         }
-        BrokerMessage::ClientInput { client_id, input } => {
+        NetworkMessage::ClientInput { client_id, input } => {
             Ok(encode_client_input(*client_id, *input))
         }
-        BrokerMessage::RegisterShard { shard_id } => {
+        NetworkMessage::RegisterShard { shard_id } => {
             Ok(encode_register_shard(Topic::ShardInstance(*shard_id)))
         }
-        BrokerMessage::RegisterSpatialService => {
+        NetworkMessage::RegisterSpatialService => {
             Ok(encode_register_spatial_service())
         }
-        BrokerMessage::ClientHello {username} => {
+        NetworkMessage::ClientHello {username} => {
             Ok(encode_client_hello(username.clone()))
         }
-        BrokerMessage::ClientAccepted { client_id } => {
+        NetworkMessage::ClientAccepted { client_id } => {
             Ok(encode_client_accepted(*client_id))
         },
-        BrokerMessage::PositionUpdate { client_id, position, } => {
+        NetworkMessage::PositionUpdate { client_id, position, } => {
             Ok(encode_position_update(*client_id, *position))
         },
-        BrokerMessage::HandoffRequest { entity_id, position, velocity, entity_state } => {
+        NetworkMessage::HandoffRequest { entity_id, position, velocity, entity_state } => {
             Ok(encode_handoff_request(*entity_id,*position,*velocity,*entity_state))
         }
-        BrokerMessage::HandoffAccepted {entity_id } => {
+        NetworkMessage::HandoffAccepted {entity_id } => {
             Ok(encode_handoff_accepted(*entity_id))
         }
-        BrokerMessage::HandoffRejected { entity_id } => {
+        NetworkMessage::HandoffRejected { entity_id } => {
             Ok(encode_handoff_rejected(*entity_id))
         }
-        BrokerMessage::GhostUpdate { entity_id,position,velocity } => {
+        NetworkMessage::GhostUpdate { entity_id,position,velocity } => {
             Ok(encode_ghost_update(*entity_id,*position,*velocity))
         }
-        BrokerMessage::HandoffCompleted {entity_id } => {
+        NetworkMessage::HandoffCompleted {entity_id } => {
             Ok(encode_handoff_completed(*entity_id))
         }
-        BrokerMessage::RegisterClient { client_id, username } => {
+        NetworkMessage::RegisterClient { client_id, username } => {
             Ok(encode_register_client(*client_id, username.clone()))
         }
     }

@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use game_sockets::{GameConnection, GameNetworkEvent, GameStreamReliability};
-use shared::protocol::broker::{decode_message, BrokerMessage};
+use shared::protocol::{decode_message, NetworkMessage};
 use crate::messages::PositionUpdateMsg;
 use crate::resources::client_map::ClientMap;
 use crate::resources::net_handles::{BrokerClient, BrokerConnectionState, ShardListener};
@@ -78,12 +78,12 @@ fn handle_shard_message(
 
     match message {
         // Shard identifies itself — register the shard_id ↔ connection mapping.
-        BrokerMessage::RegisterShard { shard_id } => {
-            listener.register_shard(connection, shard_id.0);
+        NetworkMessage::RegisterShard { shard_id } => {
+            listener.register_shard(connection, shard_id);
         }
 
         // Direct PositionUpdate from shard — propagate the source connection.
-        BrokerMessage::PositionUpdate { client_id, position } => {
+        NetworkMessage::PositionUpdate { client_id, position } => {
             ev_writer.write(PositionUpdateMsg {
                 client_id,
                 shard_connection: Some(connection),
@@ -94,7 +94,7 @@ fn handle_shard_message(
         }
 
         // Destination shard accepted the client — clear the pending handoff state.
-        BrokerMessage::HandoffCompleted { entity_id } => {
+        NetworkMessage::HandoffCompleted { entity_id } => {
             tracing::info!(
                 "HandoffAck received: client {}",
                 entity_id.0,
@@ -113,17 +113,17 @@ fn handle_shard_message(
     }
 }
 
-/// Poll the broker peer to advance handshake state and maintain the connection.
+/// Poll the utils peer to advance handshake state and maintain the connection.
 pub fn poll_broker_connection(
     mut broker: ResMut<BrokerClient>,
     mut ev_writer: MessageWriter<PositionUpdateMsg>,
 ) {
     loop {
-        match broker.peer.poll() {
+        match broker.handle.peer.poll() {
             Ok(Some(event)) => handle_broker_event(&mut broker, event, &mut ev_writer),
             Ok(None) => break,
             Err(e) => {
-                tracing::error!("broker client poll error: {e}");
+                tracing::error!("utils client poll error: {e}");
                 break;
             }
         }
@@ -138,32 +138,32 @@ fn handle_broker_event(
     use game_sockets::GameNetworkEvent::*;
     match event {
         Connected(conn) => {
-            tracing::info!("connected to broker: {}", conn.connection_id);
-            broker.connection = Some(conn);
-            broker.state = BrokerConnectionState::Connected;
-            if let Err(e) = broker.peer.create_stream(conn, GameStreamReliability::Reliable) {
-                tracing::error!("failed to create stream towards broker: {e}");
+            tracing::info!("connected to utils: {}", conn.connection_id);
+            broker.handle.connection = Some(conn);
+            broker.handle.state = BrokerConnectionState::Connected;
+            if let Err(e) = broker.handle.peer.create_stream(conn, GameStreamReliability::Reliable) {
+                tracing::error!("failed to create stream towards utils: {e}");
             }
         }
         Disconnected(_conn) => {
-            tracing::warn!("broker connection lost — will reconnect next tick");
-            broker.connection = None;
-            broker.stream = None;
-            broker.state = BrokerConnectionState::Disconnected;
+            tracing::warn!("utils connection lost — will reconnect next tick");
+            broker.handle.connection = None;
+            broker.handle.stream = None;
+            broker.handle.state = BrokerConnectionState::Disconnected;
         }
         StreamCreated(_conn, stream) => {
-            tracing::info!("broker stream ready");
-            broker.stream = Some(stream);
-            broker.state = BrokerConnectionState::Ready;
-            broker.reset_backoff();
+            tracing::info!("utils stream ready");
+            broker.handle.stream = Some(stream);
+            broker.handle.state = BrokerConnectionState::Ready;
+            broker.handle.reset_backoff();
         }
         StreamClosed(_conn, _stream) => {
-            broker.stream = None;
-            broker.state = BrokerConnectionState::Disconnected;
+            broker.handle.stream = None;
+            broker.handle.state = BrokerConnectionState::Disconnected;
         }
         Error { connection, inner } => {
-            tracing::warn!("broker error on {}: {inner}", connection.connection_id);
-            broker.state = BrokerConnectionState::Disconnected;
+            tracing::warn!("utils error on {}: {inner}", connection.connection_id);
+            broker.handle.state = BrokerConnectionState::Disconnected;
         }
         Message { connection, data, .. } => {
             handle_broker_message(connection, &data, ev_writer);
@@ -171,7 +171,7 @@ fn handle_broker_event(
     }
 }
 
-/// Handle a message received via the broker relay path.
+/// Handle a message received via the utils relay path.
 /// PositionUpdates here have no direct shard connection — shard_connection is None.
 pub fn handle_broker_message(
     connection: GameConnection,
@@ -181,16 +181,16 @@ pub fn handle_broker_message(
     let message = match decode_message(data) {
         Ok(msg) => msg,
         Err(e) => {
-            tracing::warn!("invalid broker message from connection {}: {e}", connection.connection_id);
+            tracing::warn!("invalid utils message from connection {}: {e}", connection.connection_id);
             return;
         }
     };
 
     match message {
-        BrokerMessage::PositionUpdate { client_id, position } => {
+        NetworkMessage::PositionUpdate { client_id, position } => {
             ev_writer.write(PositionUpdateMsg {
                 client_id,
-                // Relayed via broker — no direct shard connection available.
+                // Relayed via utils — no direct shard connection available.
                 shard_connection: None,
                 x: f64::from(position.x),
                 y: f64::from(position.y),

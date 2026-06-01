@@ -7,7 +7,7 @@ use crate::pubsub::state::PubSubState;
 use shared::game_sockets::{
     GameConnection, GamePeer, GameStream
 };
-use shared::protocol::broker::{BrokerMessage, decode_message, encode_message, Topic};
+use shared::protocol::{NetworkMessage, decode_message, encode_message, Topic};
 use std::collections::HashMap;
 
 pub fn handle_message(
@@ -23,7 +23,7 @@ pub fn handle_message(
         Ok(message) => message,
         Err(error) => {
             tracing::warn!(
-                "invalid broker message from connection {}: {error}",
+                "invalid utils message from connection {}: {error}",
                 connection.connection_id
             );
             return;
@@ -32,7 +32,7 @@ pub fn handle_message(
 
     match message {
 
-        BrokerMessage::ClientHello { username: _ } => {
+        NetworkMessage::ClientHello { username: _ } => {
             if !peer_roles.registered(connection, PeerRole::Client, "ClientHello") {
                 return;
             }
@@ -41,7 +41,7 @@ pub fn handle_message(
             let client_id = state.allocate_client_id();
             state.register_client_connection(client_id, connection);
 
-            let packet = match encode_message(&BrokerMessage::ClientAccepted {
+            let packet = match encode_message(&NetworkMessage::ClientAccepted {
                 client_id,
             }) {
                 Ok(packet) => packet,
@@ -75,7 +75,7 @@ pub fn handle_message(
                 );
         }
 
-        BrokerMessage::RegisterShard { shard_id } => {
+        NetworkMessage::RegisterShard { shard_id } => {
             if !peer_roles.registered(
                 connection,
                 PeerRole::Shard,
@@ -92,7 +92,7 @@ pub fn handle_message(
             );
         }
 
-        BrokerMessage::RegisterSpatialService => {
+        NetworkMessage::RegisterSpatialService => {
             if !peer_roles.registered(
                 connection,
                 PeerRole::SpatialService,
@@ -110,7 +110,7 @@ pub fn handle_message(
             );
         }
 
-        BrokerMessage::Subscribe { client_id, shard_id } => {
+        NetworkMessage::Subscribe { client_id, shard_id } => {
             if !peer_roles.ensure(connection, PeerRole::SpatialService, "Subscribe") {
                 return;
             }
@@ -118,7 +118,7 @@ pub fn handle_message(
             state.subscribe_registered_client(client_id, shard_id);
         }
 
-        BrokerMessage::Unsubscribe { client_id, shard_id } => {
+        NetworkMessage::Unsubscribe { client_id, shard_id } => {
             if !peer_roles.ensure(connection, PeerRole::SpatialService, "Unsubscribe") {
                 return;
             }
@@ -126,7 +126,7 @@ pub fn handle_message(
             state.unsubscribe_client(client_id, shard_id);
         }
 
-        BrokerMessage::Publish { shard_id, payload_len,payload } => {
+        NetworkMessage::Publish { shard_id, payload_len,payload } => {
             if !peer_roles.ensure(
                 connection,
                 PeerRole::Shard,
@@ -152,7 +152,7 @@ pub fn handle_message(
                 &payload);
         }
 
-        BrokerMessage::ClientInput { client_id, input } => {
+        NetworkMessage::ClientInput { client_id, input } => {
             if !peer_roles.ensure(
                 connection,
                 PeerRole::Client,
@@ -167,21 +167,21 @@ pub fn handle_message(
                 input);
         }
 
-        BrokerMessage::Broadcast { .. } => {
+        NetworkMessage::Broadcast { .. } => {
             tracing::warn!(
-                "broker received unexpected Broadcast message from connection {}",
+                "utils received unexpected Broadcast message from connection {}",
                 connection.connection_id
             );
         }
 
-        BrokerMessage::ClientAccepted { client_id } => {
+        NetworkMessage::ClientAccepted { client_id } => {
             tracing::warn!(
-                "broker received unexpected ClientAccepted from connection {} for client_id={}",
+                "utils received unexpected ClientAccepted from connection {} for client_id={}",
                 connection.connection_id,
                 client_id.0
             );
         },
-        BrokerMessage::PositionUpdate { client_id , position} => {
+        NetworkMessage::PositionUpdate { client_id , position} => {
 
             if !peer_roles.ensure(
                 connection,
@@ -197,11 +197,11 @@ pub fn handle_message(
                 position,
             );
         }
-        BrokerMessage::RegisterClient { .. } => {}
-        BrokerMessage::HandoffRequest { .. } => {}
-        BrokerMessage::HandoffAccepted { .. } => {}
-        BrokerMessage::HandoffRejected { .. } => {}
-        BrokerMessage::GhostUpdate { .. } => {}
-        BrokerMessage::HandoffCompleted { .. } => {}
+        NetworkMessage::RegisterClient { .. } => {}
+        NetworkMessage::HandoffRequest { .. } => {}
+        NetworkMessage::HandoffAccepted { .. } => {}
+        NetworkMessage::HandoffRejected { .. } => {}
+        NetworkMessage::GhostUpdate { .. } => {}
+        NetworkMessage::HandoffCompleted { .. } => {}
     }
 }

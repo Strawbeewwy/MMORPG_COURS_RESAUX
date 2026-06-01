@@ -1,14 +1,13 @@
 mod common;
-pub mod player_spawn;
 pub mod player;
 pub mod entity;
 
 pub use common::{
-    Username, NetVec2, WorldSnapshot, ZoneId,WorldUpdate,
+    WorldSnapshot, ZoneId,WorldUpdate,
 };
 
 pub use player::{
-    PlayerPublicInfo, PlayerSnapshot,Player,PlayerId
+    PlayerPublicInfo, PlayerSnapshot,Player,PlayerId, Username,PlayerSpawnInfo,
 };
 
 pub use entity::{
@@ -16,4 +15,3 @@ pub use entity::{
 };
 
 
-pub use player_spawn::PlayerSpawnInfo;

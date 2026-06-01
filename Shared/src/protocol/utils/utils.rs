@@ -1,6 +1,8 @@
-pub use crate::protocol::broker::broker_message::{
-    CLIENT_ID_LEN, ClientId, BrokerMessage,
+use crate::protocol::{ClientId, CLIENT_ID_LEN};
+pub use crate::protocol::message::network_message::{
+    NetworkMessage,
 };
+
 
 pub fn read_u16_le(bytes: &[u8]) -> u16 {
     u16::from_le_bytes([bytes[0], bytes[1]])

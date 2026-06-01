@@ -1,4 +1,4 @@
-use crate::protocol::broker::utils::read_u32_le;
+use crate::protocol::utils::utils::read_u32_le;
 
 pub const TOPIC_LEN: usize = 32;
 pub const SHARD_ID_LEN: usize = size_of::<u32>();

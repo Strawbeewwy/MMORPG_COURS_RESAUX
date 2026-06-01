@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use bevy::prelude::*;
-use shared::protocol::broker::{ShardId, Topic};
+use shared::protocol::{ShardId, Topic};
 use std::env;
 use std::sync::Arc;
 use shared::protocol::{Username, ZoneId};

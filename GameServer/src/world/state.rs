@@ -8,7 +8,7 @@ use crate::net::area_of_interest::{
 
 use bevy::platform::collections::HashMap;
 use uuid::Uuid;
-use shared::protocol::broker::ClientId;
+use shared::protocol::ClientId;
 use shared::protocol::game::EntityType;
 use shared::protocol::game::player::{
     Player, PlayerId, PLAYER_DEFAULT_MOVE_SPEED, PlayerSnapshot, PlayerPublicInfo,

@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use shared::protocol::broker::{encode_message, BrokerMessage};
+use shared::protocol::{encode_message, NetworkMessage};
 use crate::messages::HandoffRequestMsg;
 use crate::resources::client_map::{ClientMap, ClientTransferState};
 use crate::resources::net_handles::ShardListener;
@@ -42,7 +42,7 @@ pub fn handle_handoff_requests(
         //     }
         // };
 
-        if listener.send_to_shard(req.to_shard.0, payload) {
+        if listener.send_to_shard(req.to_shard, payload) {
             client_map.set_state(
                 req.client_id.into(),
                 ClientTransferState::PendingHandoff {

@@ -1,9 +1,9 @@
 use crate::pubsub::state::PubSubState;
 use bytes::Bytes;
 use shared::game_sockets::{GameConnection, GamePeer, GameStream};
-use shared::protocol::broker::{
+use shared::protocol::{
     CLIENT_INPUT_LEN, ClientId, Topic, encode_message,
-     BrokerMessage, };
+    NetworkMessage, };
 use std::collections::HashMap;
 use shared::protocol::NetVec2;
 
@@ -19,7 +19,7 @@ pub fn broadcast_to_subscribers(
         return;
     };
 
-    let packet = match encode_message(&BrokerMessage::Broadcast {
+    let packet = match encode_message(&NetworkMessage::Broadcast {
         payload_len: payload_len.clone(),
         payload: Vec::from(payload),
     }) {
@@ -72,7 +72,7 @@ pub fn relay_client_input_to_shard(
         return;
     };
 
-    let packet = match encode_message(&BrokerMessage::ClientInput {
+    let packet = match encode_message(&NetworkMessage::ClientInput {
         client_id,
         input,
     }) {
@@ -110,7 +110,7 @@ pub fn relay_position_update_to_spatial_services(
         return;
     }
 
-    let packet = match encode_message(&BrokerMessage::PositionUpdate {
+    let packet = match encode_message(&NetworkMessage::PositionUpdate {
         client_id,
         position,
     }) {

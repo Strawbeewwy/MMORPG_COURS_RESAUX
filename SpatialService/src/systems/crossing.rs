@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use shared::protocol::broker::ShardId;
+use shared::protocol::ShardId;
 use crate::messages::{CrossingAlertMsg, HandoffRequestMsg};
 use crate::resources::client_map::ClientMap;
 
@@ -7,7 +7,7 @@ use crate::resources::client_map::ClientMap;
 /// that is stable and near a shard boundary.
 ///
 /// Only one HandoffRequest is emitted per crossing event — for the first
-/// neighbouring shard that differs from the client's current shard.
+/// neighboring shard that differs from the client's current shard.
 /// Clients already in `PendingHandoff` state are skipped.
 pub fn handle_crossing_alerts(
     mut ev_reader: MessageReader<CrossingAlertMsg>,

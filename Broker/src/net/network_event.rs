@@ -19,7 +19,7 @@ impl BrokerNetwork {
 
         peer.listen("0.0.0.0", port)?;
 
-        tracing::info!("broker listening on 0.0.0.0:{port}");
+        tracing::info!("utils listening on 0.0.0.0:{port}");
 
         Ok(Self {
             peer,
@@ -34,7 +34,7 @@ impl BrokerNetwork {
                 Ok(Some(event)) => event,
                 Ok(None) => break,
                 Err(error) => {
-                    tracing::error!("failed to poll broker peer: {error}");
+                    tracing::error!("failed to poll utils peer: {error}");
                     break;
                 }
             };
@@ -50,7 +50,7 @@ impl BrokerNetwork {
     ) {
         match event {
             GameNetworkEvent::Connected(connection) => {
-                tracing::info!("peer connected to broker: {}", connection.connection_id);
+                tracing::info!("peer connected to utils: {}", connection.connection_id);
 
                 if let Err(error) = self
                     .peer
@@ -65,7 +65,7 @@ impl BrokerNetwork {
             }
 
             GameNetworkEvent::Disconnected(connection) => {
-                tracing::info!("peer disconnected from broker: {}", connection.connection_id);
+                tracing::info!("peer disconnected from utils: {}", connection.connection_id);
 
                 self.reliable_streams.remove(&connection);
                 self.peer_roles.remove(connection);
@@ -74,7 +74,7 @@ impl BrokerNetwork {
 
             GameNetworkEvent::StreamCreated(connection, stream) => {
                 tracing::info!(
-                    "broker stream created: connection={} stream={}",
+                    "utils stream created: connection={} stream={}",
                     connection.connection_id,
                     stream.stream_id
                 );
@@ -86,7 +86,7 @@ impl BrokerNetwork {
 
             GameNetworkEvent::StreamClosed(connection, stream) => {
                 tracing::info!(
-                    "broker stream closed: connection={} stream={}",
+                    "utils stream closed: connection={} stream={}",
                     connection.connection_id,
                     stream.stream_id
                 );
@@ -112,7 +112,7 @@ impl BrokerNetwork {
 
             GameNetworkEvent::Error { connection, inner } => {
                 tracing::warn!(
-                    "broker socket error on connection {}: {}",
+                    "utils socket error on connection {}: {}",
                     connection.connection_id,
                     inner
                 );
