@@ -1,10 +1,9 @@
 use std::hash::{Hash, Hasher};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use crate::protocol::{NetVec2, Username, ZoneId};
 use crate::protocol::broker::ClientId;
 
-pub type PlayerId = Uuid;
+pub type PlayerId = u128;
 pub const PLAYER_DEFAULT_MOVE_SPEED: f32 = 5.0;
 #[derive(Debug, Clone)]
 pub struct Player {

@@ -2,13 +2,14 @@ use anyhow::{Context, Result};
 use bevy::prelude::*;
 use shared::protocol::broker::{ShardId, Topic};
 use std::env;
-use shared::protocol::ZoneId;
+use std::sync::Arc;
+use shared::protocol::{Username, ZoneId};
 
 pub const DEFAULT_RECONNECT_INTERVAL: u64 = 5;
 
 #[derive(Resource, Debug, Clone)]
 pub struct ClientConfig {
-    pub username: String,
+    pub username: Username,
     pub broker_ip: String,
     pub broker_port: u16,
     pub zone: ZoneId,
@@ -17,9 +18,9 @@ pub struct ClientConfig {
 
 impl ClientConfig {
     pub fn from_env() -> Result<Self> {
-        let username = env::var("USERNAME")
-            .context("missing USERNAME env var")?;
-
+        let username: Username = Arc::from(env::var("USERNAME")
+            .context("missing USERNAME env var")?);
+    
         let broker_ip = env::var("BROKER_IP")
             .context("missing BROKER_IP env var")?;
 

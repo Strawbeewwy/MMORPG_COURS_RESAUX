@@ -1,11 +1,13 @@
+use std::sync::Arc;
 use crate::net::network_event::SharedPlayerRegistry;
 use bevy::prelude::*;
-use shared::protocol::{NetVec2, WorldSnapshot, ZoneId, PlayerSpawnInfo, EntityId};
+use shared::protocol::{NetVec2, WorldSnapshot, ZoneId, PlayerSpawnInfo, EntityId, Username};
 use crate::net::area_of_interest::{
     is_inside_area_of_interest, DEFAULT_AREA_OF_INTEREST_RADIUS,
 };
 
 use bevy::platform::collections::HashMap;
+use uuid::Uuid;
 use shared::protocol::broker::ClientId;
 use shared::protocol::game::EntityType;
 use shared::protocol::game::player::{
@@ -50,6 +52,12 @@ impl PlayerRegistry {
 
     }
 
+
+    pub fn register_client(&mut self,client_id: ClientId, player_id: PlayerId) {
+
+        self.client_player.insert(client_id, player_id);
+    }
+
     pub fn register_player(&mut self, player: Player, client_id: ClientId) {
         self.player_client.insert(player.player_id, client_id);
     }
@@ -59,8 +67,8 @@ impl PlayerRegistry {
     }
 
 
-    pub fn remove_client(&mut self, player_id: &PlayerId) {
-        self.players.remove(player_id);
+    pub fn remove_client(&mut self, client_id: &ClientId) {
+        self.client_player.remove(client_id);
     }
 
     pub fn snapshot(&self, zone: ZoneId) -> WorldSnapshot {
@@ -160,5 +168,25 @@ pub fn handle_add_client_to_shard(
         velocity: NetVec2::ZERO,
         movement_speed: PLAYER_DEFAULT_MOVE_SPEED,
     };
+
+}
+
+pub fn handle_register_client(
+    config: &ServerConfig,
+    registry: &SharedPlayerRegistry,
+    client_id: ClientId,
+    username: Username,
+){
+    let Ok(mut registry) = registry.inner.try_lock() else {
+        tracing::warn!("could not lock player registry for shard world snapshot publish");
+        return;
+    };
+    let player = Player::new(
+        Uuid::new_v4().as_u128(),
+        username,
+        config.zone.clone(),
+    );
+
+    registry.register_client(client_id,player.player_id);
 
 }

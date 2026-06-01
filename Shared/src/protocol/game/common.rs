@@ -7,8 +7,6 @@ use crate::protocol::{PlayerPublicInfo, PlayerSnapshot};
 /// heap allocations when the same zone name is cloned across many network messages.
 /// Serde serialises/deserialises `Arc<str>` as a plain JSON string transparently.
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
-pub struct EntityId(pub u32);
 pub type ZoneId = Arc<str>;
 pub type Username = Arc<str>;
 
@@ -37,7 +35,7 @@ pub enum WorldUpdate {
 2D vector sent on the network, not used for math
 just for values
 **/
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq,Eq, Hash)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq,Eq)]
 pub struct NetVec2 {
     pub x: i32,
     pub y: i32,
@@ -85,15 +83,7 @@ impl TryFrom <[u8; 10]> for NetVec2{
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum EntityType {
-    Player,
-    Enemy,
-    Npc,
-    Item,
-    Projectile,
-    Effect,
-}
+
 
 
 /**

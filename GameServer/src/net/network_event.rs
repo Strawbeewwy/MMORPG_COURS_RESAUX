@@ -1,8 +1,6 @@
 use crate::config::ServerConfig;
 use crate::net::input::handle_broker_client_input;
-use crate::world::state::{
-    PlayerRegistry, handle_add_client_to_shard,
-};
+use crate::world::state::{PlayerRegistry, handle_add_client_to_shard, handle_register_client};
 use bevy::prelude::*;
 use bytes::Bytes;
 use shared::game_sockets::protocols::QuicBackend;
@@ -212,6 +210,9 @@ fn handle_broker_message(
 
         BrokerMessage::ClientInput { client_id, input } => {
             handle_broker_client_input(config, registry, client_id, input);
+        }
+        BrokerMessage::RegisterClient {client_id, username} => {
+            handle_register_client(config, registry,client_id, username.clone());
         }
 
         other => {

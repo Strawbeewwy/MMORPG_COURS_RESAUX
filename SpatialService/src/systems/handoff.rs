@@ -25,20 +25,22 @@ pub fn handle_handoff_requests(
             continue;
         }
 
-        let payload = match encode_message(&BrokerMessage::HandoffRequest {
-            client_id: req.client_id,
-            from_shard: req.from_shard,
-            to_shard: req.to_shard,
-        }) {
-            Ok(p) => p,
-            Err(e) => {
-                tracing::error!(
-                    "failed to encode HandoffRequest for client {}: {e}",
-                    req.client_id.0
-                );
-                continue;
-            }
-        };
+        let payload =  Vec::default();
+        //TODO Fix this request
+        //     = match encode_message(&BrokerMessage::HandoffRequest {
+        //     client_id: req.client_id,
+        //     from_shard: req.from_shard,
+        //     to_shard: req.to_shard,
+        // }) {
+        //     Ok(p) => p,
+        //     Err(e) => {
+        //         tracing::error!(
+        //             "failed to encode HandoffRequest for client {}: {e}",
+        //             req.client_id.0
+        //         );
+        //         continue;
+        //     }
+        // };
 
         if listener.send_to_shard(req.to_shard.0, payload) {
             client_map.set_state(

@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use crate::protocol::broker::config::CLIENT_INPUT_LEN;
 use crate::protocol::broker::topic::*;
 use crate::protocol::broker::utils::read_u32_le;
+use crate::protocol::{EntityId, NetVec2, Username};
+use crate::protocol::game::entity::EntityState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default , Hash, Serialize, Deserialize)]
 pub struct ClientId(pub u32);
@@ -15,14 +17,7 @@ impl From<ClientId> for u32 {
 
 pub const CLIENT_ID_LEN: usize = size_of::<ClientId>();
 
-pub fn read_client_id(bytes: &[u8]) -> ClientId {
 
-    let mut client_id_bytes = [0_u8; CLIENT_ID_LEN];
-
-    client_id_bytes[..bytes.len()].copy_from_slice(bytes);
-
-    ClientId(read_u32_le(&client_id_bytes))
-}
 
 
 
@@ -52,31 +47,39 @@ pub enum BrokerMessage {
     RegisterShard {// from spatial to broker
         shard_id: ShardId,
     },
+    RegisterClient {
+        client_id: ClientId,
+        username: Username,
+    },
     RegisterSpatialService,//from spatial to broker
-    ClientHello{ // from client to broker
-        username: String,
+    ClientHello {
+        username: Username,
     },
     ClientAccepted { // from broker to client
         client_id: ClientId,
     },
     PositionUpdate { //from shard to spatial
         client_id: ClientId,
-        position: [f32; 2],
+        position: NetVec2,
     },
-    /// Sent by a shard to the SpatialService immediately after connecting.
-    /// Registers shard_id ↔ GameConnection so HandoffRequest can be routed back.
-    ShardRegister {
-        shard_id: ShardId,
+    HandoffRequest {//
+        entity_id: EntityId,
+        position: NetVec2,
+        velocity: NetVec2,
+        entity_state: EntityState
     },
-    /// Sent by the SpatialService to the destination shard to initiate a handoff.
-    HandoffRequest {
-        client_id: ClientId,
-        from_shard: ShardId,
-        to_shard: ShardId,
+    HandoffAccepted {
+        entity_id: EntityId,
     },
-    /// Sent by the destination shard back to the SpatialService to confirm acceptance.
-    HandoffAck {
-        client_id: ClientId,
-        to_shard: ShardId,
+    HandoffRejected {
+        entity_id: EntityId,
+    },
+    GhostUpdate {
+        entity_id: EntityId,
+        position: NetVec2,
+        velocity: NetVec2,
+    },
+    HandoffCompleted {
+        entity_id: EntityId,
     },
 }

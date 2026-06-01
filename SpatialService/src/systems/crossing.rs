@@ -38,19 +38,19 @@ pub fn handle_crossing_alerts(
         let Some(&to_shard) = alert
             .iter_shards()
             .iter()
-            .find(|s| s.0 != current_shard)
+            .find(|s| s.0 != current_shard.0)
         else {
             continue;
         };
 
         tracing::info!(
             "CrossingAlert: client {} crossing from shard {} → shard {}",
-            client_id.0, current_shard, to_shard.0
+            client_id.0, current_shard.0, to_shard.0
         );
 
         ev_handoff.write(HandoffRequestMsg {
             client_id,
-            from_shard: ShardId(current_shard),
+            from_shard: ShardId(current_shard.0),
             to_shard,
         });
     }
