@@ -189,7 +189,7 @@ cargo xtask run
 | Action | Résultat attendu |
 |---|---|
 | Démarrage | HUD affiche `Disconnected` puis `Connected` |
-| Déplacement WASD | `Position` et `Shard` dans le HUD se mettent à jour |
+| Déplacement (flèches ou WASD) | `Position` et `Shard` dans le HUD se mettent à jour |
 | Client B visible par A | `Entities: 1` apparaît dans le HUD du client A |
 | Traverser `x ≈ 2048` ou `y ≈ 2048` | `Shard` passe de `shard_0` → `shard_1` (ou autre) |
 | Logs SpatialService sur traversée | `crossing alert`, `handoff request`, `handoff ack` |
@@ -408,7 +408,7 @@ cargo xtask run
 | Action | Expected result |
 |---|---|
 | Startup | HUD shows `Disconnected` then `Connected` |
-| WASD movement | `Position` and `Shard` in the HUD update in real time |
+| Arrow keys / WASD movement | `Position` and `Shard` in the HUD update in real time |
 | Client B visible from A | `Entities: 1` appears in client A's HUD |
 | Cross `x ≈ 2048` or `y ≈ 2048` | `Shard` changes from `shard_0` → `shard_1` (or equivalent) |
 | SpatialService logs on crossing | `crossing alert`, `handoff request`, `handoff ack` |

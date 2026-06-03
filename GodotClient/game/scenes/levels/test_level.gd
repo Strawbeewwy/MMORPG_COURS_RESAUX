@@ -25,4 +25,3 @@ func _draw_checkerboard() -> void:
 
 func _draw_world_border() -> void:
 	draw_rect(Rect2(Vector2.ZERO, world_size), Color(1.0, 0.4, 0.1), false, 3.0)
-

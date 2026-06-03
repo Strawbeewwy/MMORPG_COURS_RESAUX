@@ -32,8 +32,8 @@ func _draw() -> void:
 
 func _physics_process(_delta: float) -> void:
 	var dir := Vector2(
-		Input.get_axis("move_left",  "move_right"),
-		Input.get_axis("move_up",    "move_down")
+		Input.get_axis("ui_left",  "ui_right"),
+		Input.get_axis("ui_up",    "ui_down")
 	).normalized()
 
 	velocity = dir * SPEED
