@@ -18,7 +18,7 @@ impl PeerRoles {
         self.roles.remove(&connection);
     }
 
-    pub fn registered(
+    pub fn register_role(
         &mut self,
         connection: GameConnection,
         role: PeerRole,

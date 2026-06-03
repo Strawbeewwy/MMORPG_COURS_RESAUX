@@ -3,10 +3,11 @@ use crate::net::heartbeat::{
     bind_heartbeat_socket, send_heartbeat
 };
 use crate::net::network_event::{
-    SharedPlayerRegistry, connect_to_broker, poll_broker_events, publish_world_snapshots,
-};
+    SharedPlayerRegistry, connect_to_broker,
+    poll_broker_events, publish_world_update,
+    publish_player_position_updates};
 use crate::world::state::{
-    PlayerRegistry, update_players_registry
+    EntityRegistry, update_players_registry
 };
 use bevy::app::ScheduleRunnerPlugin;
 use bevy::prelude::*;
@@ -36,7 +37,7 @@ pub fn run() {
         )))
         .insert_resource(config)
         .insert_resource(SharedPlayerRegistry {
-            inner: Arc::new(Mutex::new(PlayerRegistry::default())),
+            inner: Arc::new(Mutex::new(EntityRegistry::default())),
         })
         .add_systems(
             Startup,
@@ -50,7 +51,8 @@ pub fn run() {
             (
                 poll_broker_events,
                 update_players_registry,
-                publish_world_snapshots,
+                publish_player_position_updates,
+                publish_world_update,
                 send_heartbeat,
             )
                 .chain(),

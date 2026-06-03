@@ -27,7 +27,7 @@ pub enum NetworkMessage {
         client_id: ClientId,
         input: [u8; CLIENT_INPUT_LEN],
     },
-    RegisterShard {// from shard to broker
+    RegisterShard {// from spatial to broker
         shard_id: ShardId,
     },
     RegisterClient {// from broker to shard
