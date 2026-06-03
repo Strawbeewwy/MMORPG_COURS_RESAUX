@@ -28,19 +28,19 @@ fn main() {
         "setup" => setup(&workspace_root),
         "editor" => {
             build_gdextension(&workspace_root, false);
-            copy_lib(&workspace_root);
+            copy_lib(&workspace_root, false);
             write_gdextension_file(&workspace_root);
             open_editor(&workspace_root);
         }
         "run" => {
             build_gdextension(&workspace_root, false);
-            copy_lib(&workspace_root);
+            copy_lib(&workspace_root, false);
             write_gdextension_file(&workspace_root);
             run_game(&workspace_root);
         }
         "package" => {
             build_gdextension(&workspace_root, true);
-            copy_lib(&workspace_root);
+            copy_lib(&workspace_root, true);
             write_gdextension_file(&workspace_root);
             export_game(&workspace_root);
         }
@@ -164,14 +164,23 @@ fn build_gdextension(root: &Path, release: bool) {
     run_cmd(&mut cmd);
 }
 
-fn copy_lib(root: &Path) {
+fn copy_lib(root: &Path, release: bool) {
     let lib = lib_name();
-    let profile_dir = if cfg!(debug_assertions) { "debug" } else { "release" };
-    let src = root.join("rust").join("target").join(profile_dir).join(&lib);
+    let profile_dir = if release { "release" } else { "debug" };
+    // The workspace root is GodotClient/ so Cargo writes output to
+    // GodotClient/target/, NOT GodotClient/rust/target/.
+    let src = root.join("target").join(profile_dir).join(&lib);
     let dst = root.join("game").join("bin").join(&lib);
     fs::create_dir_all(root.join("game").join("bin")).ok();
+    if !src.exists() {
+        panic!(
+            "copy {lib}: compiled artifact not found at {}\n\
+             Make sure `cargo build --package mmo_client` succeeded.",
+            src.display()
+        );
+    }
     fs::copy(&src, &dst).unwrap_or_else(|e| panic!("copy {lib}: {e}"));
-    println!("📋  Copied {lib} → game/bin/");
+    println!("📋  Copied {lib} ({profile_dir}) → game/bin/");
 }
 
 fn write_gdextension_file(root: &Path) {

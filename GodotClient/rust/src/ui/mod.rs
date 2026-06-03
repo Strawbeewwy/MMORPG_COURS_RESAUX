@@ -2,44 +2,18 @@
 //!
 //! `ConnectionStatusLabel` updates a Godot Label to show the current
 //! network connection status (Connecting / Connected / Disconnected).
+use godot::classes::{INode2D, Node2D};
 use godot::prelude::*;
 
-/// Attach this script to a `Label` node in your HUD scene.
-/// It polls the NetworkClient autoload and updates its text each frame.
-#[derive(GodotClass)]
-#[class(base=Label)]
-pub struct ConnectionStatusLabel {
-    base: Base<Label>,
-}
+// ─── ConnectionStatusLabel ────────────────────────────────────────────────────
+// Note: this is a plain Rust struct — status updates are driven from GDScript
+// debug_hud.gd which has direct access to the Label node.
+// The Rust side exposes no Godot class for this — it is pure GDScript.
 
-#[godot_api]
-impl ILabel for ConnectionStatusLabel {
-    fn init(base: Base<Label>) -> Self {
-        Self { base }
-    }
+// ─── ShardBoundaryDebug ───────────────────────────────────────────────────────
 
-    fn ready(&mut self) {
-        self.base_mut().set_text("Connecting…".into());
-    }
-}
-
-#[godot_api]
-impl ConnectionStatusLabel {
-    /// Call this from the NetworkClient `connected` signal (add it later).
-    #[func]
-    fn on_connected(&mut self) {
-        self.base_mut().set_text("Connected".into());
-    }
-
-    /// Call this from the NetworkClient `disconnected` signal.
-    #[func]
-    fn on_disconnected(&mut self) {
-        self.base_mut().set_text("Disconnected — reconnecting…".into());
-    }
-}
-
-/// Debug overlay — draws shard boundaries in the editor and at runtime.
-/// Attach this `@tool`-equivalent Rust node to visualise the QuadTree grid.
+/// Godot Node2D that draws the QuadTree shard grid.
+/// Works as a @tool node — visible directly in the Godot editor.
 #[derive(GodotClass)]
 #[class(tool, base=Node2D)]
 pub struct ShardBoundaryDebug {
@@ -76,9 +50,8 @@ impl INode2D for ShardBoundaryDebug {
             for y in 0..rows {
                 let origin = Vector2::new(x as f32 * size.x, y as f32 * size.y);
                 let rect = Rect2::new(origin, size);
-                self.base_mut().draw_rect(rect, color, false, 2.0);
+                self.base_mut().draw_rect(rect, color);
             }
         }
     }
 }
-

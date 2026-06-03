@@ -25,9 +25,9 @@ pub type Outbox = Arc<Mutex<Vec<Vec<u8>>>>;
 /// Extend as new server messages are handled.
 #[derive(Debug, Clone)]
 pub enum IncomingEvent {
-    PositionUpdate { client_id: u64, x: f32, y: f32 },
-    PlayerJoined { client_id: u64 },
-    PlayerLeft { client_id: u64 },
+    PositionUpdate { client_id: i64, x: f32, y: f32 },
+    PlayerJoined { client_id: i64 },
+    PlayerLeft { client_id: i64 },
 }
 
 // ─── NetworkClient Node ───────────────────────────────────────────────────────
@@ -41,7 +41,7 @@ pub struct NetworkClient {
     inbox: Inbox,
     outbox: Outbox,
     /// Authenticated client id — 0 until login completes.
-    my_client_id: u64,
+    my_client_id: i64,
     /// Server address read from Godot project settings or defaulting to localhost.
     server_addr: String,
 }
@@ -121,21 +121,21 @@ impl NetworkClient {
 
     /// Emitted every time a position update is received for any client.
     #[signal]
-    fn position_received(client_id: u64, x: f32, y: f32);
+    fn position_received(client_id: i64, x: f32, y: f32);
 
     /// Emitted when a new player enters the area of interest.
     #[signal]
-    fn player_joined(client_id: u64);
+    fn player_joined(client_id: i64);
 
     /// Emitted when a player leaves the area of interest or disconnects.
     #[signal]
-    fn player_left(client_id: u64);
+    fn player_left(client_id: i64);
 
     // ── Functions callable from GDScript ─────────────────────────────────────
 
     /// Set the authenticated client id after login.
     #[func]
-    fn set_client_id(&mut self, id: u64) {
+    fn set_client_id(&mut self, id: i64) {
         self.my_client_id = id;
         tracing::info!("NetworkClient: local client_id set to {id}");
     }
@@ -221,19 +221,19 @@ fn decode_and_push(data: &[u8], inbox: &Inbox) {
         cursor += 1;
         let event = match tag {
             0x02 if data.len() >= cursor + 16 => {
-                let client_id = u64::from_le_bytes(data[cursor..cursor + 8].try_into().unwrap());
+                let client_id = i64::from_le_bytes(data[cursor..cursor + 8].try_into().unwrap());
                 let x = f32::from_le_bytes(data[cursor + 8..cursor + 12].try_into().unwrap());
                 let y = f32::from_le_bytes(data[cursor + 12..cursor + 16].try_into().unwrap());
                 cursor += 16;
                 Some(IncomingEvent::PositionUpdate { client_id, x, y })
             }
             0x03 if data.len() >= cursor + 8 => {
-                let client_id = u64::from_le_bytes(data[cursor..cursor + 8].try_into().unwrap());
+                let client_id = i64::from_le_bytes(data[cursor..cursor + 8].try_into().unwrap());
                 cursor += 8;
                 Some(IncomingEvent::PlayerJoined { client_id })
             }
             0x04 if data.len() >= cursor + 8 => {
-                let client_id = u64::from_le_bytes(data[cursor..cursor + 8].try_into().unwrap());
+                let client_id = i64::from_le_bytes(data[cursor..cursor + 8].try_into().unwrap());
                 cursor += 8;
                 Some(IncomingEvent::PlayerLeft { client_id })
             }

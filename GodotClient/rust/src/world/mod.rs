@@ -3,6 +3,7 @@
 //! `EntityRegistry` is a Godot `Node2D` subclass that:
 //!   - spawns/despawns `RemotePlayer` nodes based on `player_joined` / `player_left` signals
 //!   - smoothly interpolates remote positions each frame using `lerp`
+use godot::classes::INode2D;
 use godot::prelude::*;
 use std::collections::HashMap;
 
@@ -20,7 +21,7 @@ struct RemoteState {
 pub struct EntityRegistry {
     base: Base<Node2D>,
     /// Map from server client_id → (scene node, interpolation state)
-    entities: HashMap<u64, (Gd<Node2D>, RemoteState)>,
+    entities: HashMap<i64, (Gd<Node2D>, RemoteState)>,
     /// Interpolation speed factor (0 = no lerp, 1 = instant snap).
     #[var]
     lerp_speed: f32,
@@ -53,7 +54,7 @@ impl INode2D for EntityRegistry {
 impl EntityRegistry {
     /// Called by NetworkClient's `position_received` signal.
     #[func]
-    fn on_position_received(&mut self, client_id: u64, x: f32, y: f32) {
+    fn on_position_received(&mut self, client_id: i64, x: f32, y: f32) {
         let target = Vector2::new(x, y);
         if let Some((_, state)) = self.entities.get_mut(&client_id) {
             state.target = target;
@@ -62,19 +63,16 @@ impl EntityRegistry {
 
     /// Called by NetworkClient's `player_joined` signal.
     #[func]
-    fn on_player_joined(&mut self, client_id: u64) {
+    fn on_player_joined(&mut self, client_id: i64) {
         if self.entities.contains_key(&client_id) {
             return;
         }
         let node: Gd<Node2D> = match &self.remote_player_scene {
             Some(scene) => scene.instantiate_as::<Node2D>(),
-            None => {
-                // Fallback: plain Node2D marker
-                Gd::<Node2D>::default()
-            }
+            None => Node2D::new_alloc(),
         };
         let start = Vector2::ZERO;
-        self.base_mut().add_child(node.clone().upcast());
+        self.base_mut().add_child(&node.clone().upcast::<Node>());
         self.entities.insert(
             client_id,
             (node, RemoteState { target: start, current: start }),
@@ -84,11 +82,10 @@ impl EntityRegistry {
 
     /// Called by NetworkClient's `player_left` signal.
     #[func]
-    fn on_player_left(&mut self, client_id: u64) {
+    fn on_player_left(&mut self, client_id: i64) {
         if let Some((mut node, _)) = self.entities.remove(&client_id) {
             node.queue_free();
             tracing::debug!("EntityRegistry: removed entity for client {client_id}");
         }
     }
 }
-
