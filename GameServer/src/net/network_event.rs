@@ -182,7 +182,8 @@ fn register_shard_with_broker(
             }
         };
 
-        if !send_raw_to_broker(broker, packet, "RegisterShard") {
+        if let Err(error) = broker.handle.send(packet) {
+            tracing::error!("failed to send packet to broker: {error:#}");
             return;
         }
     }
@@ -274,32 +275,9 @@ fn publish_world_update(
             }
         };
 
-        if !send_raw_to_broker(broker, packet, "Publish") {
+        if let Err(error) = broker.handle.send(packet) {
+            tracing::error!("failed to send packet to broker: {error:#}");
             return;
-        }
-    }
-}
-
-fn send_raw_to_broker(
-    broker: &BrokerShardPeer,
-    packet: Vec<u8>,
-    label: &str,
-) -> bool {
-    let Some(connection) = broker.handle.connection else {
-        tracing::warn!("cannot send {label}: shard is not connected to utils");
-        return false;
-    };
-
-    let Some(stream) = broker.handle.stream.as_ref() else {
-        tracing::warn!("cannot send {label}: shard reliable stream is not ready");
-        return false;
-    };
-
-    match broker.handle.peer.send(&connection, stream, Bytes::from(packet)) {
-        Ok(()) => true,
-        Err(error) => {
-            tracing::error!("failed to send {label} to utils: {}", error);
-            false
         }
     }
 }

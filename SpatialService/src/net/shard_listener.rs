@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use game_sockets::protocols::QuicBackend;
 use game_sockets::GamePeer;
 use std::collections::HashMap;
+use shared::protocol::net_handles::shard_handle::ShardHandle;
 use crate::resources::config::SpatialConfig;
 use crate::resources::net_handles::ShardListener;
 
@@ -18,11 +19,15 @@ pub fn bind_shard_listener(mut commands: Commands, config: Res<SpatialConfig>) {
         config.listen_port
     );
 
-    commands.insert_resource(ShardListener {
+    let handle = ShardHandle{
         peer,
         streams: HashMap::new(),
         connection_by_shard_id: HashMap::new(),
         shard_id_by_connection: HashMap::new(),
+    };
+
+    commands.insert_resource(ShardListener {
+        handle,
     });
 }
 

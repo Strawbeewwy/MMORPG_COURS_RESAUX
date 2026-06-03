@@ -52,7 +52,10 @@ pub fn handle_subscriptions(
                         continue;
                     }
                 };
-                broker.handle.send(packet);
+                if let Err(error) = broker.handle.send(packet) {
+                    tracing::error!("failed to send packet to broker: {error:#}");
+                    return;
+                }
                 tracing::debug!("client {} unsubscribed from shard:{}", update.client_id.0, old.0);
             }
 
@@ -67,7 +70,11 @@ pub fn handle_subscriptions(
                         continue;
                     }
                 };
-                broker.handle.send(packet);
+
+                if let Err(error) = broker.handle.send(packet) {
+                    tracing::error!("failed to send packet to broker: {error:#}");
+                    return;
+                }
 
                 // Use the proper insert() method to maintain the connection_clients index
                 // so that remove_by_connection() correctly cleans up on shard disconnect.

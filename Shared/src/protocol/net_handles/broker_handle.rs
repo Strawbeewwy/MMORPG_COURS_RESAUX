@@ -15,8 +15,6 @@ pub enum BrokerConnectionState {
 }
 
 
-
-
 /// Outbound QUIC connection to the utils.
 /// Used to send Subscribe / Unsubscribe messages.
 pub struct BrokerHandle {
@@ -67,14 +65,14 @@ impl BrokerHandle {
     }
 
     /// Send raw bytes over the reliable utils stream if ready.
-    pub fn send(&self, payload: Vec<u8>) {
+    pub fn send(&self, payload: Vec<u8>) ->anyhow::Result<()> {
         let (Some(conn), Some(stream)) = (self.connection.as_ref(), self.stream.as_ref()) else {
-            //tracing::warn!("BrokerClient not ready (state={:?}) — dropping message", self.state);
-            return;
+            anyhow::bail!("cannot send packet: broker connection or stream is not ready");
         };
         if let Err(e) = self.peer.send(conn, stream, payload.into()) {
-            //tracing::error!("failed to send to utils: {e}");
+            anyhow::bail!("failed to send packet to broker: {}", e);
         }
+        Ok(())
     }
 
     /// Reset state for a reconnect attempt (does not touch backoff counters).

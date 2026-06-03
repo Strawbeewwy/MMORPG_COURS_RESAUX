@@ -6,63 +6,68 @@ use crate::protocol::game::entity::EntityState;
 
 #[derive(Debug, Clone)]
 pub enum NetworkMessage {
-    Subscribe { //from spatial to utils
+    Subscribe { //from spatial to broker
         client_id: ClientId,
         shard_id: ShardId,
     },
-    Unsubscribe { // from spatial to utils
+    Unsubscribe { // from spatial to broker
         client_id: ClientId,
         shard_id: ShardId,
     },
-    Publish { // from shard to utils
+    Publish { // from shard to broker
         shard_id: ShardId,
         payload_len: u16,
         payload: Vec<u8>,
     },
-    Broadcast { // from utils to client
+    Broadcast { // from broker to client
         payload_len: u16,
         payload: Vec<u8>,
     },
-    ClientInput { // from client to utils
+    ClientInput { // from client to broker
         client_id: ClientId,
         input: [u8; CLIENT_INPUT_LEN],
     },
-    RegisterShard {// from spatial to utils
+    RegisterShard {// from shard to broker
         shard_id: ShardId,
     },
-    RegisterClient {
+    RegisterClient {// from broker to shard
         client_id: ClientId,
         username: Username,
     },
-    RegisterSpatialService,//from spatial to utils
-    ClientHello {
+    RegisterSpatialService,//from spatial to broker
+    ClientHello {// from client to broker
         username: Username,
     },
-    ClientAccepted { // from utils to client
+    ClientAccepted { // from broker to client
         client_id: ClientId,
     },
-    PositionUpdate { //from shard to spatial
+    PositionUpdate { //from shard to broker then to spatial
         client_id: ClientId,
         position: NetVec2,
     },
-    HandoffRequest {//
+    HandoffRequest {//from spatial to broker then to shard
         entity_id: EntityId,
+        from_shard_id: ShardId,
+        to_shard_id: ShardId,
         position: NetVec2,
         velocity: NetVec2,
         entity_state: EntityState
     },
-    HandoffAccepted {
+    HandoffAccepted {//from shard to broker then to spatial
         entity_id: EntityId,
+        accepting_shard_id: ShardId,
     },
-    HandoffRejected {
+    HandoffRejected { // from shard to broker then to spatial
         entity_id: EntityId,
+        rejecting_shard_id: ShardId,
     },
-    GhostUpdate {
+    GhostUpdate { // from shard to broker to another shard
         entity_id: EntityId,
+        to_shard_id: ShardId,
         position: NetVec2,
         velocity: NetVec2,
     },
-    HandoffCompleted {
+    HandoffCompleted {// from spatial to broker then to shard
         entity_id: EntityId,
     },
 }

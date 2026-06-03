@@ -10,7 +10,7 @@ pub use crate::protocol::game::entity::{
     ENTITY_STATE_LEN,
 };
 use crate::protocol::{NetVec2, Username, ClientId,CLIENT_ID_LEN};
-
+use crate::protocol::public_types::topic::SHARD_ID_LEN;
 
 pub fn encode_message(message: &NetworkMessage) -> anyhow::Result<Vec<u8>> {
     match message {
@@ -44,17 +44,17 @@ pub fn encode_message(message: &NetworkMessage) -> anyhow::Result<Vec<u8>> {
         NetworkMessage::PositionUpdate { client_id, position, } => {
             Ok(encode_position_update(*client_id, *position))
         },
-        NetworkMessage::HandoffRequest { entity_id, position, velocity, entity_state } => {
-            Ok(encode_handoff_request(*entity_id,*position,*velocity,*entity_state))
+        NetworkMessage::HandoffRequest { entity_id,from_shard_id,to_shard_id, position, velocity, entity_state } => {
+            Ok(encode_handoff_request(*entity_id,*from_shard_id,*to_shard_id,*position,*velocity,*entity_state))
         }
-        NetworkMessage::HandoffAccepted {entity_id } => {
-            Ok(encode_handoff_accepted(*entity_id))
+        NetworkMessage::HandoffAccepted {entity_id, accepting_shard_id } => {
+            Ok(encode_handoff_accepted(*entity_id,*accepting_shard_id))
         }
-        NetworkMessage::HandoffRejected { entity_id } => {
-            Ok(encode_handoff_rejected(*entity_id))
+        NetworkMessage::HandoffRejected { entity_id, rejecting_shard_id } => {
+            Ok(encode_handoff_rejected(*entity_id,*rejecting_shard_id))
         }
-        NetworkMessage::GhostUpdate { entity_id,position,velocity } => {
-            Ok(encode_ghost_update(*entity_id,*position,*velocity))
+        NetworkMessage::GhostUpdate { entity_id,to_shard_id,position,velocity } => {
+            Ok(encode_ghost_update(*entity_id,*to_shard_id,*position,*velocity))
         }
         NetworkMessage::HandoffCompleted {entity_id } => {
             Ok(encode_handoff_completed(*entity_id))
@@ -65,7 +65,9 @@ pub fn encode_message(message: &NetworkMessage) -> anyhow::Result<Vec<u8>> {
     }
 }
 
-fn encode_client_hello(username: Username) -> Vec<u8> {
+fn encode_client_hello(
+    username: Username
+) -> Vec<u8> {
     let tag: u8 = TAG_CLIENT_HELLO;
     let username_bytes = username.as_bytes();
 
@@ -95,16 +97,18 @@ fn encode_handoff_completed(
 
 fn encode_ghost_update(
     entity_id: EntityId,
+    to_shard_id: ShardId,
     position: NetVec2,
     velocity: NetVec2
 ) -> Vec<u8> {
     let tag: u8 = TAG_GHOST_UPDATE;
 
     let mut packet = Vec::with_capacity(
-        TAG_LEN + ENTITY_ID_LEN + 20// 10 per NetVec2
+        TAG_LEN + ENTITY_ID_LEN + SHARD_ID_LEN + 20// 10 per NetVec2
     );
     packet.extend_from_slice(&tag.to_le_bytes());
     packet.extend_from_slice(&entity_id.0.to_le_bytes());
+    packet.extend_from_slice(&to_shard_id.0.to_le_bytes());
     packet.extend_from_slice(&position.to_bytes());
     packet.extend_from_slice(&velocity.to_bytes());
 
@@ -112,35 +116,41 @@ fn encode_ghost_update(
 }
 
 fn encode_handoff_rejected(
-    entity_id: EntityId
+    entity_id: EntityId,
+    rejecting_shard_id: ShardId
 ) -> Vec<u8> {
     let tag: u8 = TAG_HANDOFF_REJECTED;
 
     let mut packet = Vec::with_capacity(
-        TAG_LEN + ENTITY_ID_LEN
+        TAG_LEN + ENTITY_ID_LEN + SHARD_ID_LEN
     );
     packet.extend_from_slice(&tag.to_le_bytes());
     packet.extend_from_slice(&entity_id.0.to_le_bytes());
+    packet.extend_from_slice(&rejecting_shard_id.0.to_le_bytes());
 
     packet
 }
 
 fn encode_handoff_accepted(
-    entity_id: EntityId
+    entity_id: EntityId,
+    accepting_shard_id: ShardId
 ) -> Vec<u8> {
     let tag: u8 = TAG_HANDOFF_ACCEPTED;
 
     let mut packet = Vec::with_capacity(
-        TAG_LEN + ENTITY_ID_LEN
+        TAG_LEN + ENTITY_ID_LEN + SHARD_ID_LEN
     );
     packet.extend_from_slice(&tag.to_le_bytes());
     packet.extend_from_slice(&entity_id.0.to_le_bytes());
+    packet.extend_from_slice(&accepting_shard_id.0.to_le_bytes());
 
     packet
 }
 
 fn encode_handoff_request(
     entity_id: EntityId,
+    from_shard_id: ShardId,
+    to_shard_id: ShardId,
     position: NetVec2,
     velocity: NetVec2,
     entity_state: EntityState
@@ -148,10 +158,12 @@ fn encode_handoff_request(
     let tag: u8 = TAG_HANDOFF_REQUEST;
 
     let mut packet = Vec::with_capacity(
-        TAG_LEN + ENTITY_ID_LEN + ENTITY_STATE_LEN + 20// 10 per NetVec2
+        TAG_LEN + ENTITY_ID_LEN + (2*SHARD_ID_LEN) + ENTITY_STATE_LEN + 20// 10 per NetVec2
     );
     packet.extend_from_slice(&tag.to_le_bytes());
     packet.extend_from_slice(&entity_id.0.to_le_bytes());
+    packet.extend_from_slice(&from_shard_id.0.to_le_bytes());
+    packet.extend_from_slice(&to_shard_id.0.to_le_bytes());
     packet.extend_from_slice(&position.to_bytes());
     packet.extend_from_slice(&velocity.to_bytes());
     packet.extend_from_slice(&entity_state.to_le_bytes());

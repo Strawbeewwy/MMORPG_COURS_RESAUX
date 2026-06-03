@@ -13,7 +13,7 @@ pub fn poll_shard_events(
     mut ev_writer: MessageWriter<PositionUpdateMsg>,
 ) {
     loop {
-        match listener.peer.poll() {
+        match listener.handle.peer.poll() {
             Ok(Some(event)) => handle_shard_event(&mut listener, &mut client_map, &mut ev_writer, event),
             Ok(None) => break,
             Err(e) => {
@@ -34,22 +34,22 @@ fn handle_shard_event(
     match event {
         Connected(conn) => {
             tracing::info!("shard connected: {}", conn.connection_id);
-            if let Err(e) = listener.peer.create_stream(conn, GameStreamReliability::Reliable) {
+            if let Err(e) = listener.handle.peer.create_stream(conn, GameStreamReliability::Reliable) {
                 tracing::error!("failed to create stream for shard {}: {e}", conn.connection_id);
             }
         }
         Disconnected(conn) => {
             tracing::info!("shard disconnected: {}", conn.connection_id);
-            listener.unregister_shard(conn);
+            listener.handle.unregister_shard(conn);
             // Remove all clients that were tracked via this shard connection
             // to prevent unbounded growth of ClientMap.
             client_map.remove_by_connection(conn);
         }
         StreamCreated(conn, stream) => {
-            listener.streams.insert(conn, stream);
+            listener.handle.streams.insert(conn, stream);
         }
         StreamClosed(conn, _stream) => {
-            listener.streams.remove(&conn);
+            listener.handle.streams.remove(&conn);
         }
         Error { connection, inner } => {
             tracing::warn!("shard socket error on {}: {inner}", connection.connection_id);
@@ -79,7 +79,7 @@ fn handle_shard_message(
     match message {
         // Shard identifies itself — register the shard_id ↔ connection mapping.
         NetworkMessage::RegisterShard { shard_id } => {
-            listener.register_shard(connection, shard_id);
+            listener.handle.register_shard(connection, shard_id);
         }
 
         // Direct PositionUpdate from shard — propagate the source connection.
@@ -181,7 +181,7 @@ pub fn handle_broker_message(
     let message = match decode_message(data) {
         Ok(msg) => msg,
         Err(e) => {
-            tracing::warn!("invalid utils message from connection {}: {e}", connection.connection_id);
+            tracing::warn!("invalid broker message from connection {}: {e}", connection.connection_id);
             return;
         }
     };
@@ -190,7 +190,7 @@ pub fn handle_broker_message(
         NetworkMessage::PositionUpdate { client_id, position } => {
             ev_writer.write(PositionUpdateMsg {
                 client_id,
-                // Relayed via utils — no direct shard connection available.
+                // Relayed via broker — no direct shard connection available.
                 shard_connection: None,
                 x: f64::from(position.x),
                 y: f64::from(position.y),

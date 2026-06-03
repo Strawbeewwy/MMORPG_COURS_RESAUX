@@ -42,7 +42,7 @@ pub fn handle_handoff_requests(
         //     }
         // };
 
-        if listener.send_to_shard(req.to_shard, payload) {
+        if listener.handle.send_to_shard(req.to_shard, payload).unwrap() {
             client_map.set_state(
                 req.client_id.into(),
                 ClientTransferState::PendingHandoff {

@@ -14,7 +14,7 @@ pub use crate::protocol::utils::utils::{
     read_u32_le, read_u16_le,read_client_id,
 };
 use crate::protocol::{NetVec2, Username, ClientId,CLIENT_ID_LEN};
-
+use crate::protocol::public_types::topic::SHARD_ID_LEN;
 
 pub fn decode_message(data: &[u8]) -> anyhow::Result<NetworkMessage> {
     let Some((&tag_bytes, body)) = data.split_first() else {
@@ -52,16 +52,18 @@ fn decode_ghost_update(
 
     let entity_id = EntityId(read_u32_le(&body[0..ENTITY_ID_LEN]));
 
+    let to_shard_id = ShardId(read_u32_le(&body[ENTITY_ID_LEN..ENTITY_ID_LEN+SHARD_ID_LEN]));
+
     let mut position_bytes = [0u8; 10];
-    position_bytes.copy_from_slice(&body[ENTITY_ID_LEN..ENTITY_ID_LEN+10]);
+    position_bytes.copy_from_slice(&body[SHARD_ID_LEN+ENTITY_ID_LEN..SHARD_ID_LEN+ENTITY_ID_LEN+10]);
     let position = NetVec2::try_from(position_bytes);
 
     let mut velocity_bytes = [0u8; 10];
-    velocity_bytes.copy_from_slice(&body[ENTITY_ID_LEN + 10..ENTITY_ID_LEN+20]);
+    velocity_bytes.copy_from_slice(&body[SHARD_ID_LEN+ENTITY_ID_LEN + 10..SHARD_ID_LEN+ENTITY_ID_LEN+20]);
     let velocity = NetVec2::try_from(velocity_bytes);
 
 
-    Ok(NetworkMessage::GhostUpdate { entity_id, position:position.unwrap(),velocity:velocity.unwrap() })
+    Ok(NetworkMessage::GhostUpdate { entity_id, to_shard_id,position:position.unwrap(),velocity:velocity.unwrap() })
 }
 
 fn decode_handoff_rejected(
@@ -72,8 +74,9 @@ fn decode_handoff_rejected(
     }
 
     let entity_id = EntityId(read_u32_le(&body[0..ENTITY_ID_LEN]));
+    let rejecting_shard_id = ShardId(read_u32_le(&body[ENTITY_ID_LEN..ENTITY_ID_LEN+SHARD_ID_LEN]));
 
-    Ok(NetworkMessage::HandoffRejected { entity_id })
+    Ok(NetworkMessage::HandoffRejected { entity_id , rejecting_shard_id})
 }
 
 fn decode_handoff_complete(
@@ -91,38 +94,42 @@ fn decode_handoff_complete(
 fn decode_handoff_accepted(
     body: &[u8]
 ) -> anyhow::Result<NetworkMessage> {
-    if body.len() != ENTITY_ID_LEN {
+    if body.len() != ENTITY_ID_LEN + SHARD_ID_LEN {
         anyhow::bail!("invalid packet length: {}", body.len());
     }
 
     let entity_id = EntityId(read_u32_le(&body[0..ENTITY_ID_LEN]));
+    let accepting_shard_id = ShardId(read_u32_le(&body[ENTITY_ID_LEN..ENTITY_ID_LEN+SHARD_ID_LEN]));
 
-    Ok(NetworkMessage::HandoffAccepted { entity_id })
+    Ok(NetworkMessage::HandoffAccepted { entity_id, accepting_shard_id })
 }
 
 fn decode_handoff_request(
     body: &[u8]
 ) -> anyhow::Result<NetworkMessage> {
-    if body.len() != ENTITY_ID_LEN + 21 {
+    if body.len() != ENTITY_ID_LEN +(2*SHARD_ID_LEN) +21 {
         anyhow::bail!("invalid packet length: {}", body.len());
     }
 
     let entity_id = EntityId(read_u32_le(&body[0..ENTITY_ID_LEN]));
 
+    let from_shard_id = ShardId(read_u32_le(&body[ENTITY_ID_LEN..ENTITY_ID_LEN+SHARD_ID_LEN]));
+
+    let to_shard_id = ShardId(read_u32_le(&body[ENTITY_ID_LEN + SHARD_ID_LEN..ENTITY_ID_LEN+ (2*SHARD_ID_LEN)]));
+
     let mut position_bytes = [0u8; 10];
-    position_bytes.copy_from_slice(&body[ENTITY_ID_LEN..ENTITY_ID_LEN+10]);
+    position_bytes.copy_from_slice(&body[ENTITY_ID_LEN+ (2*SHARD_ID_LEN)..ENTITY_ID_LEN+ (2*SHARD_ID_LEN)+10]);
     let position = NetVec2::try_from(position_bytes);
 
     let mut velocity_bytes = [0u8; 10];
-    velocity_bytes.copy_from_slice(&body[ENTITY_ID_LEN + 10..ENTITY_ID_LEN+20]);
+    velocity_bytes.copy_from_slice(&body[ENTITY_ID_LEN+ (2*SHARD_ID_LEN) + 10..ENTITY_ID_LEN+ (2*SHARD_ID_LEN)+20]);
     let velocity = NetVec2::try_from(velocity_bytes);
-
 
     let mut entity_state_byte = [0u8;1];
     entity_state_byte.copy_from_slice(&body[ENTITY_ID_LEN + 20..ENTITY_ID_LEN + 21]);
     let entity_state = EntityState::from_le_bytes(entity_state_byte);
 
-    Ok(NetworkMessage::HandoffRequest { entity_id, position:position.unwrap(),velocity:velocity.unwrap(), entity_state: entity_state.unwrap() })
+    Ok(NetworkMessage::HandoffRequest { entity_id, to_shard_id,from_shard_id,position:position.unwrap(),velocity:velocity.unwrap(), entity_state: entity_state.unwrap() })
 
 }
 
