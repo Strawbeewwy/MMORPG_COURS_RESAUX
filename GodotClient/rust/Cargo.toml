@@ -5,14 +5,15 @@ edition = "2021"
 
 [lib]
 name = "mmo_client"
-crate-type = ["cdylib"]   # Required for GDExtension
+crate-type = ["cdylib"]
 
 [dependencies]
 godot = { git = "https://github.com/godot-rust/gdext", branch = "master" }
-# Note: `shared` is intentionally NOT listed here — it pulls bevy which is
-# incompatible with the GDExtension build target.  The wire protocol is
-# re-implemented inline in src/network/mod.rs (decode_and_push / send_position).
-tokio = { version = "1", features = ["rt", "net", "sync", "time", "macros", "io-util"] }
+# Same QUIC transport as every Bevy actor — no Bevy dependency needed.
+game_sockets = { git = "https://github.com/VALERE91/game_sockets.git", branch = "master", default-features = false, features = ["quic"] }
+bytes   = "1"
+anyhow  = "1"
+# Tokio current-thread runtime is required by quinn (used internally by game_sockets).
+tokio   = { version = "1", features = ["rt", "time"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-

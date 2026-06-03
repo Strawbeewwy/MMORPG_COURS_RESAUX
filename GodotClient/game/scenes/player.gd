@@ -5,23 +5,23 @@ extends CharacterBody2D
 
 const SPEED := 200.0
 
-var my_client_id: int = 1  # Hardcoded for the test level — replace post-login.
-
 @onready var _hud = get_node_or_null("/root/World/DebugHUD")
 
 func _ready() -> void:
 	add_to_group("local_player")
 
-	# Capsule collision shape — created in code so the scene has no inline resource dep.
 	var shape := CapsuleShape2D.new()
 	shape.radius = 12.0
 	shape.height = 28.0
 	$CollisionShape2D.shape = shape
 
-	# Try to reach the Rust NetworkClient; silently skip if .dll not loaded yet.
+	# client_id is assigned by the Broker via ClientAccepted — no need to set it manually.
 	var net = get_node_or_null("/root/NetworkClient")
-	if net and net.has_method("set_client_id"):
-		net.set_client_id(my_client_id)
+	if net:
+		net.client_accepted.connect(_on_client_accepted)
+
+func _on_client_accepted(client_id: int) -> void:
+	print("player: Broker assigned client_id=%d" % client_id)
 
 func _draw() -> void:
 	# Bright green circle — visible without any sprite asset.
@@ -40,9 +40,9 @@ func _physics_process(_delta: float) -> void:
 	move_and_slide()
 	queue_redraw()  # redraw direction dot each frame
 
-	# Send position — fail silently if not connected yet.
+	# Send normalised movement direction — Broker encodes it as ClientInput.
 	var net = get_node_or_null("/root/NetworkClient")
-	if net and net.has_method("send_position"):
-		net.send_position(position.x, position.y)
+	if net and net.has_method("send_movement"):
+		net.send_movement(dir.x, dir.y)
 		if _hud and _hud.has_method("notify_send"):
 			_hud.notify_send()
