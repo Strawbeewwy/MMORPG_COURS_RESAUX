@@ -1,0 +1,34 @@
+[gd_scene load_steps=6 format=3 uid="uid://world_main"]
+
+[ext_resource type="Script" path="res://scenes/player.gd" id="1"]
+[ext_resource type="Script" path="res://scenes/entity_registry.gd" id="2"]
+[ext_resource type="PackedScene" uid="uid://test_level" path="res://scenes/levels/test_level.tscn" id="3"]
+[ext_resource type="PackedScene" uid="uid://debug_hud" path="res://scenes/ui/debug_hud.tscn" id="4"]
+[ext_resource type="Script" path="res://scenes/ui/shard_boundary_debug.gd" id="5"]
+
+[sub_resource type="CapsuleShape2D" id="1"]
+radius = 12.0
+height = 28.0
+
+[node name="World" type="Node2D"]
+
+[node name="TestLevel" parent="." instance=ExtResource("3")]
+
+[node name="ShardBoundaryDebug" type="Node2D" parent="."]
+script = ExtResource("5")
+
+[node name="EntityRegistry" type="Node2D" parent="."]
+script = ExtResource("2")
+
+[node name="LocalPlayer" type="CharacterBody2D" parent="."]
+position = Vector2(2048, 2048)
+script = ExtResource("1")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="LocalPlayer"]
+shape = SubResource("1")
+
+[node name="Camera2D" type="Camera2D" parent="LocalPlayer"]
+enabled = true
+zoom = Vector2(1.5, 1.5)
+
+[node name="DebugHUD" parent="." instance=ExtResource("4")]
