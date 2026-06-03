@@ -1,0 +1,10 @@
+# .gitignore for GodotClient/
+.godot_bin/
+builds/
+game/.godot/
+game/bin/*.dll
+game/bin/*.so
+game/bin/*.dylib
+game/mmo_client.gdextension
+rust/target/
+

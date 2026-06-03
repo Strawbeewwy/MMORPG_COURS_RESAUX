@@ -8,6 +8,9 @@ members = [
     "GameClient",
     "SpatialService",
     "Broker",
+    # Godot 4.6 client — GDExtension + build automation
+    "GodotClient/rust",
+    "GodotClient/rust/xtask",
 ]
 resolver = "2"
 

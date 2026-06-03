@@ -1,0 +1,16 @@
+[package]
+name = "mmo_client"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "mmo_client"
+crate-type = ["cdylib"]   # Required for GDExtension
+
+[dependencies]
+godot = { git = "https://github.com/godot-rust/gdext", branch = "master" }
+shared = { path = "../../Shared" }
+tokio = { version = "1", features = ["rt", "net", "sync", "time", "macros"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+

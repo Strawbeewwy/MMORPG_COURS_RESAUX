@@ -1,0 +1,28 @@
+[gd_scene load_steps=3 format=3 uid="uid://world_main"]
+
+[node name="World" type="Node2D"]
+
+[node name="NetworkClient" type="Node" parent="."]
+script = ExtResource("res://scenes/autoloads/NetworkClient.gd")
+
+[node name="EntityRegistry" type="Node2D" parent="."]
+script = ExtResource("res://scenes/entity_registry.gd")
+
+[node name="LocalPlayer" type="CharacterBody2D" parent="."]
+script = ExtResource("res://scenes/player.gd")
+
+[node name="Camera2D" type="Camera2D" parent="LocalPlayer"]
+enabled = true
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="ConnectionStatus" type="Label" parent="HUD"]
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 250.0
+offset_bottom = 30.0
+text = "Connecting…"
+
+[node name="ShardDebug" type="Node2D" parent="."]
+script = ExtResource("res://scenes/ui/shard_boundary_debug.gd")
+
