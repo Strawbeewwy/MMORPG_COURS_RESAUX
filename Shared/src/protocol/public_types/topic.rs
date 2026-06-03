@@ -1,8 +1,22 @@
-use crate::protocol::utils::utils::read_u32_le;
+use crate::protocol::utils::utils::{
+    BinaryDecode,
+    BinaryEncode,
+    read_exact,
+    read_u8,
+    read_u32,
+    write_u8,
+    write_u32,
+};
 
 pub const TOPIC_LEN: usize = 32;
-pub const SHARD_ID_LEN: usize = size_of::<u32>();
-pub const ZONE_ID_LEN: usize = size_of::<u32>();
+const TOPIC_GLOBAL: u8 = 0x01;
+const TOPIC_CHAT: u8 = 0x02;
+const TOPIC_ZONE: u8 = 0x03;
+const TOPIC_SHARD_INSTANCE: u8 = 0x04;
+pub const TOPIC_ID_LEN: usize = size_of::<u32>();
+const TOPIC_HEADER_LEN: usize = size_of::<u8>() + TOPIC_ID_LEN;
+const TOPIC_PADDING_LEN: usize = TOPIC_LEN - TOPIC_HEADER_LEN;
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq,
     PartialOrd, Ord, Hash, Default)]
@@ -16,39 +30,8 @@ pub enum Topic {
     ShardInstance(ShardId),
 }
 
+
 impl Topic {
-    pub fn to_bytes(&self) -> [u8; TOPIC_LEN] {
-        let mut bytes = [0u8; TOPIC_LEN];
-
-        match self {
-            Topic::Global => {
-                let name = b"global";
-                bytes[..name.len()].copy_from_slice(name);
-            }
-            Topic::Chat => {
-                let name = b"chat";
-                bytes[..name.len()].copy_from_slice(name);
-            }
-            Topic::Zone(id) => {
-
-                let prefix = b"sector_";
-                bytes[..prefix.len()].copy_from_slice(prefix);
-
-                let id_bytes = id.to_le_bytes();
-                bytes[prefix.len()..prefix.len() + ZONE_ID_LEN].copy_from_slice(&id_bytes);
-            }
-            Topic::ShardInstance(id) => {
-                let prefix = b"shard_";
-                bytes[..prefix.len()].copy_from_slice(prefix);
-
-                let id_bytes = id.0.to_le_bytes();
-                bytes[prefix.len()..prefix.len() + SHARD_ID_LEN].copy_from_slice(&id_bytes);
-            }
-        }
-
-        bytes
-    }
-
     pub fn to_string(&self) -> String {
         match self {
             Topic::Global => "global".to_string(),
@@ -58,63 +41,61 @@ impl Topic {
         }
     }
 }
-
-impl TryFrom<[u8; TOPIC_LEN]> for Topic {
-    type Error = &'static str;
-
-    fn try_from(bytes: [u8; TOPIC_LEN]) -> Result<Self, Self::Error> {
-
-       /*
-        this function checks if the bytes starting from a determined index are all zero
-        this prevents reading past the end of the buffer and ensures the topic is properly formatted
-        it also prevents any trailing data from being read as part of the topic
-        */
-        let is_zero_padded = |start_idx: usize| -> bool {
-
-            bytes.get(start_idx..).map_or(false, |slice| slice.iter().all(|&b| b == 0))
-        };
-
-        if bytes.starts_with(b"global") && is_zero_padded(b"global".len()) {
-            Ok(Topic::Global)
-        } else if bytes.starts_with(b"chat") && is_zero_padded(b"chat".len()) {
-            Ok(Topic::Chat)
-        } else if bytes.starts_with(b"sector_") {
-            let id_start = b"sector_".len();
-            let id_end = id_start + size_of::<u32>();
-
-            if let Some(id_slice) = bytes.get(id_start..id_end) {
-
-                if is_zero_padded(id_end) {
-                    let id = read_u32_le(id_slice);
-                    return Ok(Topic::Zone(id));
-                }
+impl BinaryEncode for Topic {
+    fn encode_binary(&self, output: &mut Vec<u8>) -> anyhow::Result<()> {
+        match self {
+            Topic::Global => {
+                write_u8(output, TOPIC_GLOBAL);
+                write_u32(output, 0);
             }
-            Err("Zone topic is malformed or contains trailing data")
-        } else if bytes.starts_with(b"shard_") {
-            let id_start = b"shard_".len();
-            let id_end = id_start + size_of::<u32>();
-
-            if let Some(id_slice) = bytes.get(id_start..id_end) {
-                if is_zero_padded(id_end) {
-                    let id = read_u32_le(id_slice);
-                    return Ok(Topic::ShardInstance(ShardId(id)));
-                }
+            Topic::Chat => {
+                write_u8(output, TOPIC_CHAT);
+                write_u32(output, 0);
             }
-            Err("ShardInstance topic is malformed or contains trailing data")
-        } else {
-            Err("Topic unknown or malformed")
+            Topic::Zone(id) => {
+                write_u8(output, TOPIC_ZONE);
+                write_u32(output, *id);
+            }
+            Topic::ShardInstance(id) => {
+                write_u8(output, TOPIC_SHARD_INSTANCE);
+                write_u32(output, id.0);
+            }
         }
+
+        output.extend_from_slice(&[0_u8; TOPIC_PADDING_LEN]);
+
+        Ok(())
     }
 }
 
-pub fn read_topic(bytes: &[u8]) -> Topic {
+impl BinaryDecode for Topic {
+    fn decode_binary(input: &mut &[u8]) -> anyhow::Result<Self> {
+        let kind = read_u8(input)?;
+        let id = read_u32(input)?;
+        let padding = read_exact(input, TOPIC_PADDING_LEN)?;
 
-    let mut topic_bytes = [0u8; TOPIC_LEN];
+        if !padding.iter().all(|byte| *byte == 0) {
+            anyhow::bail!("topic contains non-zero padding bytes");
+        }
 
-    topic_bytes[..bytes.len()].copy_from_slice(bytes);
+        match kind {
+            TOPIC_GLOBAL => {
+                if id != 0 {
+                    anyhow::bail!("Global topic must not contain an id");
+                }
 
-    let topic = Topic::try_from(topic_bytes);
+                Ok(Topic::Global)
+            }
+            TOPIC_CHAT => {
+                if id != 0 {
+                    anyhow::bail!("Chat topic must not contain an id");
+                }
 
-    topic.unwrap()
+                Ok(Topic::Chat)
+            }
+            TOPIC_ZONE => Ok(Topic::Zone(id)),
+            TOPIC_SHARD_INSTANCE => Ok(Topic::ShardInstance(ShardId(id))),
+            unknown => anyhow::bail!("unknown topic kind: 0x{unknown:02x}"),
+        }
+    }
 }
-

@@ -2,18 +2,18 @@ use crate::config::ServerConfig;
 use crate::net::input::handle_broker_client_input;
 use crate::world::state::{EntityRegistry, handle_register_client};
 use bevy::prelude::*;
-use bytes::Bytes;
 use shared::game_sockets::protocols::QuicBackend;
 use shared::game_sockets::{
-    GameConnection, GameNetworkEvent, GamePeer, GameStream, GameStreamReliability,
+    GameNetworkEvent, GamePeer, GameStream, GameStreamReliability,
 };
 use shared::protocol::{NetworkMessage, Topic, decode_message, encode_message, BrokerHandle, BrokerConnectionState, ClientId, NetVec2, ZoneId, PlayerSnapshot, WorldSnapshot};
-use shared::protocol::transport::codec;
+use shared::protocol::http::codec;
 use shared::protocol::WorldUpdate;
 use std::sync::Arc;
 use bevy::platform::collections::HashMap;
 use tokio::sync::Mutex;
-use shared::game_sockets::GameNetworkEvent::{Connected, Disconnected, StreamClosed, StreamCreated};
+use shared::game_sockets::GameNetworkEvent::{Disconnected, StreamClosed, StreamCreated};
+use crate::net::area_of_interest::{is_inside_area_of_interest, DEFAULT_AREA_OF_INTEREST_RADIUS};
 
 #[derive(Resource, Clone)]
 pub struct SharedPlayerRegistry {
@@ -240,34 +240,6 @@ fn handle_broker_message(
     }
 }
 
-pub fn generate_world_snapshots(
-    config: &Res<ServerConfig>,
-    broker: &Res<BrokerShardPeer>,
-    registry: &Res<SharedPlayerRegistry>,
-) -> anyhow::Result<WorldUpdate>{
-    if !broker.is_ready() {
-        anyhow::bail!("broker is not ready");
-    }
-
-    let Ok(registry) = registry.inner.try_lock() else {
-        anyhow::bail!("Could not lock player registry");
-    };
-
-    let player_snapshot = registry.generate_player_snapshot();
-
-
-    let world_snapshot = WorldSnapshot {
-        zone: config.zone.clone(),
-        players: player_snapshot,
-        server_tick: config.server_tick.clone(),
-    };
-
-
-    Ok(WorldUpdate::Snapshot { snapshot: world_snapshot })
-
-}
-
-
 pub fn publish_player_position_updates(
     broker: Res<BrokerShardPeer>,
     registry: Res<SharedPlayerRegistry>,
@@ -325,54 +297,83 @@ pub fn publish_world_update(
     registry: Res<SharedPlayerRegistry>,
     config: Res<ServerConfig>,
 ) {
-    let topic = config.shard_topic;
+    if !broker.is_ready() {
+        return;
+    }
 
-    let update = match generate_world_snapshots(&config, &broker, &registry) {
-        Ok(update) => update,
-        Err(error) => {
-            tracing::error!("failed to generate world snapshots: {error:#}");
-            return;
-        }
-    };
-
-    let payload = match codec::encode(&update) {
-        Ok(payload) => payload,
-        Err(error) => {
-            tracing::error!("failed to encode WorldUpdate: {error:#}");
-            return;
-        }
-    };
-
-    let payload_len = match u16::try_from(payload.len()) {
-        Ok(payload_len) => payload_len,
-        Err(_) => {
-            tracing::error!("WorldUpdate payload too large: {} bytes", payload.len());
-            return;
-        }
-    };
-
-    let Topic::ShardInstance(shard_id) = topic else {
-        tracing::warn!("cannot publish WorldUpdate to unsupported topic {}", topic.to_string());
+    let Topic::ShardInstance(shard_id) = config.shard_topic else {
+        tracing::warn!(
+            "cannot publish WorldUpdate to unsupported topic {}",
+            config.shard_topic.to_string()
+        );
         return;
     };
 
-    let packet = match encode_message(&NetworkMessage::Publish {
-        shard_id,
-        payload_len,
-        payload,
-    }) {
-        Ok(packet) => packet,
-        Err(error) => {
-            tracing::warn!(
-                "cannot encode Publish for topic {}: {}",
-                topic.to_string(),
-                error
+    let Ok(registry) = registry.inner.try_lock() else {
+        tracing::warn!("could not lock player registry for world update");
+        return;
+    };
+
+    let full_players = registry.generate_player_snapshot();
+
+    for observer in &full_players {
+        let players = full_players
+            .iter()
+            .filter(|player| {
+                player.client_id == observer.client_id
+                    || is_inside_area_of_interest(
+                    observer.position,
+                    player.position,
+                    DEFAULT_AREA_OF_INTEREST_RADIUS,
+                )
+            })
+            .cloned()
+            .collect();
+
+        let snapshot = WorldSnapshot {
+            zone: config.zone.clone(),
+            players,
+            server_tick: config.server_tick,
+        };
+
+        let update = WorldUpdate::Snapshot { snapshot };
+
+        let payload = match codec::encode(&update) {
+            Ok(payload) => payload,
+            Err(error) => {
+                tracing::error!(
+                    "failed to encode AOI WorldUpdate for client_id={}: {error:#}",
+                    observer.client_id.0
+                );
+                continue;
+            }
+        };
+
+        let payload_len = match u16::try_from(payload.len()) {
+            Ok(payload_len) => payload_len,
+            Err(_) => {
+                tracing::error!(
+                    "AOI WorldUpdate payload too large for client_id={}: {} bytes",
+                    observer.client_id.0,
+                    payload.len()
+                );
+                continue;
+            }
+        };
+
+        let message = NetworkMessage::Publish {
+            shard_id,
+            client_id: observer.client_id,
+            payload_len,
+            payload,
+        };
+
+        if let Err(error) = broker.send_message(&message) {
+            tracing::error!(
+                "failed to publish AOI WorldUpdate for client_id={}: {error:#}",
+                observer.client_id.0
             );
             return;
         }
-    };
-
-    if let Err(error) = broker.handle.send(packet) {
-        tracing::error!("failed to send packet to broker: {error:#}");
     }
 }

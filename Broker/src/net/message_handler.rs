@@ -126,7 +126,7 @@ pub fn handle_message(
             state.unsubscribe_client(client_id, shard_id);
         }
 
-        NetworkMessage::Publish { shard_id, payload_len,payload } => {
+        NetworkMessage::Publish { shard_id, client_id, payload_len,payload } => {
             if !peer_roles.ensure(
                 connection,
                 PeerRole::Shard,
@@ -143,13 +143,15 @@ pub fn handle_message(
 
             let topic = Topic::ShardInstance(shard_id);
 
-            broadcast_to_subscribers(
+            publish_to_client(
                 peer,
                 reliable_streams,
                 state,
                 topic,
-                &payload_len,
-                &payload);
+                client_id,
+                payload_len,
+                &payload,
+            );
         }
 
         NetworkMessage::ClientInput { client_id, input } => {

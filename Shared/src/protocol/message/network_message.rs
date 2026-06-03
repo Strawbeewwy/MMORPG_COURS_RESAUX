@@ -16,6 +16,7 @@ pub enum NetworkMessage {
     },
     Publish { // from shard to broker
         shard_id: ShardId,
+        client_id: ClientId,
         payload_len: u16,
         payload: Vec<u8>,
     },

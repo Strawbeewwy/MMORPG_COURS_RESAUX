@@ -2,7 +2,6 @@ use crate::config::BrokerConfig;
 use crate::net::network_event::BrokerNetwork;
 use crate::pubsub::state::PubSubState;
 use std::time::Duration;
-use tokio::time::sleep;
 
 pub struct BrokerApp {
     config: BrokerConfig,
@@ -22,7 +21,7 @@ impl BrokerApp {
     }
 
     pub async fn run(&mut self) -> anyhow::Result<()> {
-        tracing::info!("utils started");
+        tracing::info!("broker started");
 
         let mut ticker = tokio::time::interval(Duration::from_millis(self.config.tick_ms));
 

@@ -2,6 +2,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use crate::protocol::{NetVec2, ZoneId, ClientId};
+use crate::protocol::utils::utils::{read_username, write_username, BinaryDecode, BinaryEncode};
 
 pub type Username = Arc<str>;
 
@@ -69,6 +70,23 @@ pub struct PlayerPublicInfo {
     pub username: Username,
 }
 
+
+impl BinaryEncode for PlayerPublicInfo {
+    fn encode_binary(&self, output: &mut Vec<u8>) -> anyhow::Result<()> {
+        write_username(output, &self.username)
+    }
+}
+
+impl BinaryDecode for PlayerPublicInfo {
+    fn decode_binary(input: &mut &[u8]) -> anyhow::Result<Self> {
+        let username = read_username(input)?;
+
+        Ok(PlayerPublicInfo {
+            username,
+        })
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlayerSpawnInfo {
     pub username: Username,
@@ -77,14 +95,4 @@ pub struct PlayerSpawnInfo {
 }
 
 
-/**
-snapshot of a player, sent to the client
-**/
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct PlayerSnapshot {
-    pub client_id: ClientId,
-    pub player_id: PlayerId,
-    pub username: Username,
-    pub position: NetVec2,
-    pub velocity: NetVec2,
-}
+

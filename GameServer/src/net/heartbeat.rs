@@ -1,7 +1,7 @@
 use crate::config::ServerConfig;
 use crate::net::network_event::SharedPlayerRegistry;
 use bevy::prelude::*;
-use shared::protocol::transport::codec;
+use shared::protocol::http::codec;
 use shared::protocol::Heartbeat;
 use std::net::UdpSocket;
 use std::time::Duration;

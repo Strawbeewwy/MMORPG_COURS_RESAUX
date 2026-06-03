@@ -3,7 +3,7 @@ use crate::world::state::LocalWorldState;
 use shared::protocol::{
     NetworkMessage, decode_message
 };
-use shared::protocol::transport::codec;
+use shared::protocol::http::codec;
 use shared::protocol::WorldUpdate;
 
 pub fn decode_and_handle_broker_message(

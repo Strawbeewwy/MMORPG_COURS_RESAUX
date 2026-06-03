@@ -1,19 +1,14 @@
-use std::sync::Arc;
 use crate::net::network_event::SharedPlayerRegistry;
 use bevy::prelude::*;
-use shared::protocol::{NetVec2, WorldSnapshot, ZoneId, PlayerSpawnInfo, EntityId, Username};
-use crate::net::area_of_interest::{
-    is_inside_area_of_interest, DEFAULT_AREA_OF_INTEREST_RADIUS,
-};
+use shared::protocol::{NetVec2, EntityId, Username, PlayerSnapshot};
 
 use bevy::platform::collections::HashMap;
 use uuid::Uuid;
 use shared::protocol::ClientId;
 use shared::protocol::game::EntityType;
 use shared::protocol::game::player::{
-    Player, PlayerId, PLAYER_DEFAULT_MOVE_SPEED, PlayerSnapshot, PlayerPublicInfo,
+    Player, PlayerId, PLAYER_DEFAULT_MOVE_SPEED,
 };
-use shared::protocol::transport::codec;
 use crate::config::ServerConfig;
 
 #[derive(Debug, Default, Resource)]
