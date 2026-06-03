@@ -50,6 +50,8 @@ est écrite en Rust via **GDExtension** (crate `mmo_client`).
 
 #### Installation — première fois
 
+> ⚠️ Toutes les commandes `cargo xtask` doivent être exécutées **depuis le répertoire `GodotClient/`**.
+
 ```powershell
 cd GodotClient
 cargo xtask setup
@@ -168,6 +170,8 @@ is written in Rust via **GDExtension** (crate `mmo_client`).
 - `curl` (natively available on Windows 10+, macOS, Linux)
 
 #### First-time setup
+
+> ⚠️ All `cargo xtask` commands must be run from inside the **`GodotClient/`** directory.
 
 ```powershell
 cd GodotClient

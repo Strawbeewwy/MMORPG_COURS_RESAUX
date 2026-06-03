@@ -1,0 +1,5 @@
+# Cargo alias — makes `cargo xtask <cmd>` work from anywhere inside GodotClient/.
+# This is the standard xtask convention: https://github.com/matklad/cargo-xtask
+[alias]
+xtask = "run --package xtask --"
+

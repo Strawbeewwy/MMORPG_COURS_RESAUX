@@ -8,9 +8,7 @@ members = [
     "GameClient",
     "SpatialService",
     "Broker",
-    # Godot 4.6 client — GDExtension + build automation
-    "GodotClient/rust",
-    "GodotClient/rust/xtask",
+    # GodotClient/ has its own workspace — build it from GodotClient/ with `cargo xtask <cmd>`
 ]
 resolver = "2"
 
