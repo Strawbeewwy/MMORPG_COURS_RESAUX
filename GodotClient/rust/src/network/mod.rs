@@ -1,48 +1,112 @@
-//! Async network client exposed to Godot as a `NetworkClient` Node.
+//! QUIC network client for the Godot MMO frontend.
 //!
-//! Architecture
-//! ────────────
-//! The Godot main thread must never block.  A dedicated OS thread hosts a
-//! Tokio runtime for all I/O.  Thread-safe channels bridge the two worlds:
+//! Uses the same `game_sockets::GamePeer` / `QuicBackend` as every Bevy actor
+//! (GameServer, SpatialService) so the Broker sees no difference.
 //!
-//!   Tokio thread                      Godot thread
-//!   ──────────────                    ────────────────────
-//!   TcpStream read  → inbox (Mutex)  → process() → emit_signal
-//!   outbox (Mutex) ← send_position() ←  GDScript func call
+//! Wire protocol is byte-for-byte identical to `Shared/src/protocol/broker`:
+//!   send  ClientHello  → 0x08 | u16_le(username.len) | username_bytes
+//!   send  ClientInput  → 0x05 | u32_le(client_id) | f32_le(x) | f32_le(y) | [0;8]
+//!   recv  ClientAccepted → 0x0A | u32_le(client_id)
+//!   recv  Broadcast    → 0x04 | u16_le(payload_len) | payload
 //!
-//! Reconnection uses exponential back-off (1 s → 32 s, capped).
+//! Threading model
+//! ───────────────
+//!   Godot main thread          │  network thread (std::thread + Tokio rt)
+//!   ─────────────────────────  │  ─────────────────────────────────────────
+//!   NetworkClient::process()   │  poll_loop()
+//!     drain inbox → signals    │    peer.poll() → push IncomingEvent to inbox
+//!     drain outbox → peer.send │    take outbox → peer.send
+
+use bytes::Bytes;
+use game_sockets::{
+    protocols::QuicBackend, GameNetworkEvent, GamePeer, GameStream,
+    GameStreamReliability,
+};
+use godot::classes::INode;
 use godot::prelude::*;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpStream;
 
-// Re-export so world/ and ui/ can reach the shared inbox type.
-pub type Inbox = Arc<Mutex<Vec<IncomingEvent>>>;
+// ── Wire protocol tags (mirrors Shared/src/protocol/broker/config.rs) ─────────
+const TAG_CLIENT_HELLO:   u8 = 0x08;
+const TAG_CLIENT_INPUT:   u8 = 0x05;
+const TAG_CLIENT_ACCEPTED:u8 = 0x0A;
+const TAG_BROADCAST:      u8 = 0x04;
+/// Size of the ClientInput payload array (mirrors CLIENT_INPUT_LEN in Shared).
+const CLIENT_INPUT_LEN: usize = 16;
+
+// ── Shared channel types ───────────────────────────────────────────────────────
+pub type Inbox  = Arc<Mutex<Vec<IncomingEvent>>>;
 pub type Outbox = Arc<Mutex<Vec<Vec<u8>>>>;
 
-/// Simplified event type decoded from the broker wire format.
-/// Extend as new server messages are handled.
+/// Events decoded from Broker messages and forwarded to the Godot main thread.
 #[derive(Debug, Clone)]
 pub enum IncomingEvent {
-    PositionUpdate { client_id: i64, x: f32, y: f32 },
-    PlayerJoined { client_id: i64 },
-    PlayerLeft { client_id: i64 },
+    /// Broker assigned us a client_id after ClientHello.
+    ClientAccepted { client_id: u32 },
+    /// GameServer broadcast — contains a serialised WorldUpdate payload.
+    Broadcast { payload: Vec<u8> },
 }
 
-// ─── NetworkClient Node ───────────────────────────────────────────────────────
+// ── Wire helpers ───────────────────────────────────────────────────────────────
 
-/// Godot autoload node.  Add it to the scene tree as an autoload singleton
-/// named `NetworkClient` and connect its signals from GDScript.
+/// Encode a ClientHello packet (TAG_CLIENT_HELLO).
+pub fn encode_client_hello(username: &str) -> Vec<u8> {
+    let name = username.as_bytes();
+    let mut buf = Vec::with_capacity(1 + 2 + name.len());
+    buf.push(TAG_CLIENT_HELLO);
+    buf.extend_from_slice(&(name.len() as u16).to_le_bytes());
+    buf.extend_from_slice(name);
+    buf
+}
+
+/// Encode a ClientInput packet (TAG_CLIENT_INPUT) with movement x/y.
+/// Matches `encode_movement_input` in GameClient/src/net/input.rs.
+pub fn encode_client_input(client_id: u32, x: f32, y: f32) -> Vec<u8> {
+    let mut input = [0u8; CLIENT_INPUT_LEN];
+    input[0..4].copy_from_slice(&x.to_le_bytes());
+    input[4..8].copy_from_slice(&y.to_le_bytes());
+
+    let mut buf = Vec::with_capacity(1 + 4 + CLIENT_INPUT_LEN);
+    buf.push(TAG_CLIENT_INPUT);
+    buf.extend_from_slice(&client_id.to_le_bytes());
+    buf.extend_from_slice(&input);
+    buf
+}
+
+/// Decode a single Broker message from raw bytes.
+/// Returns None for unknown / malformed messages (logged as warnings).
+fn decode(data: &[u8]) -> Option<IncomingEvent> {
+    let (&tag, body) = data.split_first()?;
+    match tag {
+        TAG_CLIENT_ACCEPTED if body.len() >= 4 => {
+            let client_id = u32::from_le_bytes(body[0..4].try_into().ok()?);
+            Some(IncomingEvent::ClientAccepted { client_id })
+        }
+        TAG_BROADCAST if body.len() >= 2 => {
+            let declared_len = u16::from_le_bytes(body[0..2].try_into().ok()?) as usize;
+            let payload = body[2..2 + declared_len.min(body.len().saturating_sub(2))].to_vec();
+            Some(IncomingEvent::Broadcast { payload })
+        }
+        _ => {
+            tracing::debug!("mmo_client: ignoring broker tag 0x{tag:02X} ({} bytes)", body.len());
+            None
+        }
+    }
+}
+
+// ── NetworkClient Godot node ───────────────────────────────────────────────────
+
+/// Godot autoload node — add to the scene tree as `NetworkClient`.
+/// Exposes signals and functions to GDScript; handles the QUIC connection
+/// to the Broker on a dedicated thread.
 #[derive(GodotClass)]
 #[class(base=Node)]
 pub struct NetworkClient {
-    base: Base<Node>,
-    inbox: Inbox,
-    outbox: Outbox,
-    /// Authenticated client id — 0 until login completes.
-    my_client_id: i64,
-    /// Server address read from Godot project settings or defaulting to localhost.
+    base:      Base<Node>,
+    inbox:     Inbox,
+    outbox:    Outbox,
+    client_id: u32,
     server_addr: String,
 }
 
@@ -51,64 +115,55 @@ impl INode for NetworkClient {
     fn init(base: Base<Node>) -> Self {
         Self {
             base,
-            inbox: Arc::new(Mutex::new(Vec::new())),
+            inbox:  Arc::new(Mutex::new(Vec::new())),
             outbox: Arc::new(Mutex::new(Vec::new())),
-            my_client_id: 0,
-            server_addr: "127.0.0.1:9000".to_string(),
+            client_id: 0,
+            server_addr: "127.0.0.1:9600".to_string(),
         }
     }
 
     fn ready(&mut self) {
-        // Optional: read server address from project settings.
-        // let addr = ProjectSettings::singleton()
-        //     .get_setting("network/server_address".into())
-        //     .to::<GString>().to_string();
-
-        let inbox = self.inbox.clone();
+        let inbox  = self.inbox.clone();
         let outbox = self.outbox.clone();
-        let addr = self.server_addr.clone();
+        let addr   = self.server_addr.clone();
 
-        // Spawn the I/O thread.  It owns its own Tokio runtime.
         std::thread::Builder::new()
-            .name("mmo_network".to_string())
+            .name("mmo_quic".into())
             .spawn(move || {
+                // quinn (inside game_sockets) requires a Tokio runtime.
                 tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
-                    .expect("tokio runtime")
-                    .block_on(run_with_reconnect(addr, inbox, outbox));
+                    .expect("tokio rt")
+                    .block_on(async {
+                        poll_loop(addr, inbox, outbox).await;
+                    });
             })
-            .expect("spawn network thread");
+            .expect("spawn mmo_quic thread");
 
-        tracing::info!("NetworkClient ready — connecting to {}", self.server_addr);
+        tracing::info!("NetworkClient ready — broker {}", self.server_addr);
     }
 
-    /// Pump inbox into Godot signals — called every frame.
+    /// Pump inbox into Godot signals each frame.
     fn process(&mut self, _delta: f64) {
         let events: Vec<IncomingEvent> = {
-            let mut guard = self.inbox.lock().unwrap();
-            guard.drain(..).collect()
+            let mut g = self.inbox.lock().unwrap();
+            g.drain(..).collect()
         };
-
-        for event in events {
-            match event {
-                IncomingEvent::PositionUpdate { client_id, x, y } => {
+        for ev in events {
+            match ev {
+                IncomingEvent::ClientAccepted { client_id } => {
+                    self.client_id = client_id;
+                    tracing::info!("NetworkClient: assigned client_id={client_id}");
                     self.base_mut().emit_signal(
-                        "position_received",
-                        &[
-                            client_id.to_variant(),
-                            x.to_variant(),
-                            y.to_variant(),
-                        ],
+                        "client_accepted",
+                        &[(client_id as i64).to_variant()],
                     );
                 }
-                IncomingEvent::PlayerJoined { client_id } => {
-                    self.base_mut()
-                        .emit_signal("player_joined", &[client_id.to_variant()]);
-                }
-                IncomingEvent::PlayerLeft { client_id } => {
-                    self.base_mut()
-                        .emit_signal("player_left", &[client_id.to_variant()]);
+                IncomingEvent::Broadcast { payload } => {
+                    // Forward the raw WorldUpdate payload to GDScript.
+                    let bytes: PackedByteArray = payload.iter().copied().collect();
+                    self.base_mut().emit_signal("broadcast_received", &[bytes.to_variant()]);
                 }
             }
         }
@@ -117,131 +172,164 @@ impl INode for NetworkClient {
 
 #[godot_api]
 impl NetworkClient {
-    // ── Signals emitted toward GDScript ──────────────────────────────────────
+    // ── Signals ───────────────────────────────────────────────────────────────
 
-    /// Emitted every time a position update is received for any client.
+    /// Broker accepted the connection and assigned a client_id.
     #[signal]
-    fn position_received(client_id: i64, x: f32, y: f32);
+    fn client_accepted(client_id: i64);
 
-    /// Emitted when a new player enters the area of interest.
+    /// A WorldUpdate broadcast from the GameServer was received.
     #[signal]
-    fn player_joined(client_id: i64);
+    fn broadcast_received(payload: PackedByteArray);
 
-    /// Emitted when a player leaves the area of interest or disconnects.
-    #[signal]
-    fn player_left(client_id: i64);
+    // ── GDScript-callable functions ────────────────────────────────────────────
 
-    // ── Functions callable from GDScript ─────────────────────────────────────
-
-    /// Set the authenticated client id after login.
+    /// Send the local player's movement direction to the Broker.
+    /// x / y are normalised direction values in [-1, 1].
     #[func]
-    fn set_client_id(&mut self, id: i64) {
-        self.my_client_id = id;
-        tracing::info!("NetworkClient: local client_id set to {id}");
+    fn send_movement(&self, x: f32, y: f32) {
+        let pkt = encode_client_input(self.client_id, x, y);
+        self.outbox.lock().unwrap().push(pkt);
     }
 
-    /// Send the local player's position to the server.
-    /// Called from `_physics_process` in player.gd.
+    /// Override the Broker address before the node enters the scene tree.
     #[func]
-    fn send_position(&self, x: f32, y: f32) {
-        // Wire format: tag 0x01 | client_id (8 bytes LE) | x (4 bytes LE) | y (4 bytes LE)
-        let mut payload = Vec::with_capacity(17);
-        payload.push(0x01u8);
-        payload.extend_from_slice(&self.my_client_id.to_le_bytes());
-        payload.extend_from_slice(&x.to_le_bytes());
-        payload.extend_from_slice(&y.to_le_bytes());
-        self.outbox.lock().unwrap().push(payload);
-    }
-
-    /// Override the server address before `ready()` is called.
-    #[func]
-    fn set_server_addr(&mut self, addr: GString) {
+    fn set_broker_addr(&mut self, addr: GString) {
         self.server_addr = addr.to_string();
+    }
+
+    /// Return the client_id assigned by the Broker (0 until ClientAccepted).
+    #[func]
+    fn get_client_id(&self) -> i64 {
+        self.client_id as i64
     }
 }
 
-// ─── Async I/O ───────────────────────────────────────────────────────────────
+// ── Background QUIC poll loop ──────────────────────────────────────────────────
 
-/// Connect and reconnect with exponential back-off.
-async fn run_with_reconnect(addr: String, inbox: Inbox, outbox: Outbox) {
+async fn poll_loop(addr: String, inbox: Inbox, outbox: Outbox) {
+    let host_port: Vec<&str> = addr.rsplitn(2, ':').collect();
+    let (port, host) = match host_port.as_slice() {
+        [p, h] => (p.parse::<u16>().unwrap_or(9600), *h),
+        _ => {
+            tracing::error!("invalid broker addr: {addr}");
+            return;
+        }
+    };
+
     let mut backoff = Duration::from_secs(1);
     loop {
-        match TcpStream::connect(&addr).await {
-            Ok(stream) => {
-                tracing::info!("network: connected to {addr}");
-                backoff = Duration::from_secs(1); // reset on success
-                run_connection(stream, &inbox, &outbox).await;
-                tracing::warn!("network: disconnected from {addr}");
-            }
-            Err(e) => {
-                tracing::error!("network: cannot connect to {addr}: {e} — retry in {backoff:?}");
-            }
+        match try_connect_and_run(host, port, &inbox, &outbox).await {
+            Ok(()) => tracing::warn!("mmo_quic: disconnected from broker — reconnecting"),
+            Err(e) => tracing::error!("mmo_quic: connection error: {e} — retry in {backoff:?}"),
         }
         tokio::time::sleep(backoff).await;
         backoff = (backoff * 2).min(Duration::from_secs(32));
     }
 }
 
-/// I/O loop for a live connection.  Returns when the connection drops.
-async fn run_connection(mut stream: TcpStream, inbox: &Inbox, outbox: &Outbox) {
-    let mut buf = vec![0u8; 8192];
-    loop {
-        // Drain outbound queue first.
-        let pending: Vec<Vec<u8>> = outbox.lock().unwrap().drain(..).collect();
-        for payload in pending {
-            if stream.write_all(&payload).await.is_err() {
-                return;
-            }
-        }
+async fn try_connect_and_run(
+    host:   &str,
+    port:   u16,
+    inbox:  &Inbox,
+    outbox: &Outbox,
+) -> anyhow::Result<()> {
+    let peer = GamePeer::new(QuicBackend::new());
+    peer.connect(host, port)?;
+    tracing::info!("mmo_quic: connecting to broker {host}:{port}");
 
-        // Wait for incoming bytes or a short timeout to re-check outbox.
-        tokio::select! {
-            result = stream.read(&mut buf) => {
-                match result {
-                    Ok(0) => return, // server closed connection
-                    Ok(n) => decode_and_push(&buf[..n], inbox),
-                    Err(_) => return,
+    let mut peer = peer;
+    let mut connection: Option<game_sockets::GameConnection> = None;
+    let mut stream:     Option<GameStream> = None;
+    let mut hello_sent = false;
+
+    loop {
+        loop {
+            match peer.poll() {
+                Ok(Some(event)) => handle_event(
+                    &mut peer, event,
+                    &mut connection, &mut stream, &mut hello_sent,
+                    inbox,
+                ),
+                Ok(None) => break,
+                Err(e) => {
+                    tracing::warn!("mmo_quic: poll error: {e}");
+                    return Ok(());
                 }
             }
-            _ = tokio::time::sleep(Duration::from_millis(8)) => {
-                // Timeout — loop to flush outbox.
+        }
+
+        if let (Some(conn), Some(st)) = (connection.as_ref(), stream.as_ref()) {
+            let pending: Vec<Vec<u8>> = {
+                let mut g = outbox.lock().unwrap();
+                g.drain(..).collect()
+            };
+            for pkt in pending {
+                if let Err(e) = peer.send(conn, st, Bytes::from(pkt)) {
+                    tracing::warn!("mmo_quic: send error: {e}");
+                }
             }
         }
+
+        tokio::time::sleep(Duration::from_millis(8)).await;
     }
 }
 
-/// Minimal wire decoder — mirrors `Shared/src/protocol`.
-/// Tag 0x02: PositionUpdate | client_id (8) | x (4) | y (4)
-/// Tag 0x03: PlayerJoined   | client_id (8)
-/// Tag 0x04: PlayerLeft     | client_id (8)
-fn decode_and_push(data: &[u8], inbox: &Inbox) {
-    let mut cursor = 0;
-    while cursor < data.len() {
-        let tag = data[cursor];
-        cursor += 1;
-        let event = match tag {
-            0x02 if data.len() >= cursor + 16 => {
-                let client_id = i64::from_le_bytes(data[cursor..cursor + 8].try_into().unwrap());
-                let x = f32::from_le_bytes(data[cursor + 8..cursor + 12].try_into().unwrap());
-                let y = f32::from_le_bytes(data[cursor + 12..cursor + 16].try_into().unwrap());
-                cursor += 16;
-                Some(IncomingEvent::PositionUpdate { client_id, x, y })
+fn handle_event(
+    peer:        &mut GamePeer,
+    event:       GameNetworkEvent,
+    connection:  &mut Option<game_sockets::GameConnection>,
+    stream:      &mut Option<GameStream>,
+    hello_sent:  &mut bool,
+    inbox:       &Inbox,
+) {
+    match event {
+        GameNetworkEvent::Connected(conn) => {
+            tracing::info!("mmo_quic: connected (id={})", conn.connection_id);
+            *connection = Some(conn);
+            // Open a reliable stream — Broker expects one per client.
+            if let Err(e) = peer.create_stream(conn, GameStreamReliability::Reliable) {
+                tracing::error!("mmo_quic: create_stream failed: {e}");
             }
-            0x03 if data.len() >= cursor + 8 => {
-                let client_id = i64::from_le_bytes(data[cursor..cursor + 8].try_into().unwrap());
-                cursor += 8;
-                Some(IncomingEvent::PlayerJoined { client_id })
-            }
-            0x04 if data.len() >= cursor + 8 => {
-                let client_id = i64::from_le_bytes(data[cursor..cursor + 8].try_into().unwrap());
-                cursor += 8;
-                Some(IncomingEvent::PlayerLeft { client_id })
-            }
-            _ => break, // unknown tag — discard remainder
-        };
-        if let Some(ev) = event {
-            inbox.lock().unwrap().push(ev);
         }
+
+        GameNetworkEvent::StreamCreated(conn, st) if st.is_reliable() => {
+            tracing::info!("mmo_quic: reliable stream ready (stream={})", st.stream_id);
+            // Send ClientHello before storing — borrow st before the move.
+            if !*hello_sent {
+                let hello = encode_client_hello("GodotPlayer");
+                if let Err(e) = peer.send(&conn, &st, Bytes::from(hello)) {
+                    tracing::error!("mmo_quic: failed to send ClientHello: {e}");
+                } else {
+                    *hello_sent = true;
+                    tracing::info!("mmo_quic: ClientHello sent");
+                }
+            }
+            *stream = Some(st);
+        }
+
+        GameNetworkEvent::Message { data, .. } => {
+            if let Some(ev) = decode(&data) {
+                inbox.lock().unwrap().push(ev);
+            }
+        }
+
+        GameNetworkEvent::Disconnected(_) => {
+            tracing::warn!("mmo_quic: disconnected");
+            *connection = None;
+            *stream     = None;
+            *hello_sent = false;
+        }
+
+        GameNetworkEvent::StreamClosed(_, _) => {
+            *stream     = None;
+            *hello_sent = false;
+        }
+
+        GameNetworkEvent::Error { inner, .. } => {
+            tracing::warn!("mmo_quic: socket error: {inner}");
+        }
+
+        _ => {}
     }
 }
-
