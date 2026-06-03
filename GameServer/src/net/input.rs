@@ -24,8 +24,6 @@ pub fn handle_broker_client_input(
         return;
     }
 
-
-
     let Ok(mut registry) = registry.inner.try_lock() else {
         tracing::warn!("could not lock player registry for client input");
         return;
@@ -50,6 +48,7 @@ pub fn handle_broker_client_input(
         movement_x,
         movement_y
     );
+
 }
 
 fn read_f32_le(bytes: &[u8]) -> f32 {

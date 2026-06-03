@@ -33,7 +33,7 @@ pub fn handle_message(
     match message {
 
         NetworkMessage::ClientHello { username: _ } => {
-            if !peer_roles.registered(connection, PeerRole::Client, "ClientHello") {
+            if !peer_roles.register_role(connection, PeerRole::Client, "ClientHello") {
                 return;
             }
 
@@ -76,7 +76,7 @@ pub fn handle_message(
         }
 
         NetworkMessage::RegisterShard { shard_id } => {
-            if !peer_roles.registered(
+            if !peer_roles.register_role(
                 connection,
                 PeerRole::Shard,
                 "RegisterShard"
@@ -93,7 +93,7 @@ pub fn handle_message(
         }
 
         NetworkMessage::RegisterSpatialService => {
-            if !peer_roles.registered(
+            if !peer_roles.register_role(
                 connection,
                 PeerRole::SpatialService,
                 "RegisterSpatialService",
@@ -197,11 +197,19 @@ pub fn handle_message(
                 position,
             );
         }
+        //from broker to shard,  
+        // we need to register the client to the shard
+        // for AOI and client inputs
         NetworkMessage::RegisterClient { .. } => {}
+        //from spatial to broker then to shards
         NetworkMessage::HandoffRequest { .. } => {}
+        //from shard to broker then to spatial
         NetworkMessage::HandoffAccepted { .. } => {}
+        //from shard to broker then to spatial
         NetworkMessage::HandoffRejected { .. } => {}
+        //from a shard to another shard
         NetworkMessage::GhostUpdate { .. } => {}
+        //from shard to spatial
         NetworkMessage::HandoffCompleted { .. } => {}
     }
 }
