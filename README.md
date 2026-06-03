@@ -109,9 +109,9 @@ GodotClient/
 
 | Signal | Paramètres | Émis quand |
 |---|---|---|
-| `position_received` | `client_id: u64, x: f32, y: f32` | mise à jour de position reçue |
-| `player_joined` | `client_id: u64` | nouveau joueur dans la zone |
-| `player_left` | `client_id: u64` | joueur parti / déconnecté |
+| `position_received` | `client_id: i64, x: f32, y: f32` | mise à jour de position reçue |
+| `player_joined` | `client_id: i64` | nouveau joueur dans la zone |
+| `player_left` | `client_id: i64` | joueur parti / déconnecté |
 
 #### Fonctions GDScript → Rust
 
@@ -120,6 +120,97 @@ GodotClient/
 | `send_position(x, y)` | Envoie la position locale au serveur |
 | `set_client_id(id)` | Définit l'ID authentifié après login |
 | `set_server_addr(addr)` | Change l'adresse serveur avant `_ready()` |
+
+---
+
+### Test du multijoueur et des shards
+
+#### Prérequis
+
+- **Docker** en cours d'exécution (pour Redis)
+- Workspace compilé : `cargo build` depuis la racine
+- Godot installé : `cargo xtask setup` depuis `GodotClient/`
+
+#### 1 — Lancer tous les serveurs
+
+```powershell
+# Racine du projet
+.\run_all.ps1
+```
+
+Attendre le **heartbeat** dans la fenêtre Orchestrator :
+```
+[INFO] heartbeat received from gameserver @ 127.0.0.1:7001
+```
+
+#### 2 — Lancer le Broker
+
+```powershell
+# Nouveau terminal PowerShell
+.\target\debug\broker.exe
+```
+
+#### 3 — Lancer le SpatialService
+
+```powershell
+# Nouveau terminal PowerShell
+$env:SPATIAL_HOST         = "127.0.0.1"
+$env:SPATIAL_LISTEN_PORT  = "9500"
+$env:BROKER_HOST          = "127.0.0.1"
+$env:BROKER_PORT          = "9600"
+$env:WORLD_HALF_SIZE      = "2048"
+$env:QUAD_TREE_MAX_DEPTH  = "2"
+$env:CROSSING_MARGIN      = "100"
+.\target\debug\spatial_service.exe
+```
+
+`QUAD_TREE_MAX_DEPTH=2` crée une grille **2×2 = 4 shards**, idéale pour tester le handoff.
+
+#### 4 — Lancer deux clients Godot
+
+**Client 1** — terminal A :
+```powershell
+cd GodotClient
+cargo xtask run
+```
+
+**Client 2** — terminal B (changer l'`id` dans `scenes/player.gd` avant) :
+```gdscript
+# player.gd — ligne 9
+var my_client_id: int = 2   # 1 pour le client A, 2 pour le client B
+```
+```powershell
+cd GodotClient
+cargo xtask run
+```
+
+#### 5 — Ce qu'il faut observer
+
+| Action | Résultat attendu |
+|---|---|
+| Démarrage | HUD affiche `Disconnected` puis `Connected` |
+| Déplacement WASD | `Position` et `Shard` dans le HUD se mettent à jour |
+| Client B visible par A | `Entities: 1` apparaît dans le HUD du client A |
+| Traverser `x ≈ 2048` ou `y ≈ 2048` | `Shard` passe de `shard_0` → `shard_1` (ou autre) |
+| Logs SpatialService sur traversée | `crossing alert`, `handoff request`, `handoff ack` |
+
+#### 6 — Ports de référence
+
+| Service | Port |
+|---|---|
+| Redis | `6379` |
+| GateKeeper (HTTP) | `3000` |
+| Orchestrator | `9000` |
+| GameServer (shard 0) | `7001` |
+| Broker | `9600` |
+| SpatialService | `9500` |
+
+#### Identifiants de test (GateKeeper)
+
+```
+username : alice   (ou n'importe quelle valeur non vide)
+password : 1234
+```
 
 ---
 
@@ -230,9 +321,9 @@ GodotClient/
 
 | Signal | Parameters | Emitted when |
 |---|---|---|
-| `position_received` | `client_id: u64, x: f32, y: f32` | a position update is received |
-| `player_joined` | `client_id: u64` | a new player enters the AoI |
-| `player_left` | `client_id: u64` | a player leaves or disconnects |
+| `position_received` | `client_id: i64, x: f32, y: f32` | a position update is received |
+| `player_joined` | `client_id: i64` | a new player enters the AoI |
+| `player_left` | `client_id: i64` | a player leaves or disconnects |
 
 #### GDScript → Rust functions
 
@@ -248,3 +339,95 @@ GodotClient/
 - `inbox` / `outbox` are `Arc<Mutex<Vec<…>>>` — safe to share across threads.
 - Reconnection uses **exponential back-off** (1 s → 2 s → … → 32 s, then constant).
 - `bin/` and `.godot_bin/` are gitignored — run `cargo xtask setup` on each machine.
+
+---
+
+### Multiplayer & shard testing procedure
+
+#### Prerequisites
+
+- **Docker** running (for Redis)
+- Workspace compiled: `cargo build` from the project root
+- Godot installed: `cargo xtask setup` from `GodotClient/`
+
+#### 1 — Start all servers
+
+```powershell
+# From the project root
+.\run_all.ps1
+```
+
+Wait for the **heartbeat** to appear in the Orchestrator window:
+```
+[INFO] heartbeat received from gameserver @ 127.0.0.1:7001
+```
+
+#### 2 — Start the Broker
+
+```powershell
+# New PowerShell terminal
+.\target\debug\broker.exe
+```
+
+#### 3 — Start the SpatialService
+
+```powershell
+# New PowerShell terminal
+$env:SPATIAL_HOST         = "127.0.0.1"
+$env:SPATIAL_LISTEN_PORT  = "9500"
+$env:BROKER_HOST          = "127.0.0.1"
+$env:BROKER_PORT          = "9600"
+$env:WORLD_HALF_SIZE      = "2048"
+$env:QUAD_TREE_MAX_DEPTH  = "2"
+$env:CROSSING_MARGIN      = "100"
+.\target\debug\spatial_service.exe
+```
+
+`QUAD_TREE_MAX_DEPTH=2` creates a **2×2 = 4 shard** grid — ideal for handoff testing.
+
+#### 4 — Launch two Godot clients
+
+**Client 1** — terminal A:
+```powershell
+cd GodotClient
+cargo xtask run
+```
+
+**Client 2** — terminal B (change the id in `scenes/player.gd` first):
+```gdscript
+# player.gd — line 9
+var my_client_id: int = 2   # 1 for client A, 2 for client B
+```
+```powershell
+cd GodotClient
+cargo xtask run
+```
+
+#### 5 — Expected behaviour
+
+| Action | Expected result |
+|---|---|
+| Startup | HUD shows `Disconnected` then `Connected` |
+| WASD movement | `Position` and `Shard` in the HUD update in real time |
+| Client B visible from A | `Entities: 1` appears in client A's HUD |
+| Cross `x ≈ 2048` or `y ≈ 2048` | `Shard` changes from `shard_0` → `shard_1` (or equivalent) |
+| SpatialService logs on crossing | `crossing alert`, `handoff request`, `handoff ack` |
+
+#### 6 — Port reference
+
+| Service | Port |
+|---|---|
+| Redis | `6379` |
+| GateKeeper (HTTP) | `3000` |
+| Orchestrator | `9000` |
+| GameServer (shard 0) | `7001` |
+| Broker | `9600` |
+| SpatialService | `9500` |
+
+#### Test credentials (GateKeeper)
+
+```
+username : alice   (any non-empty string)
+password : 1234
+```
+
