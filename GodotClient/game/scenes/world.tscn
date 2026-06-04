@@ -1,34 +1,47 @@
-[gd_scene load_steps=6 format=3 uid="uid://world_main"]
+[gd_scene format=3 uid="uid://ckytm2721dv11"]
 
-[ext_resource type="Script" path="res://scenes/player.gd" id="1"]
-[ext_resource type="Script" path="res://scenes/entity_registry.gd" id="2"]
-[ext_resource type="PackedScene" uid="uid://test_level" path="res://scenes/levels/test_level.tscn" id="3"]
-[ext_resource type="PackedScene" uid="uid://debug_hud" path="res://scenes/ui/debug_hud.tscn" id="4"]
-[ext_resource type="Script" path="res://scenes/ui/shard_boundary_debug.gd" id="5"]
+[ext_resource type="Script" uid="uid://dym8ew41eilhd" path="res://scenes/entity_registry.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/levels/test_level.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/ui/debug_hud.tscn" id="3"]
+[ext_resource type="Script" uid="uid://b4eseavoq8alp" path="res://scenes/ui/shard_boundary_debug.gd" id="4"]
+[ext_resource type="PackedScene" path="res://scenes/gameplay/player_local.tscn" id="5"]
+[ext_resource type="Script" uid="uid://dqi3fo1nwovl8" path="res://scenes/gameplay/enemy_renderer.gd" id="6"]
+[ext_resource type="Script" uid="uid://dpvhhyxc8763o" path="res://scenes/gameplay/projectile_manager.gd" id="7"]
+[ext_resource type="Script" uid="uid://csfe67u0jjq7w" path="res://scenes/ui/color_swap_hud.gd" id="8"]
+[ext_resource type="PackedScene" path="res://scenes/gameplay/enemy.tscn" id="8_q5onr"]
+[ext_resource type="Script" uid="uid://bp4742re333q" path="res://scenes/gameplay/color_swap.gd" id="9"]
+[ext_resource type="Script" uid="uid://crsy2t5odbbb6" path="res://scenes/gameplay/local_enemy_spawner.gd" id="10"]
+[ext_resource type="PackedScene" path="res://scenes/gameplay/projectile.tscn" id="10_jhx03"]
 
-[sub_resource type="CapsuleShape2D" id="1"]
-radius = 12.0
-height = 28.0
+[node name="World" type="Node2D" unique_id=1217310598]
 
-[node name="World" type="Node2D"]
+[node name="TestLevel" parent="." unique_id=43037903 instance=ExtResource("2")]
 
-[node name="TestLevel" parent="." instance=ExtResource("3")]
+[node name="ShardBoundaryDebug" type="Node2D" parent="." unique_id=2074277090]
+script = ExtResource("4")
 
-[node name="ShardBoundaryDebug" type="Node2D" parent="."]
-script = ExtResource("5")
-
-[node name="EntityRegistry" type="Node2D" parent="."]
-script = ExtResource("2")
-
-[node name="LocalPlayer" type="CharacterBody2D" parent="."]
-position = Vector2(2048, 2048)
+[node name="EntityRegistry" type="Node2D" parent="." unique_id=709867117]
 script = ExtResource("1")
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="LocalPlayer"]
-shape = SubResource("1")
+[node name="EnemyRenderer" type="Node2D" parent="." unique_id=234224152]
+script = ExtResource("6")
 
-[node name="Camera2D" type="Camera2D" parent="LocalPlayer"]
-enabled = true
-zoom = Vector2(1.5, 1.5)
+[node name="ProjectileManager" type="Node2D" parent="." unique_id=353604725]
+script = ExtResource("7")
 
-[node name="DebugHUD" parent="." instance=ExtResource("4")]
+[node name="ColorSwap" type="Node" parent="." unique_id=879248730]
+script = ExtResource("9")
+
+[node name="LocalEnemySpawner" type="Node" parent="." unique_id=729102377]
+script = ExtResource("10")
+enemy_scene = ExtResource("8_q5onr")
+
+[node name="LocalPlayer" parent="." unique_id=1369306630 instance=ExtResource("5")]
+position = Vector2(640, 360)
+projectile_scene = ExtResource("10_jhx03")
+
+[node name="DebugHUD" parent="." unique_id=1087859414 instance=ExtResource("3")]
+
+[node name="ColorSwapHUD" type="CanvasLayer" parent="." unique_id=675722364]
+layer = 11
+script = ExtResource("8")

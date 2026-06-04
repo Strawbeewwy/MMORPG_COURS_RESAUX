@@ -15,6 +15,7 @@ use shared::protocol::game::player::{
 };
 use shared::protocol::transport::codec;
 use crate::config::ServerConfig;
+use crate::world::combat::PlayerCombatRegistry;
 
 #[derive(Debug, Default, Resource)]
 pub struct PlayerRegistry {
@@ -138,6 +139,21 @@ pub fn update_players_registry(
     registry.update_players(time.delta_secs());
 }
 
+/// Bevy system: register every known client_id in the combat registry.
+/// Runs after poll_broker_events so newly registered clients are picked up.
+pub fn sync_combat_registry(
+    registry: Res<SharedPlayerRegistry>,
+    mut combat_reg: ResMut<crate::world::combat::PlayerCombatRegistry>,
+) {
+    let Ok(reg) = registry.inner.try_lock() else { return };
+    for client_id in reg.client_player.keys() {
+        if !combat_reg.states.contains_key(client_id) {
+            combat_reg.register(*client_id);
+            tracing::info!("combat registry: registered new client_id={}", client_id.0);
+        }
+    }
+}
+
 pub fn handle_add_client_to_shard(
     config: &ServerConfig,
     registry: &SharedPlayerRegistry,
@@ -176,7 +192,7 @@ pub fn handle_register_client(
     registry: &SharedPlayerRegistry,
     client_id: ClientId,
     username: Username,
-){
+) {
     let Ok(mut registry) = registry.inner.try_lock() else {
         tracing::warn!("could not lock player registry for shard world snapshot publish");
         return;
@@ -187,6 +203,5 @@ pub fn handle_register_client(
         config.zone.clone(),
     );
 
-    registry.register_client(client_id,player.player_id);
-
+    registry.register_client(client_id, player.player_id);
 }

@@ -8,6 +8,7 @@ pub use discovery::{Heartbeat, ServerInfo};
 pub use game::{
     EntityId, PlayerPublicInfo, PlayerSnapshot, PlayerSpawnInfo,
     Username, NetVec2, WorldSnapshot, WorldUpdate, ZoneId,
+    ColorTeam, AttackType, ActionFlags, EnemySnapshot, ProjectileSnapshot,
 };
 pub use http::{ErrorResponse, HealthResponse, LoginHttpRequest, LoginHttpResponse};
 

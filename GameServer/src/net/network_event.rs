@@ -1,5 +1,10 @@
 use crate::config::ServerConfig;
 use crate::net::input::handle_broker_client_input;
+use crate::world::combat::{
+    PendingActions, PendingSwapEvents, PlayerCombatRegistry,
+};
+use crate::world::enemy::EnemyRegistry;
+use crate::world::projectile::ProjectileRegistry;
 use crate::world::state::{PlayerRegistry, handle_add_client_to_shard, handle_register_client};
 use bevy::prelude::*;
 use bytes::Bytes;
@@ -56,6 +61,7 @@ pub fn poll_broker_events(
     config: Res<ServerConfig>,
     mut broker_peer: ResMut<BrokerShardPeer>,
     registry: Res<SharedPlayerRegistry>,
+    mut pending: ResMut<PendingActions>,
 ) {
     loop {
         let event = match broker_peer.peer.poll() {
@@ -67,7 +73,7 @@ pub fn poll_broker_events(
             }
         };
 
-        handle_broker_event(&config, &mut broker_peer, &registry, event);
+        handle_broker_event(&config, &mut broker_peer, &registry, &mut pending, event);
     }
 }
 
@@ -75,6 +81,7 @@ fn handle_broker_event(
     config: &ServerConfig,
     broker_peer: &mut BrokerShardPeer,
     registry: &SharedPlayerRegistry,
+    pending: &mut PendingActions,
     event: GameNetworkEvent,
 ) {
     match event {
@@ -140,7 +147,7 @@ fn handle_broker_event(
                 data.len()
             );
 
-            handle_broker_message(config, registry, &data);
+            handle_broker_message(config, registry, pending, &data);
         }
 
         GameNetworkEvent::Error { connection, inner } => {
@@ -194,8 +201,9 @@ fn register_shard_with_broker(
 }
 
 fn handle_broker_message(
-    config: &ServerConfig,
+    _config: &ServerConfig,
     registry: &SharedPlayerRegistry,
+    pending: &mut PendingActions,
     data: &[u8],
 ) {
     let message = match decode_message(data) {
@@ -207,12 +215,11 @@ fn handle_broker_message(
     };
 
     match message {
-
         BrokerMessage::ClientInput { client_id, input } => {
-            handle_broker_client_input(config, registry, client_id, input);
+            handle_broker_client_input(_config, registry, pending, client_id, input);
         }
-        BrokerMessage::RegisterClient {client_id, username} => {
-            handle_register_client(config, registry,client_id, username.clone());
+        BrokerMessage::RegisterClient { client_id, username } => {
+            handle_register_client(config, registry, client_id, username.clone());
         }
 
         other => {
@@ -298,6 +305,62 @@ fn send_raw_to_broker(
         Err(error) => {
             tracing::error!("failed to send {label} to broker: {}", error);
             false
+        }
+    }
+}
+
+/// Publish 5SecsSwap gameplay updates (enemies, projectiles, colour swaps, scores).
+pub fn publish_gameplay_updates(
+    config: Res<ServerConfig>,
+    broker_peer: Res<BrokerShardPeer>,
+    enemy_reg: Res<EnemyRegistry>,
+    proj_reg: Res<ProjectileRegistry>,
+    mut swap_events: ResMut<PendingSwapEvents>,
+    mut combat_reg: ResMut<PlayerCombatRegistry>,
+) {
+    if !broker_peer.registered { return; }
+
+    // 1. Enemy batch update.
+    let enemies = enemy_reg.snapshots();
+    if !enemies.is_empty() {
+        publish_world_update(
+            &broker_peer,
+            config.shard_topic,
+            WorldUpdate::EnemiesUpdate { enemies },
+        );
+    }
+
+    // 2. Projectile batch update.
+    let projectiles = proj_reg.snapshots();
+    if !projectiles.is_empty() {
+        publish_world_update(
+            &broker_peer,
+            config.shard_topic,
+            WorldUpdate::ProjectilesUpdate { projectiles },
+        );
+    }
+
+    // 3. Colour swap events.
+    for swap_index in swap_events.0.drain(..) {
+        publish_world_update(
+            &broker_peer,
+            config.shard_topic,
+            WorldUpdate::ColorSwap { swap_index },
+        );
+    }
+
+    // 4. Score updates (delta only).
+    for (client_id, state) in combat_reg.states.iter_mut() {
+        if state.score > state.score_sent {
+            publish_world_update(
+                &broker_peer,
+                config.shard_topic,
+                WorldUpdate::PlayerScoreUpdate {
+                    client_id: *client_id,
+                    score: state.score,
+                },
+            );
+            state.score_sent = state.score;
         }
     }
 }

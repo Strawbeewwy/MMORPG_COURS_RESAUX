@@ -16,4 +16,10 @@ pub const TAG_GHOST_UPDATE: u8 = 0x23;
 pub const TAG_HANDOFF_COMPLETE: u8 = 0x24;
 pub const TAG_LEN: usize = 1;
 pub const MAX_PAYLOAD_LEN: usize = u16::MAX as usize;
-pub const CLIENT_INPUT_LEN: usize = 16;
+/// Input payload layout (17 bytes):
+///   [0..4]   move_x f32 LE
+///   [4..8]   move_y f32 LE
+///   [8]      action_flags bitmask (bit0=dash, bit1=melee, bit2=shoot)
+///   [9..13]  look_x f32 LE
+///   [13..17] look_y f32 LE
+pub const CLIENT_INPUT_LEN: usize = 17;
