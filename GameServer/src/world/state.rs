@@ -11,6 +11,10 @@ use shared::protocol::game::player::{
 };
 use crate::config::ServerConfig;
 
+
+pub const MAX_ENTITY_COUNT: usize = 10000;
+pub const MAX_PLAYER_COUNT: usize = 100;
+
 #[derive(Debug, Default, Resource)]
 pub struct EntityRegistry {
     // player id -> player
@@ -32,8 +36,8 @@ impl EntityRegistry {
         self.players.len()
     }
 
-    pub fn is_full(&self, max_players: usize) -> bool {
-        self.players.len() >= max_players
+    pub fn is_full(&self,) -> bool {
+        self.players.len() >= MAX_PLAYER_COUNT
     }
 
     pub fn update_players(&mut self, delta_seconds: f32) {
@@ -102,9 +106,14 @@ pub fn handle_register_client(
     username: Username,
 ){
     let Ok(mut registry) = registry.inner.try_lock() else {
-        tracing::warn!("could not lock player registry for shard world snapshot publish");
+        tracing::warn!("could not lock player registry for registering client");
         return;
     };
+    if (registry.is_full()){
+        tracing::warn!("player registry is full, cannot register client");
+        return;
+    }
+
     let player = Player {
         player_id: Uuid::new_v4().as_u128(),
         username,

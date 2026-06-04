@@ -4,11 +4,14 @@ use crate::net::heartbeat::{
 };
 use crate::net::network_event::{
     SharedPlayerRegistry, connect_to_broker,
-    poll_broker_events, publish_world_update,
-    publish_player_position_updates};
+    poll_broker_events, };
 use crate::world::state::{
     EntityRegistry, update_players_registry
 };
+use crate::net::publish::{
+publish_world_update, publish_player_position_updates
+};
+
 use bevy::app::ScheduleRunnerPlugin;
 use bevy::prelude::*;
 use shared::config::DEFAULT_DS_TICK_RATE;

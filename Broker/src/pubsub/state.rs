@@ -2,11 +2,10 @@
 use shared::game_sockets::{
     GameConnection, GameStream
 };
-use shared::protocol::{ClientId, ShardId, Topic};
+use shared::protocol::{ClientId, ShardId, Topic, Username};
 use std::collections::{
     HashMap, HashSet
 };
-use std::ptr::null;
 
 #[derive(Default)]
 pub struct PubSubState {
@@ -14,6 +13,7 @@ pub struct PubSubState {
     pub client_topics: HashMap<ClientId, HashSet<Topic>>,
     pub client_connections: HashMap<ClientId, GameConnection>,
     pub connection_clients: HashMap<GameConnection, ClientId>,
+    pub client_username: HashMap<ClientId, Username>,
     pub shard_streams_by_topic: HashMap<Topic, (GameConnection, GameStream)>,
     pub spatial_service_streams: HashMap<GameConnection, GameStream>,
     next_client_id: ClientId,
@@ -35,6 +35,7 @@ impl PubSubState {
     pub fn register_client_connection(
         &mut self,
         client_id: ClientId,
+        username: Username,
         connection: GameConnection,
     ) {
         tracing::info!(
@@ -57,6 +58,7 @@ impl PubSubState {
         }
 
         self.connection_clients.insert(connection, client_id);
+        self.client_username.insert(client_id, username);
     }
 
     pub fn register_spatial_service(
@@ -135,7 +137,7 @@ impl PubSubState {
     ) -> Option<Topic> {
         //TODO get the player active shard
         let topic: Option<Topic> = Some(Topic::ShardInstance(ShardId(0)));
-        return topic;
+         topic
     }
 
     pub fn register_shard_topic(
@@ -211,6 +213,20 @@ impl PubSubState {
 
             }
         }
+    }
+
+    pub fn get_shard_connection_and_stream(&mut self, shard_id: ShardId) -> Option<&(GameConnection, GameStream)> {
+
+        let topic = Topic::ShardInstance(shard_id);
+        let shard_connection = match self.shard_streams_by_topic.get(&topic) {
+            Some(connection) => connection,
+            None => {
+                tracing::warn!("no shard connection found for topic: {:?}", topic);
+                return None;
+            }
+        };
+
+        Some(shard_connection)
 
     }
 }

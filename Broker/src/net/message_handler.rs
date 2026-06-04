@@ -23,7 +23,7 @@ pub fn handle_message(
         Ok(message) => message,
         Err(error) => {
             tracing::warn!(
-                "invalid utils message from connection {}: {error}",
+                "invalid message from connection {}: {error}",
                 connection.connection_id
             );
             return;
@@ -32,14 +32,14 @@ pub fn handle_message(
 
     match message {
 
-        NetworkMessage::ClientHello { username: _ } => {
+        NetworkMessage::ClientHello { username } => {
             if !peer_roles.register_role(connection, PeerRole::Client, "ClientHello") {
                 return;
             }
 
 
             let client_id = state.allocate_client_id();
-            state.register_client_connection(client_id, connection);
+            state.register_client_connection(client_id,username, connection);
 
             let packet = match encode_message(&NetworkMessage::ClientAccepted {
                 client_id,
@@ -116,6 +116,49 @@ pub fn handle_message(
             }
 
             state.subscribe_registered_client(client_id, shard_id);
+
+            let topic = Topic::ShardInstance(shard_id);
+            let (shard_connection,shard_stream) = match state.shard_streams_by_topic.get(&topic){
+                Some((connection,stream)) => (connection,stream),
+                None => {
+                    tracing::warn!("no shard connection found for topic: {:?}", topic);
+                    return;
+                }
+            };
+
+            let username = match state.client_username.get(&client_id){
+                Some(username) => username,
+                None => {
+                    tracing::warn!("no username found for client_id: {}", client_id.0);
+                    return;
+                }
+            };
+
+            let packet  = match encode_message(&NetworkMessage::RegisterClient { client_id, username: username.clone() }){
+                Ok(packet) => packet,
+                Err(error) => {
+                    tracing::warn!(
+                            "failed to encode subscribe message for connection {}: {}",
+                            connection.connection_id,
+                            error
+                        );
+                    return;
+                }
+            };
+
+            if let Err(error) = peer.send(
+                &shard_connection,
+                &shard_stream,
+                Bytes::from(packet)
+            ) {
+                tracing::warn!(
+                        "failed to send register client to connection {}: {}",
+                        connection.connection_id,
+                        error
+                    );
+                return;
+            }
+
         }
 
         NetworkMessage::Unsubscribe { client_id, shard_id } => {
@@ -143,7 +186,7 @@ pub fn handle_message(
 
             let topic = Topic::ShardInstance(shard_id);
 
-            publish_to_client(
+            relay_to_client(
                 peer,
                 reliable_streams,
                 state,
@@ -169,13 +212,6 @@ pub fn handle_message(
                 input);
         }
 
-        NetworkMessage::Broadcast { .. } => {
-            tracing::warn!(
-                "utils received unexpected Broadcast message from connection {}",
-                connection.connection_id
-            );
-        }
-
         NetworkMessage::ClientAccepted { client_id } => {
             tracing::warn!(
                 "utils received unexpected ClientAccepted from connection {} for client_id={}",
@@ -199,19 +235,36 @@ pub fn handle_message(
                 position,
             );
         }
-        //from broker to shard,  
-        // we need to register the client to the shard
-        // for AOI and client inputs
-        NetworkMessage::RegisterClient { .. } => {}
         //from spatial to broker then to shards
-        NetworkMessage::HandoffRequest { .. } => {}
+        NetworkMessage::HandoffRequest { entity_id,from_shard_id,to_shard_id,position,velocity,entity_state } => {
+            relay_handoff_request_to_shards(
+                peer,
+                state,
+                entity_id,
+                from_shard_id,
+                to_shard_id,
+                position,
+                velocity,
+                entity_state,
+            );
+        }
         //from shard to broker then to spatial
-        NetworkMessage::HandoffAccepted { .. } => {}
+        NetworkMessage::HandoffAccepted{entity_id} => {
+
+
+        }
         //from shard to broker then to spatial
-        NetworkMessage::HandoffRejected { .. } => {}
+        NetworkMessage::HandoffRejected { entity_id } => {}
         //from a shard to another shard
-        NetworkMessage::GhostUpdate { .. } => {}
+        NetworkMessage::GhostUpdate { entity_id,position,velocity } => {}
         //from shard to spatial
-        NetworkMessage::HandoffCompleted { .. } => {}
+        NetworkMessage::HandoffCompleted { entity_id } => {}
+
+        _ => {
+            tracing::warn!(
+                "broker received unexpected message from connection {}",
+                connection.connection_id
+            );
+        }
     }
 }

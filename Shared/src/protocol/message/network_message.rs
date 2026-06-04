@@ -56,15 +56,12 @@ pub enum NetworkMessage {
     },
     HandoffAccepted {//from shard to broker then to spatial
         entity_id: EntityId,
-        accepting_shard_id: ShardId,
     },
     HandoffRejected { // from shard to broker then to spatial
         entity_id: EntityId,
-        rejecting_shard_id: ShardId,
     },
     GhostUpdate { // from shard to broker to another shard
         entity_id: EntityId,
-        to_shard_id: ShardId,
         position: NetVec2,
         velocity: NetVec2,
     },

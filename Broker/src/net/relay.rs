@@ -1,11 +1,12 @@
 use crate::pubsub::state::PubSubState;
 use bytes::Bytes;
 use shared::game_sockets::{GameConnection, GamePeer, GameStream};
-use shared::protocol::{CLIENT_INPUT_LEN, ClientId, Topic, encode_message, NetworkMessage, WorldUpdate, WorldSnapshot};
+use shared::protocol::{CLIENT_INPUT_LEN, ClientId, Topic, encode_message, NetworkMessage, EntityId, ShardId};
 use std::collections::HashMap;
+use shared::protocol::game::EntityState;
 use shared::protocol::NetVec2;
 
-pub fn publish_to_client(
+pub fn relay_to_client(
     peer: &GamePeer,
     reliable_streams: &HashMap<GameConnection, GameStream>,
     state: &PubSubState,
@@ -172,5 +173,54 @@ pub fn relay_position_update_to_spatial_services(
         state.spatial_service_streams.len()
     );
 
+}
+
+pub fn relay_handoff_request_to_shards(
+    peer : &GamePeer,
+    state: &mut PubSubState,
+    entity_id: EntityId,
+    from_shard_id: ShardId,
+    to_shard_id: ShardId,
+    position: NetVec2,
+    velocity: NetVec2,
+    entity_state: EntityState,
+    ){
+
+    let shard_connection =  match state.get_shard_connection_and_stream(to_shard_id) {
+        Some(connection) => connection,
+        None => return,
+    };
+
+
+
+    let packet = match encode_message(&NetworkMessage::HandoffRequest {
+        entity_id,
+        from_shard_id,
+        to_shard_id,
+        position,
+        velocity,
+        entity_state,
+    }) {
+        Ok(packet) => packet,
+        Err(error) => {
+            tracing::warn!(
+                        "failed to encode handoff request from shard {}: {}",
+                        from_shard_id.0,
+                        error
+                    );
+            return;
+        }
+    };
+
+
+    if let Err(error) = peer.send(&shard_connection.0,&shard_connection.1,Bytes::from(packet)) {
+        tracing::warn!(
+            "failed to forward HandoffRequest for entity {} from shard {} to shard {} : {}",
+            entity_id.0,
+            from_shard_id.0,
+            to_shard_id.0,
+            error
+        );
+    }
 }
 

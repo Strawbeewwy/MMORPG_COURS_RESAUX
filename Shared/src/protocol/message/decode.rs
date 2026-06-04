@@ -193,21 +193,17 @@ fn decode_handoff_complete(input: &mut &[u8]) -> anyhow::Result<NetworkMessage> 
 
 fn decode_handoff_accepted(input: &mut &[u8]) -> anyhow::Result<NetworkMessage> {
     let entity_id = EntityId(read_u32(input)?);
-    let accepting_shard_id = ShardId(read_u32(input)?);
 
     Ok(NetworkMessage::HandoffAccepted {
         entity_id,
-        accepting_shard_id,
     })
 }
 
 fn decode_handoff_rejected(input: &mut &[u8]) -> anyhow::Result<NetworkMessage> {
     let entity_id = EntityId(read_u32(input)?);
-    let rejecting_shard_id = ShardId(read_u32(input)?);
 
     Ok(NetworkMessage::HandoffRejected {
         entity_id,
-        rejecting_shard_id,
     })
 }
 
@@ -237,13 +233,11 @@ fn decode_handoff_request(input: &mut &[u8]) -> anyhow::Result<NetworkMessage> {
 
 fn decode_ghost_update(input: &mut &[u8]) -> anyhow::Result<NetworkMessage> {
     let entity_id = EntityId(read_u32(input)?);
-    let to_shard_id = ShardId(read_u32(input)?);
     let position = read_net_vec2(input)?;
     let velocity = read_net_vec2(input)?;
 
     Ok(NetworkMessage::GhostUpdate {
         entity_id,
-        to_shard_id,
         position,
         velocity,
     })

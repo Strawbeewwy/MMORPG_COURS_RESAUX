@@ -90,23 +90,20 @@ pub fn encode_message(message: &NetworkMessage) -> anyhow::Result<Vec<u8>> {
         }
         NetworkMessage::HandoffAccepted {
             entity_id,
-            accepting_shard_id,
         } => {
-            encode_handoff_accepted(*entity_id, *accepting_shard_id)
+            encode_handoff_accepted(*entity_id)
         }
         NetworkMessage::HandoffRejected {
             entity_id,
-            rejecting_shard_id,
         } => {
-            encode_handoff_rejected(*entity_id, *rejecting_shard_id)
+            encode_handoff_rejected(*entity_id)
         }
         NetworkMessage::GhostUpdate {
             entity_id,
-            to_shard_id,
             position,
             velocity,
         } => {
-            encode_ghost_update(*entity_id, *to_shard_id, *position, *velocity)
+            encode_ghost_update(*entity_id, *position, *velocity)
         }
         NetworkMessage::HandoffCompleted { entity_id } => {
             encode_handoff_completed(*entity_id)
@@ -290,7 +287,6 @@ fn encode_handoff_completed(entity_id: EntityId) -> anyhow::Result<Vec<u8>> {
 
 fn encode_handoff_accepted(
     entity_id: EntityId,
-    accepting_shard_id: ShardId,
 ) -> anyhow::Result<Vec<u8>> {
     let mut packet = Vec::with_capacity(
         TAG_LEN + ENTITY_ID_LEN + TOPIC_ID_LEN
@@ -298,14 +294,12 @@ fn encode_handoff_accepted(
 
     write_u8(&mut packet, TAG_HANDOFF_ACCEPTED);
     write_u32(&mut packet, entity_id.0);
-    write_u32(&mut packet, accepting_shard_id.0);
 
     Ok(packet)
 }
 
 fn encode_handoff_rejected(
     entity_id: EntityId,
-    rejecting_shard_id: ShardId,
 ) -> anyhow::Result<Vec<u8>> {
     let mut packet = Vec::with_capacity(
         TAG_LEN + ENTITY_ID_LEN + TOPIC_ID_LEN
@@ -313,7 +307,6 @@ fn encode_handoff_rejected(
 
     write_u8(&mut packet, TAG_HANDOFF_REJECTED);
     write_u32(&mut packet, entity_id.0);
-    write_u32(&mut packet, rejecting_shard_id.0);
 
     Ok(packet)
 }
@@ -343,7 +336,6 @@ fn encode_handoff_request(
 
 fn encode_ghost_update(
     entity_id: EntityId,
-    to_shard_id: ShardId,
     position: NetVec2,
     velocity: NetVec2,
 ) -> anyhow::Result<Vec<u8>> {
@@ -353,7 +345,6 @@ fn encode_ghost_update(
 
     write_u8(&mut packet, TAG_GHOST_UPDATE);
     write_u32(&mut packet, entity_id.0);
-    write_u32(&mut packet, to_shard_id.0);
     write_net_vec2(&mut packet, position);
     write_net_vec2(&mut packet, velocity);
 

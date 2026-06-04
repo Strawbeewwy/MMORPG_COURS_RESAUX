@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use anyhow::Context;
-use crate::protocol::{ClientId, NetVec2, Username, CLIENT_ID_LEN};
+use crate::protocol::{ClientId, NetVec2, Username};
 use crate::protocol::game::PlayerId;
 pub use crate::protocol::message::network_message::{
     NetworkMessage,
