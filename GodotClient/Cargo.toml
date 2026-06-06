@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "rust",
+    "rust/xtask",
+]
+resolver = "2"
+

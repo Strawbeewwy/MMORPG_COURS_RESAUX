@@ -8,6 +8,7 @@ members = [
     "GameClient",
     "SpatialService",
     "Broker",
+    # GodotClient/ has its own workspace — build it from GodotClient/ with `cargo xtask <cmd>`
 ]
 resolver = "2"
 
