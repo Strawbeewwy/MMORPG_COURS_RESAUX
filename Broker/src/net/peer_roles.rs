@@ -14,8 +14,9 @@ pub struct PeerRoles {
 }
 
 impl PeerRoles {
-    pub fn remove(&mut self, connection: GameConnection) {
-        self.roles.remove(&connection);
+    pub fn remove(&mut self, connection: GameConnection)-> Option<PeerRole> {
+        let role = self.roles.remove(&connection);
+        role
     }
 
     pub fn register_role(

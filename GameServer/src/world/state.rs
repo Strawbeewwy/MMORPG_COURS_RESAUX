@@ -5,7 +5,6 @@ use shared::protocol::{NetVec2, EntityId, Username, PlayerSnapshot};
 use bevy::platform::collections::HashMap;
 use uuid::Uuid;
 use shared::protocol::ClientId;
-use shared::protocol::game::EntityType;
 use shared::protocol::game::player::{
     Player, PlayerId, PLAYER_DEFAULT_MOVE_SPEED,
 };
@@ -27,7 +26,7 @@ pub struct EntityRegistry {
     // used for client-to-shard communication
     pub client_player: HashMap<ClientId, PlayerId>,
     // entity -> type
-    pub entity_type: HashMap<EntityId, EntityType>,
+    pub entity_client: HashMap<EntityId, Option<ClientId>>,
 
 }
 
@@ -45,7 +44,7 @@ impl EntityRegistry {
             player.update_movement(delta_seconds);
             /*
                 we can add more stuff the players need updated on
-                like health, inventory, etc.
+                like health, buff/debuff, etc.
              */
         }
 
@@ -68,7 +67,8 @@ impl EntityRegistry {
 
     pub fn remove_client(&mut self, client_id: &ClientId) {
         self.player_client.remove(self.client_player.get(client_id).unwrap());
-        self.client_player.remove(client_id);
+        let played_id = self.client_player.remove(client_id);
+        self.players.remove(&played_id.unwrap());
     }
 
     pub fn generate_player_snapshot(&self)-> Vec<PlayerSnapshot> {

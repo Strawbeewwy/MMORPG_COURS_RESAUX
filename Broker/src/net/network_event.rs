@@ -1,5 +1,5 @@
 use crate::net::message_handler::handle_message;
-use crate::net::peer_roles::PeerRoles;
+use crate::net::peer_roles::{PeerRoles};
 use crate::pubsub::state::PubSubState;
 use shared::game_sockets::protocols::QuicBackend;
 use shared::game_sockets::{
@@ -67,9 +67,9 @@ impl BrokerNetwork {
             GameNetworkEvent::Disconnected(connection) => {
                 tracing::info!("peer disconnected from utils: {}", connection.connection_id);
 
-                self.reliable_streams.remove(&connection);
-                self.peer_roles.remove(connection);
-                state.remove_connection(connection);
+                let stream  = self.reliable_streams.remove(&connection);
+                let peer_role = self.peer_roles.remove(connection);
+                state.remove_connection(peer_role.unwrap(),connection, stream.unwrap());
             }
 
             GameNetworkEvent::StreamCreated(connection, stream) => {
@@ -101,7 +101,6 @@ impl BrokerNetwork {
             } => {
                 handle_message(
                     &self.peer,
-                    &self.reliable_streams,
                     &mut self.peer_roles,
                     state,
                     connection,

@@ -2,21 +2,29 @@
 use shared::game_sockets::{
     GameConnection, GameStream
 };
-use shared::protocol::{ClientId, ShardId, Topic, Username};
+use shared::protocol::{ClientId, EntityId, ShardId, Topic, Username};
 use std::collections::{
     HashMap, HashSet
 };
+use crate::net::peer_roles::PeerRole;
 
 #[derive(Default)]
 pub struct PubSubState {
+    // Client
+    next_client_id: ClientId,
+    pub client_connections: HashMap<ClientId, (GameConnection, GameStream)>,
+    pub client_username: HashMap<ClientId, Username>,
     pub topic_subscribers: HashMap<Topic, HashSet<ClientId>>,
     pub client_topics: HashMap<ClientId, HashSet<Topic>>,
-    pub client_connections: HashMap<ClientId, GameConnection>,
-    pub connection_clients: HashMap<GameConnection, ClientId>,
-    pub client_username: HashMap<ClientId, Username>,
+    //entity
+    pub entity_clients: HashMap<EntityId, Option<ClientId>>,
+    pub client_entity: HashMap<ClientId, EntityId>,
+    pub ghost_entity: HashMap<EntityId, (ShardId,ShardId)>,
+    //shard
     pub shard_streams_by_topic: HashMap<Topic, (GameConnection, GameStream)>,
-    pub spatial_service_streams: HashMap<GameConnection, GameStream>,
-    next_client_id: ClientId,
+    // spatial
+    pub spatial_service_streams: Option<(GameConnection, GameStream)>,
+
 }
 impl PubSubState {
     pub fn allocate_client_id(&mut self) -> ClientId {
@@ -34,9 +42,10 @@ impl PubSubState {
 
     pub fn register_client_connection(
         &mut self,
-        client_id: ClientId,
-        username: Username,
-        connection: GameConnection,
+        client_id: &ClientId,
+        username: &Username,
+        connection: &GameConnection,
+        stream: &GameStream,
     ) {
         tracing::info!(
             "register client={} connection={}",
@@ -44,21 +53,21 @@ impl PubSubState {
             connection.connection_id
         );
 
-        if let Some(previous_connection) = self.client_connections.insert(client_id, connection) {
-            if previous_connection != connection {
+        if let Some(previous_connection) = self.client_connections.insert(client_id.clone(), (connection.clone(),stream.clone())) {
+            if previous_connection.0 != *connection {
                 tracing::warn!(
                     "client={} was already registered on connection {}; replacing with connection {}",
                     client_id.0,
-                    previous_connection.connection_id,
+                    previous_connection.0.connection_id,
                     connection.connection_id
                 );
 
-                self.connection_clients.remove(&previous_connection);
+                self.client_connections.remove(&client_id);
             }
         }
+        self.client_connections.insert(*client_id, (connection.clone(),stream.clone()));
+        self.client_username.insert(client_id.clone(), username.clone());
 
-        self.connection_clients.insert(connection, client_id);
-        self.client_username.insert(client_id, username);
     }
 
     pub fn register_spatial_service(
@@ -72,7 +81,7 @@ impl PubSubState {
             stream.stream_id
         );
 
-        self.spatial_service_streams.insert(connection, stream);
+        self.spatial_service_streams = Some((connection, stream));
     }
 
 
@@ -104,9 +113,9 @@ impl PubSubState {
     pub fn unsubscribe_client(
         &mut self,
         client_id: ClientId,
-        shard_id: ShardId) {
+        topic: Topic
+    ) {
 
-        let topic = Topic::ShardInstance(shard_id);
         tracing::info!(
             "unsubscribe client={} topic={}",
             client_id.0,
@@ -158,41 +167,64 @@ impl PubSubState {
             .insert(topic, (connection, stream));
     }
 
-    pub fn remove_connection(&mut self, connection: GameConnection) {
-        if let Some(client_id) = self.connection_clients.remove(&connection) {
-            self.client_connections.remove(&client_id);
+    pub fn remove_connection(
+        &mut self,
+        peer_role : PeerRole,
+        connection: GameConnection,
+        stream: GameStream)
+    {
 
-            if let Some(topics) = self.client_topics.remove(&client_id) {
-                for topic in topics {
-                    if let Some(subscribers) = self.topic_subscribers.get_mut(&topic) {
-                        subscribers.remove(&client_id);
+        match peer_role {
+            PeerRole::Client => {
+                let client_id_to_remove = self.client_connections
+                    .iter()
+                    .find(|(_, (conn, str))| *conn == connection && *str == stream)
+                    .map(|(client_id, _)| *client_id);
 
-                        if subscribers.is_empty() {
-                            self.topic_subscribers.remove(&topic);
+                if client_id_to_remove.is_some() {
+                    self.client_connections.remove(&client_id_to_remove.unwrap());
+
+                    if let Some(topics) = self.client_topics.remove(&&client_id_to_remove.unwrap()) {
+                        for topic in topics {
+                            if let Some(subscribers) = self.topic_subscribers.get_mut(&topic) {
+                                subscribers.remove(&&client_id_to_remove.unwrap());
+
+                                if subscribers.is_empty() {
+                                    self.topic_subscribers.remove(&topic);
+                                }
+                            }
                         }
+                    }
+
+                    if let Some(entity_id) = self.client_entity.remove(&client_id_to_remove.unwrap()) {
+                        self.entity_clients.remove(&entity_id);
                     }
                 }
             }
-        }
+            PeerRole::Shard => {
+                let removed_shard_topics: Vec<Topic> = self
+                    .shard_streams_by_topic
+                    .iter()
+                    .filter_map(|(topic, (shard_connection, _))| {
+                        if *shard_connection == connection {
+                            Some(*topic)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
 
-        let removed_shard_topics: Vec<Topic> = self
-            .shard_streams_by_topic
-            .iter()
-            .filter_map(|(topic, (shard_connection, _))| {
-                if *shard_connection == connection {
-                    Some(*topic)
-                } else {
-                    None
+                self.shard_streams_by_topic
+                    .retain(|_, (shard_connection, _)| *shard_connection != connection);
+
+                for topic in removed_shard_topics {
+                    self.remove_dead_shard_topic(topic);
                 }
-            })
-            .collect();
+            },
+            _ => {}
+        };
 
-        self.shard_streams_by_topic
-            .retain(|_, (shard_connection, _)| *shard_connection != connection);
 
-        for topic in removed_shard_topics {
-            self.remove_dead_shard_topic(topic);
-        }
     }
 
     fn remove_dead_shard_topic(&mut self, topic: Topic) {

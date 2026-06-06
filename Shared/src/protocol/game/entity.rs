@@ -12,7 +12,6 @@ pub enum EntityType {
     Npc,
     Item,
     Projectile,
-    Effect,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

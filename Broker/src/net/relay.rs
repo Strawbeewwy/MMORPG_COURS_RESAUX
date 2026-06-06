@@ -1,14 +1,12 @@
 use crate::pubsub::state::PubSubState;
 use bytes::Bytes;
-use shared::game_sockets::{GameConnection, GamePeer, GameStream};
+use shared::game_sockets::{GamePeer};
 use shared::protocol::{CLIENT_INPUT_LEN, ClientId, Topic, encode_message, NetworkMessage, EntityId, ShardId};
-use std::collections::HashMap;
 use shared::protocol::game::EntityState;
 use shared::protocol::NetVec2;
 
 pub fn relay_to_client(
     peer: &GamePeer,
-    reliable_streams: &HashMap<GameConnection, GameStream>,
     state: &PubSubState,
     topic: Topic,
     client_id: ClientId,
@@ -33,7 +31,7 @@ pub fn relay_to_client(
         return;
     }
 
-    let Some(connection) = state.client_connections.get(&client_id) else {
+    let Some((connection,stream) )= state.client_connections.get(&client_id) else {
         tracing::debug!(
             "cannot publish to client {}: no client connection registered",
             client_id.0
@@ -41,14 +39,6 @@ pub fn relay_to_client(
         return;
     };
 
-    let Some(stream) = reliable_streams.get(connection) else {
-        tracing::debug!(
-            "cannot publish to client {}: no reliable stream for connection {}",
-            client_id.0,
-            connection.connection_id
-        );
-        return;
-    };
 
     let packet = match encode_message(&NetworkMessage::Broadcast {
         payload_len,
@@ -127,13 +117,16 @@ pub fn relay_position_update_to_spatial_services(
     position: NetVec2,
 ){
 
-    if state.spatial_service_streams.is_empty() {
-        tracing::warn!(
+    let (connection, stream) = match state.spatial_service_streams.clone() {
+        Some((connection, stream)) => (connection, stream),
+        None => {
+            tracing::warn!(
                     "cannot forward PositionUpdate for client {}: no spatial service registered",
                     client_id.0
                 );
-        return;
-    }
+            return;
+        }
+    };
 
     let packet = match encode_message(&NetworkMessage::PositionUpdate {
         client_id,
@@ -150,29 +143,16 @@ pub fn relay_position_update_to_spatial_services(
         }
     };
 
-    for (spatial_connection, spatial_stream) in &state.spatial_service_streams {
-        if let Err(error) = peer.send(
-            spatial_connection,
-            spatial_stream,
-            Bytes::from(packet.clone()),
-        ) {
-            tracing::warn!(
-                "failed to forward PositionUpdate for client {} to spatial service connection {}: {}",
-                client_id.0,
-                spatial_connection.connection_id,
-                error
-            );
-        }
-    }
-
-    tracing::debug!(
-        "forwarded PositionUpdate client_id={} position=({}, {}) to {} spatial service(s)",
-        client_id.0,
-        position.x,
-        position.y,
-        state.spatial_service_streams.len()
-    );
-
+    if let Err(error) = peer.send(&connection,&stream,Bytes::from(packet.clone())) {
+        tracing::warn!(
+            "failed to send PositionUpdate client_id={} position=({}, {}) to {} spatial service: {}" ,
+            client_id.0,
+            position.x,
+            position.y,
+            state.spatial_service_streams.clone().unwrap().0.connection_id,
+            error);
+            return;
+    };
 }
 
 pub fn relay_handoff_request_to_shards(
@@ -186,7 +166,7 @@ pub fn relay_handoff_request_to_shards(
     entity_state: EntityState,
     ){
 
-    let shard_connection =  match state.get_shard_connection_and_stream(to_shard_id) {
+    let (shard_connection, shard_stream) =  match state.get_shard_connection_and_stream(to_shard_id) {
         Some(connection) => connection,
         None => return,
     };
@@ -213,7 +193,7 @@ pub fn relay_handoff_request_to_shards(
     };
 
 
-    if let Err(error) = peer.send(&shard_connection.0,&shard_connection.1,Bytes::from(packet)) {
+    if let Err(error) = peer.send(&shard_connection,&shard_stream,Bytes::from(packet)) {
         tracing::warn!(
             "failed to forward HandoffRequest for entity {} from shard {} to shard {} : {}",
             entity_id.0,
@@ -223,4 +203,126 @@ pub fn relay_handoff_request_to_shards(
         );
     }
 }
+
+
+pub fn relay_handoff_accepted_to_spatial(
+    peer: &GamePeer,
+    state: &mut PubSubState,
+    entity_id: EntityId) {
+
+    let (connection, stream) = match state.spatial_service_streams.clone() {
+        Some((connection, stream)) => (connection, stream),
+        None => {
+            tracing::warn!(
+                    "cannot forward handoff accept for entity {}: no spatial service registered",
+                    entity_id.0
+                );
+            return;
+        }
+    };
+
+    let packet = match encode_message(&NetworkMessage::HandoffAccepted {
+        entity_id,
+    }) {
+        Ok(packet) => packet,
+        Err(error) => {
+            tracing::warn!(
+                        "failed to encode Handoff accept for entity {}: {}",
+                        entity_id.0,
+                        error
+                    );
+            return;
+        }
+    };
+
+    if let Err(error) = peer.send(&connection,&stream,Bytes::from(packet)) {
+        tracing::warn!(
+            "failed to forward HandoffAccepted for entity {} : {}",
+            entity_id.0,
+            error
+        );
+    }
+
+}
+
+pub fn relay_handoff_rejected_to_spatial(
+    peer: &GamePeer,
+    state: &mut PubSubState,
+    entity_id: EntityId) {
+
+    let (connection, stream) = match state.spatial_service_streams.clone() {
+        Some((connection, stream)) => (connection, stream),
+        None => {
+            tracing::warn!(
+                    "cannot forward handoff reject for entity {}: no spatial service registered",
+                    entity_id.0
+                );
+            return;
+        }
+    };
+
+    let packet = match encode_message(&NetworkMessage::HandoffRejected {
+        entity_id,
+    }) {
+        Ok(packet) => packet,
+        Err(error) => {
+            tracing::warn!(
+                        "failed to encode Handoff reject for entity {}: {}",
+                        entity_id.0,
+                        error
+                    );
+            return;
+        }
+    };
+
+    if let Err(error) = peer.send(&connection,&stream,Bytes::from(packet)) {
+        tracing::warn!(
+            "failed to forward HandoffRejected for entity {} : {}",
+            entity_id.0,
+            error
+        );
+    }
+
+}
+
+pub fn relay_handoff_completed_to_shard(
+    peer: &GamePeer,
+    state: &mut PubSubState,
+    entity_id: EntityId,
+) {
+
+    let to_shard_id = state.ghost_entity.get(&entity_id).unwrap().1;
+
+
+    let (shard_connection, shard_stream) =  match state.get_shard_connection_and_stream(to_shard_id) {
+        Some((connection,stream)) => (connection,stream),
+        None => return,
+    };
+    
+    
+    let packet = match encode_message(&NetworkMessage::HandoffCompleted {
+        entity_id,
+    }) {
+        Ok(packet) => packet,
+        Err(error) => {
+            tracing::warn!(
+                        "failed to encode Handoff reject for entity {}: {}",
+                        entity_id.0,
+                        error
+                    );
+            return;
+        }
+    };
+    
+
+    if let Err(error) = peer.send(&shard_connection,&shard_stream,Bytes::from(packet)) {
+        tracing::warn!(
+            "failed to forward HandoffRejected for entity {} : {}",
+            entity_id.0,
+            error
+        );
+    }
+
+}
+
 

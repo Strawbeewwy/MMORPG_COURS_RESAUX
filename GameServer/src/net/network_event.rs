@@ -231,6 +231,15 @@ fn handle_broker_message(
         NetworkMessage::HandoffRequest {entity_id, from_shard_id, to_shard_id, position, velocity, entity_state} => {
             handle_handoff_request(config, registry, entity_id, from_shard_id, to_shard_id, position, velocity, entity_state);
         }
+        NetworkMessage::HandoffAccepted {entity_id} => {
+
+        }
+        NetworkMessage::HandoffRejected {entity_id} => {
+
+        }
+        NetworkMessage::HandoffCompleted {entity_id} => {
+
+        }
 
         other => {
             tracing::warn!("unexpected broker message received by shard: {:?}", other);

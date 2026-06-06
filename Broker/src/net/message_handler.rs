@@ -7,12 +7,10 @@ use crate::pubsub::state::PubSubState;
 use shared::game_sockets::{
     GameConnection, GamePeer, GameStream
 };
-use shared::protocol::{NetworkMessage, decode_message, encode_message, Topic};
-use std::collections::HashMap;
+use shared::protocol::{NetworkMessage, decode_message, encode_message, Topic, EntityId};
 
 pub fn handle_message(
     peer: &GamePeer,
-    reliable_streams: &HashMap<GameConnection, GameStream>,
     peer_roles: &mut PeerRoles,
     state: &mut PubSubState,
     connection: GameConnection,
@@ -39,7 +37,7 @@ pub fn handle_message(
 
 
             let client_id = state.allocate_client_id();
-            state.register_client_connection(client_id,username, connection);
+            state.register_client_connection(&client_id,&username, &connection ,&stream);
 
             let packet = match encode_message(&NetworkMessage::ClientAccepted {
                 client_id,
@@ -165,8 +163,9 @@ pub fn handle_message(
             if !peer_roles.ensure(connection, PeerRole::SpatialService, "Unsubscribe") {
                 return;
             }
+            let topic = Topic::ShardInstance(shard_id);
 
-            state.unsubscribe_client(client_id, shard_id);
+            state.unsubscribe_client(client_id, topic);
         }
 
         NetworkMessage::Publish { shard_id, client_id, payload_len,payload } => {
@@ -188,7 +187,6 @@ pub fn handle_message(
 
             relay_to_client(
                 peer,
-                reliable_streams,
                 state,
                 topic,
                 client_id,
@@ -237,6 +235,7 @@ pub fn handle_message(
         }
         //from spatial to broker then to shards
         NetworkMessage::HandoffRequest { entity_id,from_shard_id,to_shard_id,position,velocity,entity_state } => {
+
             relay_handoff_request_to_shards(
                 peer,
                 state,
@@ -251,14 +250,54 @@ pub fn handle_message(
         //from shard to broker then to spatial
         NetworkMessage::HandoffAccepted{entity_id} => {
 
+            if !peer_roles.ensure(
+                connection,
+                PeerRole::Shard,
+                "HandoffAccepted") {
+                return;
+            }
 
+
+            relay_handoff_accepted_to_spatial(
+                peer,
+                state,
+                entity_id,
+            );
         }
         //from shard to broker then to spatial
-        NetworkMessage::HandoffRejected { entity_id } => {}
+        NetworkMessage::HandoffRejected { entity_id } => {
+
+            if !peer_roles.ensure(
+                connection,
+                PeerRole::Shard,
+                "HandoffRejected") {
+                return;
+            }
+
+            relay_handoff_rejected_to_spatial(
+                peer,
+                state,
+                entity_id,
+            );
+        }
         //from a shard to another shard
         NetworkMessage::GhostUpdate { entity_id,position,velocity } => {}
-        //from shard to spatial
-        NetworkMessage::HandoffCompleted { entity_id } => {}
+        //from spatial to shard
+        NetworkMessage::HandoffCompleted { entity_id } => {
+            if !peer_roles.ensure(
+                connection,
+                PeerRole::SpatialService,
+                "HandoffCompleted") {
+                return;
+            }
+
+            relay_handoff_completed_to_shard(
+                peer,
+                state,
+                entity_id,
+            );
+
+        }
 
         _ => {
             tracing::warn!(
@@ -268,3 +307,7 @@ pub fn handle_message(
         }
     }
 }
+
+
+
+
