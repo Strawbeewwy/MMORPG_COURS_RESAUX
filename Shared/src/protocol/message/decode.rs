@@ -1,27 +1,20 @@
+use anyhow::anyhow;
 use crate::protocol::message::config::*;
 pub use crate::protocol::message::network_message::NetworkMessage;
 pub use crate::protocol::public_types::topic::{
     ShardId,
     Topic,
 };
-pub use crate::protocol::game::entity::{
+pub use crate::protocol::public_types::entity::{
     EntityId,
     EntityState,
+    EntityType,
 };
 use crate::protocol::{
     ClientId,
     Username,
 };
-use crate::protocol::utils::utils::{
-    BinaryDecode,
-    read_client_id,
-    read_exact,
-    read_net_vec2,
-    read_u8,
-    read_u16,
-    read_u32,
-    read_username,
-};
+use crate::protocol::utils::utils::{BinaryDecode, read_client_id, read_exact, read_net_vec2, read_u8, read_u16, read_u32, read_username, read_entity_type, read_optional_client_id};
 
 pub fn decode_message(data: &[u8]) -> anyhow::Result<NetworkMessage> {
     let mut input = data;
@@ -39,6 +32,8 @@ pub fn decode_message(data: &[u8]) -> anyhow::Result<NetworkMessage> {
         TAG_CLIENT_HELLO => decode_client_hello(&mut input)?,
         TAG_CLIENT_REGISTER => decode_register_client(&mut input)?,
         TAG_CLIENT_ACCEPTED => decode_client_accepted(&mut input)?,
+        TAG_REQUEST_ENTITY_ID_BLOCK => decode_request_entity_id_block(&mut input)?,
+        TAG_ENTITY_ID_BLOCK_ALLOCATED => decode_entity_id_block_allocated(&mut input)?,
         TAG_POSITION_UPDATE => decode_position_update(&mut input)?,
         TAG_HANDOFF_REQUEST => decode_handoff_request(&mut input)?,
         TAG_HANDOFF_ACCEPTED => decode_handoff_accepted(&mut input)?,
@@ -173,42 +168,78 @@ fn decode_client_accepted(input: &mut &[u8]) -> anyhow::Result<NetworkMessage> {
     })
 }
 
+fn decode_request_entity_id_block(input: &mut &[u8]) -> anyhow::Result<NetworkMessage> {
+    let shard_id = ShardId(read_u32(input)?);
+    let count = read_u32(input)?;
+
+    Ok(NetworkMessage::RequestEntityIdBlock {
+        shard_id,
+        count,
+    })
+}
+
+fn decode_entity_id_block_allocated(input: &mut &[u8]) -> anyhow::Result<NetworkMessage> {
+    let shard_id = ShardId(read_u32(input)?);
+    let start = read_u32(input)?;
+    let count = read_u32(input)?;
+
+    Ok(NetworkMessage::EntityIdBlockAllocated {
+        shard_id,
+        start,
+        count,
+    })
+}
+
 fn decode_position_update(input: &mut &[u8]) -> anyhow::Result<NetworkMessage> {
-    let client_id = read_client_id(input)?;
+    let entity_id = EntityId(read_u32(input)?);
     let position = read_net_vec2(input)?;
 
     Ok(NetworkMessage::PositionUpdate {
-        client_id,
+        entity_id,
         position,
     })
 }
 
 fn decode_handoff_complete(input: &mut &[u8]) -> anyhow::Result<NetworkMessage> {
     let entity_id = EntityId(read_u32(input)?);
+    let from_shard_id = ShardId(read_u32(input)?);
+    let to_shard_id = ShardId(read_u32(input)?);
 
     Ok(NetworkMessage::HandoffCompleted {
         entity_id,
+        from_shard_id,
+        to_shard_id,
     })
 }
 
 fn decode_handoff_accepted(input: &mut &[u8]) -> anyhow::Result<NetworkMessage> {
     let entity_id = EntityId(read_u32(input)?);
+    let from_shard_id = ShardId(read_u32(input)?);
+    let to_shard_id = ShardId(read_u32(input)?);
 
     Ok(NetworkMessage::HandoffAccepted {
         entity_id,
+        from_shard_id,
+        to_shard_id,
     })
 }
 
 fn decode_handoff_rejected(input: &mut &[u8]) -> anyhow::Result<NetworkMessage> {
     let entity_id = EntityId(read_u32(input)?);
+    let from_shard_id = ShardId(read_u32(input)?);
+    let to_shard_id = ShardId(read_u32(input)?);
 
     Ok(NetworkMessage::HandoffRejected {
         entity_id,
+        from_shard_id,
+        to_shard_id,
     })
 }
 
 fn decode_handoff_request(input: &mut &[u8]) -> anyhow::Result<NetworkMessage> {
     let entity_id = EntityId(read_u32(input)?);
+    let entity_type = read_entity_type(input)?;
+    let owner_client_id = read_optional_client_id(input)?;
     let from_shard_id = ShardId(read_u32(input)?);
     let to_shard_id = ShardId(read_u32(input)?);
     let position = read_net_vec2(input)?;
@@ -219,10 +250,12 @@ fn decode_handoff_request(input: &mut &[u8]) -> anyhow::Result<NetworkMessage> {
     entity_state_byte.copy_from_slice(entity_state_bytes);
 
     let entity_state = EntityState::from_le_bytes(entity_state_byte)
-        .map_err(|error| anyhow::anyhow!("invalid EntityState: {error}"))?;
+        .ok_or_else(|| anyhow!("Invalid EntityState byte: {}", entity_state_byte[0]))?;
 
     Ok(NetworkMessage::HandoffRequest {
         entity_id,
+        entity_type,
+        owner_client_id,
         from_shard_id,
         to_shard_id,
         position,
@@ -233,11 +266,15 @@ fn decode_handoff_request(input: &mut &[u8]) -> anyhow::Result<NetworkMessage> {
 
 fn decode_ghost_update(input: &mut &[u8]) -> anyhow::Result<NetworkMessage> {
     let entity_id = EntityId(read_u32(input)?);
+    let from_shard_id = ShardId(read_u32(input)?);
+    let to_shard_id = ShardId(read_u32(input)?);
     let position = read_net_vec2(input)?;
     let velocity = read_net_vec2(input)?;
 
     Ok(NetworkMessage::GhostUpdate {
         entity_id,
+        from_shard_id,
+        to_shard_id,
         position,
         velocity,
     })

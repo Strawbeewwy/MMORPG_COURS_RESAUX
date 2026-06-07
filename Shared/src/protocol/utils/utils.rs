@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use anyhow::Context;
-use crate::protocol::{ClientId, NetVec2, Username};
+use crate::protocol::{ClientId, EntityType, NetVec2, Username};
 use crate::protocol::game::PlayerId;
 pub use crate::protocol::message::network_message::{
     NetworkMessage,
@@ -93,6 +93,30 @@ pub fn write_len_u16(output: &mut Vec<u8>, len: usize, name: &str) -> anyhow::Re
     Ok(())
 }
 
+pub fn write_optional_client_id(output: &mut Vec<u8>, client_id: Option<ClientId>) {
+    match client_id {
+        Some(client_id) => {
+            write_u8(output, 1);
+            write_client_id(output, client_id);
+        }
+        None => {
+            write_u8(output, 0);
+        }
+    }
+}
+
+pub fn write_entity_type(output: &mut Vec<u8>, entity_type: EntityType) {
+    let tag = match entity_type {
+        EntityType::Player => 1,
+        EntityType::Enemy => 2,
+        EntityType::Npc => 3,
+        EntityType::Item => 4,
+        EntityType::Projectile => 5,
+    };
+
+    write_u8(output, tag);
+}
+
 pub fn read_u8(input: &mut &[u8]) -> anyhow::Result<u8> {
     let bytes = take(input, 1)?;
     Ok(bytes[0])
@@ -177,4 +201,28 @@ pub fn read_exact<'a>(input: &mut &'a [u8], len: usize) -> anyhow::Result<&'a [u
     *input = tail;
 
     Ok(head)
+}
+
+
+pub fn read_optional_client_id(input: &mut &[u8]) -> anyhow::Result<Option<ClientId>> {
+    let has_value = read_u8(input)?;
+
+    match has_value {
+        0 => Ok(None),
+        1 => Ok(Some(read_client_id(input)?)),
+        unknown => anyhow::bail!("invalid optional ClientId marker: {unknown}"),
+    }
+}
+
+pub fn read_entity_type(input: &mut &[u8]) -> anyhow::Result<EntityType> {
+    let tag = read_u8(input)?;
+
+    match tag {
+        1 => Ok(EntityType::Player),
+        2 => Ok(EntityType::Enemy),
+        3 => Ok(EntityType::Npc),
+        4 => Ok(EntityType::Item),
+        5 => Ok(EntityType::Projectile),
+        unknown => anyhow::bail!("invalid EntityType tag: {unknown}"),
+    }
 }

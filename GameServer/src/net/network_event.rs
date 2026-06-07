@@ -223,21 +223,9 @@ fn handle_broker_message(
     match message {
 
         NetworkMessage::ClientInput { client_id, input } => {
-            handle_broker_client_input(config, registry, client_id, input);
+
         }
         NetworkMessage::RegisterClient {client_id, username} => {
-            handle_register_client(config, registry,client_id, username.clone());
-        }
-        NetworkMessage::HandoffRequest {entity_id, from_shard_id, to_shard_id, position, velocity, entity_state} => {
-            handle_handoff_request(config, registry, entity_id, from_shard_id, to_shard_id, position, velocity, entity_state);
-        }
-        NetworkMessage::HandoffAccepted {entity_id} => {
-
-        }
-        NetworkMessage::HandoffRejected {entity_id} => {
-
-        }
-        NetworkMessage::HandoffCompleted {entity_id} => {
 
         }
 

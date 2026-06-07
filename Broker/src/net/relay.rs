@@ -111,48 +111,46 @@ pub fn relay_client_input_to_shard(
 
 
 pub fn relay_position_update_to_spatial_services(
-    peer : &GamePeer,
+    peer: &GamePeer,
     state: &PubSubState,
-    client_id: ClientId,
+    entity_id: EntityId,
     position: NetVec2,
-){
-
+) {
     let (connection, stream) = match state.spatial_service_streams.clone() {
         Some((connection, stream)) => (connection, stream),
         None => {
             tracing::warn!(
-                    "cannot forward PositionUpdate for client {}: no spatial service registered",
-                    client_id.0
-                );
+                "cannot forward PositionUpdate for entity {}: no spatial service registered",
+                entity_id.0
+            );
             return;
         }
     };
 
     let packet = match encode_message(&NetworkMessage::PositionUpdate {
-        client_id,
+        entity_id,
         position,
     }) {
         Ok(packet) => packet,
         Err(error) => {
             tracing::warn!(
-                        "failed to encode PositionUpdate for client {}: {}",
-                        client_id.0,
-                        error
-                    );
+                "failed to encode PositionUpdate for entity {}: {}",
+                entity_id.0,
+                error
+            );
             return;
         }
     };
 
-    if let Err(error) = peer.send(&connection,&stream,Bytes::from(packet.clone())) {
+    if let Err(error) = peer.send(&connection, &stream, Bytes::from(packet)) {
         tracing::warn!(
-            "failed to send PositionUpdate client_id={} position=({}, {}) to {} spatial service: {}" ,
-            client_id.0,
+            "failed to send PositionUpdate entity_id={} position=({}, {}) to spatial service: {}",
+            entity_id.0,
             position.x,
             position.y,
-            state.spatial_service_streams.clone().unwrap().0.connection_id,
-            error);
-            return;
-    };
+            error
+        );
+    }
 }
 
 pub fn relay_handoff_request_to_shards(
@@ -323,6 +321,98 @@ pub fn relay_handoff_completed_to_shard(
         );
     }
 
+}
+
+pub fn relay_entity_id_block_request_to_spatial(
+    peer: &GamePeer,
+    state: &PubSubState,
+    shard_id: ShardId,
+    count: u32,
+) {
+    let (connection, stream) = match state.spatial_service_streams.clone() {
+        Some((connection, stream)) => (connection, stream),
+        None => {
+            tracing::warn!(
+                "cannot request EntityId block for shard {}: no spatial service registered",
+                shard_id.0
+            );
+            return;
+        }
+    };
+
+    let packet = match encode_message(&NetworkMessage::RequestEntityIdBlock {
+        shard_id,
+        count,
+    }) {
+        Ok(packet) => packet,
+        Err(error) => {
+            tracing::warn!(
+                "failed to encode RequestEntityIdBlock shard_id={} count={}: {}",
+                shard_id.0,
+                count,
+                error
+            );
+            return;
+        }
+    };
+
+    if let Err(error) = peer.send(&connection, &stream, Bytes::from(packet)) {
+        tracing::warn!(
+            "failed to send RequestEntityIdBlock shard_id={} count={} to spatial: {}",
+            shard_id.0,
+            count,
+            error
+        );
+    }
+}
+
+pub fn relay_entity_id_block_allocated_to_shard(
+    peer: &GamePeer,
+    state: &PubSubState,
+    shard_id: ShardId,
+    start: u32,
+    count: u32,
+) {
+    let topic = shared::protocol::Topic::ShardInstance(shard_id);
+
+    let (connection, stream) = match state.shard_streams_by_topic.get(&topic) {
+        Some((connection, stream)) => (*connection, *stream),
+        None => {
+            tracing::warn!(
+                "cannot forward EntityIdBlockAllocated: no shard connection for shard_id={}",
+                shard_id.0
+            );
+            return;
+        }
+    };
+
+    let packet = match encode_message(&NetworkMessage::EntityIdBlockAllocated {
+        shard_id,
+        start,
+        count,
+    }) {
+        Ok(packet) => packet,
+        Err(error) => {
+            tracing::warn!(
+                "failed to encode EntityIdBlockAllocated shard_id={} start={} count={}: {}",
+                shard_id.0,
+                start,
+                count,
+                error
+            );
+            return;
+        }
+    };
+
+    if let Err(error) = peer.send(&connection, &stream, Bytes::from(packet)) {
+        tracing::warn!(
+            "failed to send EntityIdBlockAllocated to shard_id={} start={} count={}: {}",
+            shard_id.0,
+            start,
+            count,
+            error
+        );
+    }
 }
 
 

@@ -8,6 +8,12 @@ use std::collections::{
 };
 use crate::net::peer_roles::PeerRole;
 
+
+pub struct GhostRoute {
+    pub from_shard_id: ShardId,
+    pub to_shard_id: ShardId,
+}
+
 #[derive(Default)]
 pub struct PubSubState {
     // Client
@@ -19,7 +25,7 @@ pub struct PubSubState {
     //entity
     pub entity_clients: HashMap<EntityId, Option<ClientId>>,
     pub client_entity: HashMap<ClientId, EntityId>,
-    pub ghost_entity: HashMap<EntityId, (ShardId,ShardId)>,
+    pub ghost_entity: HashMap<EntityId, GhostRoute>,
     //shard
     pub shard_streams_by_topic: HashMap<Topic, (GameConnection, GameStream)>,
     // spatial

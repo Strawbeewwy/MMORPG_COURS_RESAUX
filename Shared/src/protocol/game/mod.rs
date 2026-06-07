@@ -1,14 +1,13 @@
 
 pub mod player;
-pub mod entity;
 
 
 pub use player::{
-    PlayerPublicInfo,Player,PlayerId, Username,PlayerSpawnInfo,
+    Player, PlayerId, PlayerPublicInfo, PlayerSpawnInfo, Username,
 };
 
-pub use entity::{
-    EntityId,EntityType,ENTITY_ID_LEN,EntityState,ENTITY_STATE_LEN,
+pub use crate::protocol::public_types::entity::{
+    EntityId, EntityState, EntityType, ENTITY_ID_LEN, ENTITY_STATE_LEN,
 };
 
 

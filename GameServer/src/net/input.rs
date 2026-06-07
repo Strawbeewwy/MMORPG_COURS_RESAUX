@@ -1,54 +1,71 @@
-use crate::config::ServerConfig;
-use crate::net::network_event::SharedPlayerRegistry;
-use shared::protocol::{ClientId, CLIENT_INPUT_LEN};
-use shared::protocol::NetVec2;
+use bevy::prelude::*;
+use shared::protocol::{
+    ClientId,
+    CLIENT_INPUT_LEN,
+};
 
-pub fn handle_broker_client_input(
-    config: &ServerConfig,
-    registry: &SharedPlayerRegistry,
-    client_id: ClientId,
-    input: [u8; CLIENT_INPUT_LEN],
+use crate::world::{
+    ClientEntityRegistry,
+    EntityRegistry,
+    Velocity,
+};
+
+#[derive(Message, Debug, Clone, Copy)]
+pub struct ClientInputEvent {
+    pub client_id: ClientId,
+    pub input: [u8; CLIENT_INPUT_LEN],
+}
+
+pub fn apply_client_input_events(
+    mut message: MessageReader<ClientInputEvent>,
+    client_index: Res<ClientEntityRegistry>,
+    entity_index: Res<EntityRegistry>,
+    mut velocities: Query<&mut Velocity>,
 ) {
+    for event in message.read() {
+        let movement_x = read_f32_le(&event.input[0..4]);
+        let movement_y = read_f32_le(&event.input[4..8]);
 
-    let movement_x = read_f32_le(&input[0..4]);
-    let movement_y = read_f32_le(&input[4..8]);
+        if !movement_x.is_finite() || !movement_y.is_finite() {
+            warn!(
+                "invalid client input: client_id={} movement_x={} movement_y={}",
+                event.client_id.0,
+                movement_x,
+                movement_y
+            );
+            continue;
+        }
 
+        let Some(entity_id) = client_index.client_to_entity.get(&event.client_id) else {
+            warn!(
+                "no controlled entity for client_id={}",
+                event.client_id.0
+            );
+            continue;
+        };
 
-    if !movement_x.is_finite() || !movement_y.is_finite() {
-        tracing::warn!(
-           "invalid client input: client_id={} movement_x={} movement_y={}",
-           client_id.0,
-           movement_x,
-           movement_y
-       );
-        return;
+        let Some(bevy_entity) = entity_index.get_bevy_entity(entity_id) else {
+            warn!(
+                "no bevy entity for network entity_id={}",
+                entity_id.0
+            );
+            continue;
+        };
+
+        let Ok(mut velocity) = velocities.get_mut(bevy_entity) else {
+            warn!(
+                "controlled entity has no Velocity component: entity_id={}",
+                entity_id.0
+            );
+            continue;
+        };
+
+        velocity.0 = Vec2{
+            x: movement_x,
+            y: movement_y,
+        }
+   
     }
-
-    let Ok(mut registry) = registry.inner.try_lock() else {
-        tracing::warn!("could not lock player registry for client input");
-        return;
-    };
-
-    let Some(&player_id) = registry.client_player.get(&client_id) else {
-        tracing::warn!("player not found for client input with id: {}", client_id.0);
-        return;
-    };
-
-
-    let Some(player) = registry.players.get_mut(&player_id) else {
-        tracing::warn!("player not found for client input with id: {}", player_id);
-        return;
-    };
-
-    player.velocity = NetVec2::from_f32(movement_x, movement_y, NetVec2::DEFAULT_PRECISION);
-
-    tracing::debug!(
-        "client input applied: client_id={} movement_x={} movement_y={}",
-        player_id,
-        movement_x,
-        movement_y
-    );
-
 }
 
 fn read_f32_le(bytes: &[u8]) -> f32 {

@@ -10,7 +10,7 @@ pub mod snapshots;
 pub use discovery::{Heartbeat, ServerInfo};
 pub use game::{
     EntityId, PlayerPublicInfo, PlayerSpawnInfo,
-    Username,
+    Username,EntityType,
 };
 pub use http::{encode,decode,ErrorResponse, HealthResponse, LoginHttpRequest, LoginHttpResponse};
 

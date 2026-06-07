@@ -1,71 +1,91 @@
 use crate::protocol::message::config::CLIENT_INPUT_LEN;
 use crate::protocol::public_types::topic::*;
-use crate::protocol::{ClientId, EntityId, NetVec2, Username};
-use crate::protocol::game::entity::EntityState;
-
+use crate::protocol::{ClientId, EntityId, EntityType, NetVec2, Username};
+use crate::protocol::public_types::entity::EntityState;
 
 #[derive(Debug, Clone)]
 pub enum NetworkMessage {
-    Subscribe { //from spatial to broker
+    Subscribe {
         client_id: ClientId,
         shard_id: ShardId,
     },
-    Unsubscribe { // from spatial to broker
+    Unsubscribe {
         client_id: ClientId,
         shard_id: ShardId,
     },
-    Publish { // from shard to broker
+    Publish {
         shard_id: ShardId,
         client_id: ClientId,
         payload_len: u16,
         payload: Vec<u8>,
     },
-    Broadcast { // from broker to client
+    Broadcast {
         payload_len: u16,
         payload: Vec<u8>,
     },
-    ClientInput { // from client to broker
+    ClientInput {
         client_id: ClientId,
         input: [u8; CLIENT_INPUT_LEN],
     },
-    RegisterShard {// from spatial to broker
+    RegisterShard {
         shard_id: ShardId,
     },
-    RegisterClient {// from broker to shard
+    RegisterClient {
         client_id: ClientId,
         username: Username,
     },
-    RegisterSpatialService,//from spatial to broker
-    ClientHello {// from client to broker
+    RegisterSpatialService,
+    ClientHello {
         username: Username,
     },
-    ClientAccepted { // from broker to client
+    ClientAccepted {
         client_id: ClientId,
     },
-    PositionUpdate { //from shard to broker then to spatial
-        client_id: ClientId,
+
+    RequestEntityIdBlock {
+        shard_id: ShardId,
+        count: u32,
+    },
+    EntityIdBlockAllocated {
+        shard_id: ShardId,
+        start: u32,
+        count: u32,
+    },
+
+    PositionUpdate {
+        entity_id: EntityId,
         position: NetVec2,
     },
-    HandoffRequest {//from spatial to broker then to shard
+    HandoffRequest {
+        entity_id: EntityId,
+        entity_type: EntityType,
+        owner_client_id: Option<ClientId>,
+        from_shard_id: ShardId,
+        to_shard_id: ShardId,
+        position: NetVec2,
+        velocity: NetVec2,
+        entity_state: EntityState,
+    },
+    HandoffAccepted {
+        entity_id: EntityId,
+        from_shard_id: ShardId,
+        to_shard_id: ShardId,
+    },
+    HandoffRejected {
+        entity_id: EntityId,
+        from_shard_id: ShardId,
+        to_shard_id: ShardId,
+    },
+    GhostUpdate {
         entity_id: EntityId,
         from_shard_id: ShardId,
         to_shard_id: ShardId,
         position: NetVec2,
         velocity: NetVec2,
-        entity_state: EntityState
     },
-    HandoffAccepted {//from shard to broker then to spatial
+    HandoffCompleted {
         entity_id: EntityId,
-    },
-    HandoffRejected { // from shard to broker then to spatial
-        entity_id: EntityId,
-    },
-    GhostUpdate { // from shard to broker to another shard
-        entity_id: EntityId,
-        position: NetVec2,
-        velocity: NetVec2,
-    },
-    HandoffCompleted {// from spatial to broker then to shard
-        entity_id: EntityId,
+        from_shard_id: ShardId,
+        to_shard_id: ShardId,
     },
 }

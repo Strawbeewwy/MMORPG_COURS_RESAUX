@@ -5,7 +5,7 @@ pub use crate::protocol::public_types::topic::{
     Topic,
     TOPIC_LEN,
 };
-pub use crate::protocol::game::entity::{
+pub use crate::protocol::public_types::entity::{
     EntityId,
     EntityState,
     EntityType,
@@ -19,15 +19,7 @@ use crate::protocol::{
     CLIENT_ID_LEN,
 };
 use crate::protocol::public_types::topic::TOPIC_ID_LEN;
-use crate::protocol::utils::utils::{
-    BinaryEncode,
-    write_client_id,
-    write_net_vec2,
-    write_u8,
-    write_u16,
-    write_u32,
-    write_username,
-};
+use crate::protocol::utils::utils::{BinaryEncode, write_client_id, write_net_vec2, write_u8, write_u16, write_u32, write_username, write_entity_type, write_optional_client_id};
 
 pub fn encode_message(message: &NetworkMessage) -> anyhow::Result<Vec<u8>> {
     match message {
@@ -68,11 +60,23 @@ pub fn encode_message(message: &NetworkMessage) -> anyhow::Result<Vec<u8>> {
         NetworkMessage::ClientAccepted { client_id } => {
             encode_client_accepted(*client_id)
         }
-        NetworkMessage::PositionUpdate { client_id, position } => {
-            encode_position_update(*client_id, *position)
+        NetworkMessage::RequestEntityIdBlock { shard_id, count } => {
+            encode_request_entity_id_block(*shard_id, *count)
+        }
+        NetworkMessage::EntityIdBlockAllocated {
+            shard_id,
+            start,
+            count,
+        } => {
+            encode_entity_id_block_allocated(*shard_id, *start, *count)
+        }
+        NetworkMessage::PositionUpdate { entity_id, position } => {
+            encode_position_update(*entity_id, *position)
         }
         NetworkMessage::HandoffRequest {
             entity_id,
+            entity_type,
+            owner_client_id,
             from_shard_id,
             to_shard_id,
             position,
@@ -81,6 +85,8 @@ pub fn encode_message(message: &NetworkMessage) -> anyhow::Result<Vec<u8>> {
         } => {
             encode_handoff_request(
                 *entity_id,
+                *entity_type,
+                *owner_client_id,
                 *from_shard_id,
                 *to_shard_id,
                 *position,
@@ -90,29 +96,46 @@ pub fn encode_message(message: &NetworkMessage) -> anyhow::Result<Vec<u8>> {
         }
         NetworkMessage::HandoffAccepted {
             entity_id,
+            from_shard_id,
+            to_shard_id,
         } => {
-            encode_handoff_accepted(*entity_id)
+            encode_handoff_accepted(*entity_id, *from_shard_id, *to_shard_id)
         }
         NetworkMessage::HandoffRejected {
             entity_id,
+            from_shard_id,
+            to_shard_id,
         } => {
-            encode_handoff_rejected(*entity_id)
+            encode_handoff_rejected(*entity_id, *from_shard_id, *to_shard_id)
         }
         NetworkMessage::GhostUpdate {
             entity_id,
+            from_shard_id,
+            to_shard_id,
             position,
             velocity,
         } => {
-            encode_ghost_update(*entity_id, *position, *velocity)
+            encode_ghost_update(
+                *entity_id,
+                *from_shard_id,
+                *to_shard_id,
+                *position,
+                *velocity,
+            )
         }
-        NetworkMessage::HandoffCompleted { entity_id } => {
-            encode_handoff_completed(*entity_id)
+        NetworkMessage::HandoffCompleted {
+            entity_id,
+            from_shard_id,
+            to_shard_id,
+        } => {
+            encode_handoff_completed(*entity_id, *from_shard_id, *to_shard_id)
         }
         NetworkMessage::RegisterClient { client_id, username } => {
             encode_register_client(*client_id, username)
         }
     }
 }
+
 
 fn encode_client_hello(username: &Username) -> anyhow::Result<Vec<u8>> {
     let mut packet = Vec::with_capacity(
@@ -260,59 +283,102 @@ fn encode_register_spatial_service() -> anyhow::Result<Vec<u8>> {
 
     Ok(packet)
 }
+fn encode_request_entity_id_block(
+    shard_id: ShardId,
+    count: u32,
+) -> anyhow::Result<Vec<u8>> {
+    let mut packet = Vec::with_capacity(TAG_LEN + TOPIC_ID_LEN + size_of::<u32>());
+
+    write_u8(&mut packet, TAG_REQUEST_ENTITY_ID_BLOCK);
+    write_u32(&mut packet, shard_id.0);
+    write_u32(&mut packet, count);
+
+    Ok(packet)
+}
+
+fn encode_entity_id_block_allocated(
+    shard_id: ShardId,
+    start: u32,
+    count: u32,
+) -> anyhow::Result<Vec<u8>> {
+    let mut packet = Vec::with_capacity(TAG_LEN + TOPIC_ID_LEN + size_of::<u32>() + size_of::<u32>());
+
+    write_u8(&mut packet, TAG_ENTITY_ID_BLOCK_ALLOCATED);
+    write_u32(&mut packet, shard_id.0);
+    write_u32(&mut packet, start);
+    write_u32(&mut packet, count);
+
+    Ok(packet)
+}
 
 fn encode_position_update(
-    client_id: ClientId,
+    entity_id: EntityId,
     position: NetVec2,
 ) -> anyhow::Result<Vec<u8>> {
     let mut packet = Vec::with_capacity(
-        TAG_LEN + CLIENT_ID_LEN + 10
+        TAG_LEN + ENTITY_ID_LEN + 10
     );
 
     write_u8(&mut packet, TAG_POSITION_UPDATE);
-    write_client_id(&mut packet, client_id);
+    write_u32(&mut packet, entity_id.0);
     write_net_vec2(&mut packet, position);
 
     Ok(packet)
 }
 
-fn encode_handoff_completed(entity_id: EntityId) -> anyhow::Result<Vec<u8>> {
-    let mut packet = Vec::with_capacity(TAG_LEN + ENTITY_ID_LEN);
+fn encode_handoff_completed(
+    entity_id: EntityId,
+    from_shard_id: ShardId,
+    to_shard_id: ShardId,
+) -> anyhow::Result<Vec<u8>> {
+    let mut packet = Vec::with_capacity(TAG_LEN + ENTITY_ID_LEN + (2 * TOPIC_ID_LEN));
 
     write_u8(&mut packet, TAG_HANDOFF_COMPLETE);
     write_u32(&mut packet, entity_id.0);
+    write_u32(&mut packet, from_shard_id.0);
+    write_u32(&mut packet, to_shard_id.0);
 
     Ok(packet)
 }
 
 fn encode_handoff_accepted(
     entity_id: EntityId,
+    from_shard_id: ShardId,
+    to_shard_id: ShardId,
 ) -> anyhow::Result<Vec<u8>> {
     let mut packet = Vec::with_capacity(
-        TAG_LEN + ENTITY_ID_LEN + TOPIC_ID_LEN
+        TAG_LEN + ENTITY_ID_LEN + (2 * TOPIC_ID_LEN)
     );
 
     write_u8(&mut packet, TAG_HANDOFF_ACCEPTED);
     write_u32(&mut packet, entity_id.0);
+    write_u32(&mut packet, from_shard_id.0);
+    write_u32(&mut packet, to_shard_id.0);
 
     Ok(packet)
 }
 
 fn encode_handoff_rejected(
     entity_id: EntityId,
+    from_shard_id: ShardId,
+    to_shard_id: ShardId,
 ) -> anyhow::Result<Vec<u8>> {
     let mut packet = Vec::with_capacity(
-        TAG_LEN + ENTITY_ID_LEN + TOPIC_ID_LEN
+        TAG_LEN + ENTITY_ID_LEN + (2 * TOPIC_ID_LEN)
     );
 
     write_u8(&mut packet, TAG_HANDOFF_REJECTED);
     write_u32(&mut packet, entity_id.0);
+    write_u32(&mut packet, from_shard_id.0);
+    write_u32(&mut packet, to_shard_id.0);
 
     Ok(packet)
 }
 
 fn encode_handoff_request(
     entity_id: EntityId,
+    entity_type: EntityType,
+    owner_client_id: Option<ClientId>,
     from_shard_id: ShardId,
     to_shard_id: ShardId,
     position: NetVec2,
@@ -320,11 +386,20 @@ fn encode_handoff_request(
     entity_state: EntityState,
 ) -> anyhow::Result<Vec<u8>> {
     let mut packet = Vec::with_capacity(
-        TAG_LEN + ENTITY_ID_LEN + (2 * TOPIC_ID_LEN) + 20 + ENTITY_STATE_LEN
+        TAG_LEN
+            + ENTITY_ID_LEN
+            + 1
+            + 1
+            + CLIENT_ID_LEN
+            + (2 * TOPIC_ID_LEN)
+            + 20
+            + ENTITY_STATE_LEN
     );
 
     write_u8(&mut packet, TAG_HANDOFF_REQUEST);
     write_u32(&mut packet, entity_id.0);
+    write_entity_type(&mut packet, entity_type);
+    write_optional_client_id(&mut packet, owner_client_id);
     write_u32(&mut packet, from_shard_id.0);
     write_u32(&mut packet, to_shard_id.0);
     write_net_vec2(&mut packet, position);
@@ -336,15 +411,19 @@ fn encode_handoff_request(
 
 fn encode_ghost_update(
     entity_id: EntityId,
+    from_shard_id: ShardId,
+    to_shard_id: ShardId,
     position: NetVec2,
     velocity: NetVec2,
 ) -> anyhow::Result<Vec<u8>> {
     let mut packet = Vec::with_capacity(
-        TAG_LEN + ENTITY_ID_LEN + TOPIC_ID_LEN + 20
+        TAG_LEN + ENTITY_ID_LEN + (2 * TOPIC_ID_LEN) + 20
     );
 
     write_u8(&mut packet, TAG_GHOST_UPDATE);
     write_u32(&mut packet, entity_id.0);
+    write_u32(&mut packet, from_shard_id.0);
+    write_u32(&mut packet, to_shard_id.0);
     write_net_vec2(&mut packet, position);
     write_net_vec2(&mut packet, velocity);
 

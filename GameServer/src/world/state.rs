@@ -1,131 +1,123 @@
-use crate::net::network_event::SharedPlayerRegistry;
-use bevy::prelude::*;
-use shared::protocol::{NetVec2, EntityId, Username, PlayerSnapshot};
+use std::collections::VecDeque;
 
 use bevy::platform::collections::HashMap;
-use uuid::Uuid;
-use shared::protocol::ClientId;
-use shared::protocol::game::player::{
-    Player, PlayerId, PLAYER_DEFAULT_MOVE_SPEED,
+use bevy::prelude::*;
+use shared::protocol::{
+    ClientId,
+    EntityId,
 };
-use crate::config::ServerConfig;
 
-
-pub const MAX_ENTITY_COUNT: usize = 10000;
-pub const MAX_PLAYER_COUNT: usize = 100;
-
-#[derive(Debug, Default, Resource)]
+#[derive(Resource, Default)]
 pub struct EntityRegistry {
-    // player id -> player
-    // used to perform actions on players
-    pub players: HashMap<PlayerId, Player>,
-    // player -> client
-    // used for shard-to-client communication
-    pub player_client: HashMap<PlayerId, ClientId>,
-    // client -> player
-    // used for client-to-shard communication
-    pub client_player: HashMap<ClientId, PlayerId>,
-    // entity -> type
-    pub entity_client: HashMap<EntityId, Option<ClientId>>,
-
+    pub by_network_id: HashMap<EntityId, Entity>,
+    pub by_bevy_entity: HashMap<Entity, EntityId>,
 }
 
 impl EntityRegistry {
-    pub fn player_count(&self) -> usize {
-        self.players.len()
+    pub fn insert(&mut self, entity_id: EntityId, bevy_entity: Entity) {
+        self.by_network_id.insert(entity_id, bevy_entity);
+        self.by_bevy_entity.insert(bevy_entity, entity_id);
     }
 
-    pub fn is_full(&self,) -> bool {
-        self.players.len() >= MAX_PLAYER_COUNT
+    pub fn remove_by_entity_id(&mut self, entity_id: &EntityId) -> Option<Entity> {
+        let bevy_entity = self.by_network_id.remove(entity_id)?;
+        self.by_bevy_entity.remove(&bevy_entity);
+        Some(bevy_entity)
     }
 
-    pub fn update_players(&mut self, delta_seconds: f32) {
-        for player in self.players.values_mut() {
-            player.update_movement(delta_seconds);
-            /*
-                we can add more stuff the players need updated on
-                like health, buff/debuff, etc.
-             */
+    pub fn remove_by_bevy_entity(&mut self, bevy_entity: &Entity) -> Option<EntityId> {
+        let entity_id = self.by_bevy_entity.remove(bevy_entity)?;
+        self.by_network_id.remove(&entity_id);
+        Some(entity_id)
+    }
+
+    pub fn get_bevy_entity(&self, entity_id: &EntityId) -> Option<Entity> {
+        self.by_network_id.get(entity_id).copied()
+    }
+}
+
+#[derive(Resource, Default)]
+pub struct ClientEntityRegistry {
+    pub client_to_entity: HashMap<ClientId, EntityId>,
+    pub entity_to_client: HashMap<EntityId, ClientId>,
+}
+
+impl ClientEntityRegistry {
+    pub fn insert(&mut self, client_id: ClientId, entity_id: EntityId) {
+        self.client_to_entity.insert(client_id, entity_id);
+        self.entity_to_client.insert(entity_id, client_id);
+    }
+
+    pub fn remove_client(&mut self, client_id: &ClientId) -> Option<EntityId> {
+        let entity_id = self.client_to_entity.remove(client_id)?;
+        self.entity_to_client.remove(&entity_id);
+        Some(entity_id)
+    }
+
+    pub fn remove_entity(&mut self, entity_id: &EntityId) -> Option<ClientId> {
+        let client_id = self.entity_to_client.remove(entity_id)?;
+        self.client_to_entity.remove(&client_id);
+        Some(client_id)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct EntityIdRange {
+    pub next: u32,
+    pub end_exclusive: u32,
+}
+
+#[derive(Resource, Debug, Default)]
+pub struct EntityIdAllocator {
+    pub ranges: VecDeque<EntityIdRange>,
+    pub pending_request: bool,
+}
+
+impl EntityIdAllocator {
+    pub fn allocate(&mut self) -> Option<EntityId> {
+        let range = self.ranges.front_mut()?;
+
+        if range.next >= range.end_exclusive {
+            self.ranges.pop_front();
+            return self.allocate();
         }
 
+        let entity_id = EntityId(range.next);
+        range.next += 1;
+
+        if range.next >= range.end_exclusive {
+            self.ranges.pop_front();
+        }
+
+        Some(entity_id)
     }
 
-    pub fn register_client(&mut self,client_id: ClientId, player_id: PlayerId) {
+    pub fn add_range(&mut self, start: u32, count: u32) {
+        if count == 0 {
+            return;
+        }
 
-        self.client_player.insert(client_id, player_id);
-        self.player_client.insert(player_id, client_id);
+        let Some(end_exclusive) = start.checked_add(count) else {
+            tracing::warn!(
+                "invalid entity id range start={} count={}",
+                start,
+                count
+            );
+            return;
+        };
+
+        self.ranges.push_back(EntityIdRange {
+            next: start,
+            end_exclusive,
+        });
+
+        self.pending_request = false;
     }
 
-    pub fn register_player(&mut self, player: Player) {
-        self.players.insert(player.player_id, player);
-    }
-
-    pub fn remove_player(&mut self, player: &Player) {
-        self.players.remove(&player.player_id);
-    }
-
-
-    pub fn remove_client(&mut self, client_id: &ClientId) {
-        self.player_client.remove(self.client_player.get(client_id).unwrap());
-        let played_id = self.client_player.remove(client_id);
-        self.players.remove(&played_id.unwrap());
-    }
-
-    pub fn generate_player_snapshot(&self)-> Vec<PlayerSnapshot> {
-        let players = self
-            .players
-            .values()
-            .map(|player| PlayerSnapshot {
-                client_id: self.player_client.get(&player.player_id).unwrap().clone(),
-                player_id: player.player_id.clone(),
-                username: player.username.clone(),
-                position: player.position.clone(),
-                velocity: player.velocity.clone(),
-            })
-            .collect();
-
-      players
+    pub fn remaining(&self) -> u32 {
+        self.ranges
+            .iter()
+            .map(|range| range.end_exclusive.saturating_sub(range.next))
+            .sum()
     }
 }
-
-pub fn update_players_registry(
-    registry: Res<SharedPlayerRegistry>,
-    time: Res<Time>,
-) {
-    let Ok(mut registry) = registry.inner.try_lock() else {
-        return;
-    };
-
-    registry.update_players(time.delta_secs());
-}
-
-pub fn handle_register_client(
-    config: &ServerConfig,
-    registry: &SharedPlayerRegistry,
-    client_id: ClientId,
-    username: Username,
-){
-    let Ok(mut registry) = registry.inner.try_lock() else {
-        tracing::warn!("could not lock player registry for registering client");
-        return;
-    };
-    if (registry.is_full()){
-        tracing::warn!("player registry is full, cannot register client");
-        return;
-    }
-
-    let player = Player {
-        player_id: Uuid::new_v4().as_u128(),
-        username,
-        zone : config.zone.clone(),
-        position: NetVec2::ZERO,
-        velocity: NetVec2::ZERO,
-        movement_speed: PLAYER_DEFAULT_MOVE_SPEED,
-    };
-
-
-    registry.register_client(client_id,player.player_id);
-    registry.register_player(player);
-}
-
-

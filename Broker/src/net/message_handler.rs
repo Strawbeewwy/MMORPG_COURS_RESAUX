@@ -217,19 +217,19 @@ pub fn handle_message(
                 client_id.0
             );
         },
-        NetworkMessage::PositionUpdate { client_id , position} => {
-
+        NetworkMessage::PositionUpdate { entity_id, position } => {
             if !peer_roles.ensure(
                 connection,
                 PeerRole::Shard,
-                "PositionUpdate") {
+                "PositionUpdate"
+            ) {
                 return;
             }
 
             relay_position_update_to_spatial_services(
                 peer,
                 state,
-                client_id,
+                entity_id,
                 position,
             );
         }
@@ -297,6 +297,44 @@ pub fn handle_message(
                 entity_id,
             );
 
+        }
+        NetworkMessage::RequestEntityIdBlock { shard_id, count } => {
+            if !peer_roles.ensure(
+                connection,
+                PeerRole::Shard,
+                "RequestEntityIdBlock"
+            ) {
+                return;
+            }
+
+            relay_entity_id_block_request_to_spatial(
+                peer,
+                state,
+                shard_id,
+                count,
+            );
+        }
+
+        NetworkMessage::EntityIdBlockAllocated {
+            shard_id,
+            start,
+            count,
+        } => {
+            if !peer_roles.ensure(
+                connection,
+                PeerRole::SpatialService,
+                "EntityIdBlockAllocated"
+            ) {
+                return;
+            }
+
+            relay_entity_id_block_allocated_to_shard(
+                peer,
+                state,
+                shard_id,
+                start,
+                count,
+            );
         }
 
         _ => {
