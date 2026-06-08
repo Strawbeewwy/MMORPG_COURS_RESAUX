@@ -9,59 +9,50 @@ pub fn relay_to_client(
     peer: &GamePeer,
     state: &PubSubState,
     topic: Topic,
-    client_id: ClientId,
     payload_len: u16,
     payload: &[u8],
 ) {
     let Some(subscribers) = state.topic_subscribers.get(&topic) else {
         tracing::debug!(
-            "cannot publish to client {}: no subscribers for topic {}",
-            client_id.0,
+            "cannot publish : no subscribers for topic {}",
             &topic.to_string()
         );
         return;
     };
 
-    if !subscribers.contains(&client_id) {
-        tracing::debug!(
-            "cannot publish to client {}: client is not subscribed to topic {}",
-            client_id.0,
-            &topic.to_string()
-        );
-        return;
-    }
-
-    let Some((connection,stream) )= state.client_connections.get(&client_id) else {
-        tracing::debug!(
-            "cannot publish to client {}: no client connection registered",
-            client_id.0
-        );
-        return;
-    };
+   for client_id in subscribers.iter() {
+       let Some((connection, stream)) = state.client_connections.get(&client_id) else {
+           tracing::debug!(
+               "cannot publish to client {}: no client connection registered",
+               client_id.0
+           );
+           return;
+       };
 
 
-    let packet = match encode_message(&NetworkMessage::Broadcast {
-        payload_len,
-        payload: Vec::from(payload),
-    }) {
-        Ok(packet) => packet,
-        Err(error) => {
-            tracing::warn!(
-                "cannot encode targeted broadcast for client {}: {error}",
-                client_id.0
-            );
-            return;
-        }
-    };
+       let packet = match encode_message(&NetworkMessage::Broadcast {
+           payload_len,
+           payload: Vec::from(payload),
+       }) {
+           Ok(packet) => packet,
+           Err(error) => {
+               tracing::warn!(
+                   "cannot encode targeted broadcast for client {}: {error}",
+                   client_id.0
+               );
+               return;
+           }
+       };
 
-    if let Err(error) = peer.send(connection, stream, Bytes::from(packet)) {
-        tracing::warn!(
-            "failed to send targeted broadcast to client {} on connection {}: {}",
-            client_id.0,
-            connection.connection_id,
-            error
-        );
-    }
+       if let Err(error) = peer.send(connection, stream, Bytes::from(packet)) {
+           tracing::warn!(
+               "failed to send targeted broadcast to client {} on connection {}: {}",
+               client_id.0,
+               connection.connection_id,
+               error
+           );
+       }
+   }
 }
 
 

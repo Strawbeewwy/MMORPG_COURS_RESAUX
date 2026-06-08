@@ -2,11 +2,14 @@ use crate::config::ServerConfig;
 
 use crate::net::{
     send_heartbeat, bind_heartbeat_socket,
-    SharedEntityRegistry, connect_to_broker,
+    connect_to_broker,
     poll_broker_events, ClientInputEvent,
     publish_world_update, publish_player_position_updates
 };
-use crate::world::{ClientEntityRegistry, EntityRegistry, SpawnGenericEntityEvent, SpawnGhostEntityEvent, SpawnPlayerEntityEvent};
+use crate::world::{
+    ClientEntityRegistry, EntityRegistry, SpawnGenericEntityEvent,
+    SpawnGhostEntityEvent, SpawnPlayerEntityEvent,SharedEntityRegistry,
+};
 
 use bevy::app::ScheduleRunnerPlugin;
 use bevy::prelude::*;

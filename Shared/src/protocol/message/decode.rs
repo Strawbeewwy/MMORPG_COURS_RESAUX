@@ -54,13 +54,9 @@ fn decode_subscribe(input: &mut &[u8]) -> anyhow::Result<NetworkMessage> {
     let client_id = read_client_id(input)?;
     let topic = Topic::decode_binary(input)?;
 
-    let Topic::ShardInstance(shard_id) = topic else {
-        anyhow::bail!("Subscribe topic is not a ShardInstance");
-    };
-
     Ok(NetworkMessage::Subscribe {
         client_id,
-        shard_id,
+        topic,
     })
 }
 
@@ -68,29 +64,19 @@ fn decode_unsubscribe(input: &mut &[u8]) -> anyhow::Result<NetworkMessage> {
     let client_id = read_client_id(input)?;
     let topic = Topic::decode_binary(input)?;
 
-    let Topic::ShardInstance(shard_id) = topic else {
-        anyhow::bail!("Unsubscribe topic is not a ShardInstance");
-    };
-
     Ok(NetworkMessage::Unsubscribe {
         client_id,
-        shard_id,
+        topic,
     })
 }
 
 fn decode_publish(input: &mut &[u8]) -> anyhow::Result<NetworkMessage> {
     let topic = Topic::decode_binary(input)?;
-    let client_id = read_client_id(input)?;
     let payload_len = read_u16(input)?;
     let payload = read_exact(input, payload_len as usize)?.to_vec();
 
-    let Topic::ShardInstance(shard_id) = topic else {
-        anyhow::bail!("Publish topic is not a ShardInstance");
-    };
-
     Ok(NetworkMessage::Publish {
-        shard_id,
-        client_id,
+        topic,
         payload_len,
         payload,
     })
@@ -122,7 +108,7 @@ fn decode_client_input(input: &mut &[u8]) -> anyhow::Result<NetworkMessage> {
 fn decode_register_shard(input: &mut &[u8]) -> anyhow::Result<NetworkMessage> {
     let topic = Topic::decode_binary(input)?;
 
-    let Topic::ShardInstance(shard_id) = topic else {
+    let Topic::ShardInstance{id:shard_id} = topic else {
         anyhow::bail!("RegisterShard topic is not a ShardInstance");
     };
 

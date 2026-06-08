@@ -1,7 +1,7 @@
 use shared::protocol::{EntityId, NetVec2, ShardId};
 use shared::protocol::game::EntityState;
 use crate::config::ServerConfig;
-use crate::net::network_event::SharedEntityRegistry;
+use crate::world::state::SharedEntityRegistry;
 
 pub fn handle_handoff_request(
     config: &ServerConfig,

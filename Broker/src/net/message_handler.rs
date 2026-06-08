@@ -108,14 +108,13 @@ pub fn handle_message(
             );
         }
 
-        NetworkMessage::Subscribe { client_id, shard_id } => {
+        NetworkMessage::Subscribe { client_id, topic } => {
             if !peer_roles.ensure(connection, PeerRole::SpatialService, "Subscribe") {
                 return;
             }
 
-            state.subscribe_registered_client(client_id, shard_id);
+            state.subscribe_registered_client(client_id, topic);
 
-            let topic = Topic::ShardInstance(shard_id);
             let (shard_connection,shard_stream) = match state.shard_streams_by_topic.get(&topic){
                 Some((connection,stream)) => (connection,stream),
                 None => {
@@ -159,16 +158,15 @@ pub fn handle_message(
 
         }
 
-        NetworkMessage::Unsubscribe { client_id, shard_id } => {
+        NetworkMessage::Unsubscribe { client_id, topic } => {
             if !peer_roles.ensure(connection, PeerRole::SpatialService, "Unsubscribe") {
                 return;
-            }
-            let topic = Topic::ShardInstance(shard_id);
+            };
 
             state.unsubscribe_client(client_id, topic);
         }
 
-        NetworkMessage::Publish { shard_id, client_id, payload_len,payload } => {
+        NetworkMessage::Publish { topic, payload_len,payload } => {
             if !peer_roles.ensure(
                 connection,
                 PeerRole::Shard,
@@ -182,14 +180,10 @@ pub fn handle_message(
                 return;
             }
 
-
-            let topic = Topic::ShardInstance(shard_id);
-
             relay_to_client(
                 peer,
                 state,
                 topic,
-                client_id,
                 payload_len,
                 &payload,
             );

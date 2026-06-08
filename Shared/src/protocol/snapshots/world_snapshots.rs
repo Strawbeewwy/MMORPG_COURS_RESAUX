@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use serde::{Deserialize, Serialize};
 use crate::protocol::{PlayerPublicInfo, PlayerSnapshot, ClientId};
 use crate::protocol::snapshots::entity_snapshot::EntitySnapshot;
 use crate::protocol::utils::utils::{read_arc_str, read_client_id, read_u16, read_u64, read_u8, write_arc_str, write_client_id, write_len_u16, write_u64, write_u8, BinaryDecode, BinaryEncode};

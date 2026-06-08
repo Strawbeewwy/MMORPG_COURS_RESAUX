@@ -4,8 +4,9 @@ use shared::protocol::{ClientId, EntityId, NetVec2, NetworkMessage, Topic, World
 use shared::protocol::utils::utils::BinaryEncode;
 use crate::config::ServerConfig;
 use crate::net::area_of_interest::{is_inside_area_of_interest, DEFAULT_AREA_OF_INTEREST_RADIUS};
-use crate::net::network_event::{BrokerShardPeer, SharedEntityRegistry};
+use crate::net::network_event::BrokerShardPeer;
 use crate::world::{Position};
+use crate::world::state::SharedEntityRegistry;
 
 #[derive(Resource, Default)]
 pub struct PublishedEntityPositions {
@@ -90,7 +91,12 @@ pub fn publish_world_update(
 
     match shared_registry.try_lock() {
         Some((cli_registry, ent_registry))=> {
-            // Do Something
+            if cli_registry.client_to_entity.is_empty() {
+                tracing::warn!("no players connected, skipping world update");
+                return;
+            }
+            
+            
         }
         None => {
             tracing::warn!("could not lock player registry for client input");

@@ -21,7 +21,6 @@ pub use input::{
 };
 
 pub use network_event::{
-    SharedEntityRegistry,
     connect_to_broker,
     poll_broker_events,
 };

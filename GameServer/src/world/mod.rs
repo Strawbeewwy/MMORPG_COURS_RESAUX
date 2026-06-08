@@ -18,6 +18,7 @@ pub use state::{
     EntityIdAllocator,
     EntityIdRange,
     EntityRegistry,
+    SharedEntityRegistry,
 };
 
 pub use spawn_entity::{

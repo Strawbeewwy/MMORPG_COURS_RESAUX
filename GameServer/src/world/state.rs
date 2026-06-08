@@ -1,11 +1,50 @@
 use std::collections::VecDeque;
-
+use std::sync::Arc;
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
-use shared::protocol::{
-    ClientId,
-    EntityId,
-};
+use tokio::sync::{Mutex, MutexGuard};
+use shared::protocol::{ClientId, EntityId, PlayerSnapshot};
+use shared::protocol::snapshots::entity_snapshot::EntitySnapshot;
+
+/**
+World interaction should always be done through the SharedPlayerRegistry resource.
+All interaction on entities must be done with entity_reg_shared,
+client_reg_shared is used to get an entity_id from the client_id,
+then we use the entity_id on entity_reg_shared to interact with the entity.
+**/
+#[derive(Resource, Clone)]
+pub struct SharedEntityRegistry {
+    pub entity_reg_shared: Arc<Mutex<EntityRegistry>>,
+    pub client_reg_shared: Arc<Mutex<ClientEntityRegistry>>,
+}
+
+
+/**
+When accessing the SharedEntityRegistry, use the try_lock method to acquire both locks.
+This ensures that both locks are acquired atomically, preventing partial lock acquisition and potential deadlocks.
+
+Easy copy and paste:
+
+        match shared_registry.try_lock() {
+            Some((cli_registry, ent_registry))=> {
+                // Do Something
+            }
+            None => {
+                tracing::warn!("could not lock player registry for client input");
+                return;
+            }
+        }
+
+
+**/
+impl SharedEntityRegistry {
+    pub fn try_lock(&self) -> Option<(MutexGuard<ClientEntityRegistry>, MutexGuard<EntityRegistry>)> {
+        let client_lock = self.client_reg_shared.try_lock().ok()?;
+        let entity_lock = self.entity_reg_shared.try_lock().ok()?;
+        Some((client_lock, entity_lock))
+    }
+}
+
 
 #[derive(Resource, Default)]
 pub struct EntityRegistry {

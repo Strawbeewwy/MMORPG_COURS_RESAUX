@@ -62,7 +62,9 @@ impl ServerConfig {
             .unwrap_or(DEFAULT_BROKER_PORT);
 
 
-        let shard_topic = Topic::ShardInstance(ShardId(shard_id?));
+        let shard_topic = Topic::ShardInstance{
+            id:ShardId(shard_id?)
+        };
 
         Ok(Self {
             ip,

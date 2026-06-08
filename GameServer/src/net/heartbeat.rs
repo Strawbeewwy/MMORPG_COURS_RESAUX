@@ -1,11 +1,10 @@
 use crate::config::ServerConfig;
-use crate::net::network_event::SharedEntityRegistry;
 use bevy::prelude::*;
 use shared::protocol::http::codec;
 use shared::protocol::Heartbeat;
 use std::net::UdpSocket;
 use std::time::Duration;
-
+use crate::world::state::SharedEntityRegistry;
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
 

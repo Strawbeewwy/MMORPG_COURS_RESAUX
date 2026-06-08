@@ -94,10 +94,9 @@ impl PubSubState {
     pub fn subscribe_registered_client(
         &mut self,
         client_id: ClientId,
-        shard_id: ShardId,
+        topic: Topic,
     ) {
-
-        let topic = Topic::ShardInstance(shard_id);
+        
 
         tracing::info!(
             "subscribe registered client={} topic={}",

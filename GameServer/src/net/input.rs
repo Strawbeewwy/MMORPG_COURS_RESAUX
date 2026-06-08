@@ -3,7 +3,8 @@ use shared::protocol::{
     ClientId,
     CLIENT_INPUT_LEN,
 };
-use crate::net::SharedEntityRegistry;
+
+use crate::world::state::SharedEntityRegistry;
 use crate::world::Velocity;
 
 

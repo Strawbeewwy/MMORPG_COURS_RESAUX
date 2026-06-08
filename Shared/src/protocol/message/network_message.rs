@@ -7,15 +7,14 @@ use crate::protocol::public_types::entity::EntityState;
 pub enum NetworkMessage {
     Subscribe {
         client_id: ClientId,
-        shard_id: ShardId,
+        topic: Topic,
     },
     Unsubscribe {
         client_id: ClientId,
-        shard_id: ShardId,
+        topic: Topic
     },
     Publish {
-        shard_id: ShardId,
-        client_id: ClientId,
+        topic: Topic,
         payload_len: u16,
         payload: Vec<u8>,
     },

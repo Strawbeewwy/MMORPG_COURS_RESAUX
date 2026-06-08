@@ -60,8 +60,8 @@ impl PartialEq for EntityRecord {
 impl Eq for EntityRecord {}
 
 impl Hash for EntityRecord {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.entity_id.hash(state);
+    fn hash<H: Hasher>(&self, entity_id: &mut H) {
+        self.entity_id.hash(entity_id);
     }
 }
 
@@ -82,7 +82,7 @@ impl PartialEq for GhostEntityRecord {
 impl Eq for GhostEntityRecord {}
 
 impl Hash for GhostEntityRecord {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.entity_id.hash(state);
+    fn hash<H: Hasher>(&self, entity_id: &mut H) {
+        self.entity_id.hash(entity_id);
     }
 }

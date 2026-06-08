@@ -1,3 +1,5 @@
+use std::hash::{Hash, Hasher};
+use crate::protocol::{EntityId, NetVec2};
 use crate::protocol::utils::utils::{
     BinaryDecode,
     BinaryEncode,
@@ -13,6 +15,7 @@ const TOPIC_GLOBAL: u8 = 0x01;
 const TOPIC_CHAT: u8 = 0x02;
 const TOPIC_ZONE: u8 = 0x03;
 const TOPIC_SHARD_INSTANCE: u8 = 0x04;
+const TOPIC_ENTITY: u8 = 0x05;
 pub const TOPIC_ID_LEN: usize = size_of::<u32>();
 const TOPIC_HEADER_LEN: usize = size_of::<u8>() + TOPIC_ID_LEN;
 const TOPIC_PADDING_LEN: usize = TOPIC_LEN - TOPIC_HEADER_LEN;
@@ -22,42 +25,99 @@ const TOPIC_PADDING_LEN: usize = TOPIC_LEN - TOPIC_HEADER_LEN;
     PartialOrd, Ord, Hash, Default)]
 pub struct ShardId(pub u32);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Eq,)]
 pub enum Topic {
-    Global,//NOT USED
-    Chat,//NOT USED
-    Zone(u32),//NOT USED
-    ShardInstance(ShardId),
+    Global{
+        id: u32
+    },//NOT USED
+    Chat{
+        id: u32
+    },//NOT USED
+    Zone{
+        id: u32
+    },//NOT USED
+    ShardInstance{
+        id: ShardId
+    },
+    Entity{
+        id: EntityId,
+    },
 }
 
+impl PartialEq for Topic{
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Topic::Entity { id: id1}, Topic::Entity { id: id2 }) => id1 == id2,
+            (Topic::Global { id: id1 }, Topic::Global { id: id2 }) => id1 == id2,
+            (Topic::Chat { id: id1 }, Topic::Chat { id: id2 }) => id1 == id2,
+            (Topic::Zone { id: id1 }, Topic::Zone { id: id2 }) => id1 == id2,
+            (Topic::ShardInstance { id: id1 }, Topic::ShardInstance { id: id2 }) => id1 == id2,
+            _ => false,
+        }
+    }
+}
 
+impl Hash for Topic {
+    fn hash<H: Hasher>(&self, id_to_h: &mut H) {
+        match self {
+            Topic::Entity { id } => {
+                id.hash(id_to_h);
+            },
+            Topic::Global { id } => {
+                id.hash(id_to_h);
+            }
+            Topic::Chat { id } => {
+                id.hash(id_to_h);
+            }
+            Topic::Zone { id } => {
+                id.hash(id_to_h);
+            }
+            Topic::ShardInstance { id } => {
+                id.hash(id_to_h);
+            }
+        }
+
+    }
+}
 impl Topic {
+
+    pub fn get_id(&self)->u32{
+        match self {
+            Topic::Entity { id } => id.0,
+            _ => 0,
+        }
+    }
     pub fn to_string(&self) -> String {
         match self {
-            Topic::Global => "global".to_string(),
-            Topic::Chat => "chat".to_string(),
-            Topic::Zone(id) => format!("sector_{:04}", id),
-            Topic::ShardInstance(id) => format!("shard_{:02}", id.0),
+            Topic::Global {..}=> "global".to_string(),
+            Topic::Chat{..} => "chat".to_string(),
+            Topic::Zone{id} => format!("sector_{:04}", id),
+            Topic::ShardInstance{id} => format!("shard_{:02}", id.0),
+            Topic::Entity { id } => {format!("entity_:{}", id.0)},
         }
     }
 }
 impl BinaryEncode for Topic {
     fn encode_binary(&self, output: &mut Vec<u8>) -> anyhow::Result<()> {
         match self {
-            Topic::Global => {
+            Topic::Global {id}=> {
                 write_u8(output, TOPIC_GLOBAL);
-                write_u32(output, 0);
+                write_u32(output, *id);
             }
-            Topic::Chat => {
+            Topic::Chat{id} => {
                 write_u8(output, TOPIC_CHAT);
-                write_u32(output, 0);
+                write_u32(output, *id);
             }
-            Topic::Zone(id) => {
+            Topic::Zone{id} => {
                 write_u8(output, TOPIC_ZONE);
                 write_u32(output, *id);
             }
-            Topic::ShardInstance(id) => {
+            Topic::ShardInstance{id} => {
                 write_u8(output, TOPIC_SHARD_INSTANCE);
+                write_u32(output, id.0);
+            }
+            Topic::Entity { id } => {
+                write_u8(output, TOPIC_ENTITY);
                 write_u32(output, id.0);
             }
         }
@@ -71,8 +131,9 @@ impl BinaryEncode for Topic {
 impl BinaryDecode for Topic {
     fn decode_binary(input: &mut &[u8]) -> anyhow::Result<Self> {
         let kind = read_u8(input)?;
-        let id = read_u32(input)?;
+        let r_id = read_u32(input)?;
         let padding = read_exact(input, TOPIC_PADDING_LEN)?;
+
 
         if !padding.iter().all(|byte| *byte == 0) {
             anyhow::bail!("topic contains non-zero padding bytes");
@@ -80,21 +141,18 @@ impl BinaryDecode for Topic {
 
         match kind {
             TOPIC_GLOBAL => {
-                if id != 0 {
-                    anyhow::bail!("Global topic must not contain an id");
-                }
-
-                Ok(Topic::Global)
+                Ok(Topic::Global{id:r_id})
             }
             TOPIC_CHAT => {
-                if id != 0 {
-                    anyhow::bail!("Chat topic must not contain an id");
-                }
-
-                Ok(Topic::Chat)
+                Ok(Topic::Chat{id:r_id})
             }
-            TOPIC_ZONE => Ok(Topic::Zone(id)),
-            TOPIC_SHARD_INSTANCE => Ok(Topic::ShardInstance(ShardId(id))),
+            TOPIC_ZONE => Ok(Topic::Zone{id:r_id}),
+            TOPIC_SHARD_INSTANCE => Ok(Topic::ShardInstance{
+                id: ShardId(r_id)
+            }),
+            TOPIC_ENTITY => Ok(Topic::Entity{
+                id: EntityId(r_id)
+            }),
             unknown => anyhow::bail!("unknown topic kind: 0x{unknown:02x}"),
         }
     }

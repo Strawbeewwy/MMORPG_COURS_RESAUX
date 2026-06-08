@@ -23,21 +23,19 @@ use crate::protocol::utils::utils::{BinaryEncode, write_client_id, write_net_vec
 
 pub fn encode_message(message: &NetworkMessage) -> anyhow::Result<Vec<u8>> {
     match message {
-        NetworkMessage::Subscribe { client_id, shard_id } => {
-            encode_subscribe(*client_id, Topic::ShardInstance(*shard_id))
+        NetworkMessage::Subscribe { client_id, topic } => {
+            encode_subscribe(*client_id, *topic)
         }
-        NetworkMessage::Unsubscribe { client_id, shard_id } => {
-            encode_unsubscribe(*client_id, Topic::ShardInstance(*shard_id))
+        NetworkMessage::Unsubscribe { client_id, topic } => {
+            encode_unsubscribe(*client_id, *topic)
         }
         NetworkMessage::Publish {
-            shard_id,
-            client_id,
+            topic,
             payload_len,
             payload,
         } => {
             encode_publish(
-                Topic::ShardInstance(*shard_id),
-                *client_id,
+                *topic,
                 *payload_len,
                 payload,
             )
@@ -49,7 +47,7 @@ pub fn encode_message(message: &NetworkMessage) -> anyhow::Result<Vec<u8>> {
             encode_client_input(*client_id, *input)
         }
         NetworkMessage::RegisterShard { shard_id } => {
-            encode_register_shard(Topic::ShardInstance(*shard_id))
+            encode_register_shard(Topic::ShardInstance{id:*shard_id})
         }
         NetworkMessage::RegisterSpatialService => {
             encode_register_spatial_service()
@@ -204,7 +202,6 @@ fn encode_unsubscribe(
 
 fn encode_publish(
     topic: Topic,
-    client_id: ClientId,
     payload_len: u16,
     payload: &[u8],
 ) -> anyhow::Result<Vec<u8>> {
@@ -217,12 +214,11 @@ fn encode_publish(
     }
 
     let mut packet = Vec::with_capacity(
-        TAG_LEN + TOPIC_LEN + CLIENT_ID_LEN + size_of::<u16>() + payload.len()
+        TAG_LEN + TOPIC_LEN  + size_of::<u16>() + payload.len()
     );
 
     write_u8(&mut packet, TAG_PUBLISH);
     topic.encode_binary(&mut packet)?;
-    write_client_id(&mut packet, client_id);
     write_u16(&mut packet, payload_len);
     packet.extend_from_slice(payload);
 
