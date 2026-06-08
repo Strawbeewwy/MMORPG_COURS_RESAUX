@@ -19,3 +19,9 @@ pub use state::{
     EntityIdRange,
     EntityRegistry,
 };
+
+pub use spawn_entity::{
+    SpawnGhostEntityEvent,
+    SpawnGenericEntityEvent,
+    SpawnPlayerEntityEvent,
+};

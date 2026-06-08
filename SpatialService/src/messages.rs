@@ -3,7 +3,7 @@
 /// keeping the `shared` crate free of any Bevy dependency.
 use bevy::prelude::*;
 use game_sockets::GameConnection;
-use shared::protocol::{ClientId, ShardId};
+use shared::protocol::{ClientId, EntityId, ShardId};
 
 /// Bevy message produced by `poll_shard_events` from an incoming PositionUpdate wire packet.
 ///
@@ -14,7 +14,7 @@ use shared::protocol::{ClientId, ShardId};
 /// the reverse `f64 → f32` cast in `handle_subscriptions` is intentional and documented there.
 #[derive(Message, Debug, Clone, Copy)]
 pub struct PositionUpdateMsg {
-    pub client_id: ClientId,
+    pub entity_id: EntityId,
     /// The direct QUIC connection of the shard that sent this update.
     /// `Some` when received via the shard listener (direct shard → SpatialService path).
     /// `None` when relayed through the utils.

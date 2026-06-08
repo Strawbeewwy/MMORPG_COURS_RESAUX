@@ -1,24 +1,62 @@
 use crate::config::ServerConfig;
-use crate::net::input::handle_broker_client_input;
-use crate::world::state::{EntityRegistry, handle_register_client};
+
+use crate::world::state::{EntityRegistry};
 use bevy::prelude::*;
 use shared::game_sockets::protocols::QuicBackend;
 use shared::game_sockets::{
     GameNetworkEvent, GamePeer, GameStreamReliability,
 };
 use shared::protocol::{NetworkMessage, Topic, decode_message, encode_message, BrokerHandle, BrokerConnectionState, ClientId, NetVec2, WorldSnapshot, WorldUpdate};
-use std::sync::Arc;
-use bevy::platform::collections::HashMap;
-use tokio::sync::Mutex;
-use shared::game_sockets::GameNetworkEvent::{StreamClosed, StreamCreated};
+use std::sync::{Arc};
+use tokio::sync::{Mutex, MutexGuard};
 use shared::protocol::utils::utils::BinaryEncode;
+use crate::net::apply_client_input;
 use crate::net::area_of_interest::{is_inside_area_of_interest, DEFAULT_AREA_OF_INTEREST_RADIUS};
 use crate::net::handoff::handle_handoff_request;
+use crate::world::{ClientEntityRegistry, Velocity};
 
+
+
+/**
+World interaction should always be done through the SharedPlayerRegistry resource.
+All interaction on entities must be done with entity_reg_shared,
+client_reg_shared is used to get an entity_id from the client_id,
+then we use the entity_id on entity_reg_shared to interact with the entity.
+**/
 #[derive(Resource, Clone)]
-pub struct SharedPlayerRegistry {
-    pub inner: Arc<Mutex<EntityRegistry>>,
+pub struct SharedEntityRegistry {
+    pub entity_reg_shared: Arc<Mutex<EntityRegistry>>,
+    pub client_reg_shared: Arc<Mutex<ClientEntityRegistry>>,
 }
+
+
+/**
+When accessing the SharedEntityRegistry, use the try_lock method to acquire both locks.
+This ensures that both locks are acquired atomically, preventing partial lock acquisition and potential deadlocks.
+
+Easy copy and paste:
+
+        match shared_registry.try_lock() {
+            Some((cli_registry, ent_registry))=> {
+                // Do Something
+            }
+            None => {
+                tracing::warn!("could not lock player registry for client input");
+                return;
+            }
+        }
+
+
+**/
+impl SharedEntityRegistry {
+    pub fn try_lock(&self) -> Option<(MutexGuard<ClientEntityRegistry>, MutexGuard<EntityRegistry>)> {
+        let client_lock = self.client_reg_shared.try_lock().ok()?;
+        let entity_lock = self.entity_reg_shared.try_lock().ok()?;
+        Some((client_lock, entity_lock))
+    }
+}
+
+
 
 #[derive(Resource)]
 pub struct BrokerShardPeer {
@@ -67,8 +105,10 @@ pub fn connect_to_broker(mut commands: Commands, config: Res<ServerConfig>) {
 pub fn poll_broker_events(
     config: Res<ServerConfig>,
     mut broker: ResMut<BrokerShardPeer>,
-    registry: Res<SharedPlayerRegistry>,
+    registry: Res<SharedEntityRegistry>,
+    mut velocities: Query<&mut Velocity>,
 ) {
+
     loop {
         let event = match broker.handle.peer.poll() {
             Ok(Some(event)) => event,
@@ -79,22 +119,23 @@ pub fn poll_broker_events(
             }
         };
 
-        handle_broker_event(&config, &mut broker, &registry, event);
+        handle_broker_event(&config, &mut broker, &registry, event,&mut velocities);
     }
 }
 
 fn handle_broker_event(
     config: &ServerConfig,
     broker: &mut BrokerShardPeer,
-    registry: &SharedPlayerRegistry,
+    registry: &SharedEntityRegistry,
     event: GameNetworkEvent,
+    velocities: &mut Query<&mut Velocity>,
 ) {
     match event {
         GameNetworkEvent::Connected(connection) => {
-            tracing::info!("shard connected to utils: {}", connection.connection_id);
+            info!("shard connected to utils: {}", connection.connection_id);
 
             broker.handle.connection = Some(connection);
-        broker.handle.state = BrokerConnectionState::Connected;
+            broker.handle.state = BrokerConnectionState::Connected;
 
             if let Err(error) = broker
                 .handle
@@ -110,7 +151,7 @@ fn handle_broker_event(
         }
 
         GameNetworkEvent::Disconnected(connection) => {
-            tracing::warn!("shard disconnected from utils: {}", connection.connection_id);
+            warn!("shard disconnected from utils: {}", connection.connection_id);
 
             broker.handle.connection = None;
             broker.handle.stream = None;
@@ -118,21 +159,21 @@ fn handle_broker_event(
         }
 
         GameNetworkEvent::StreamCreated(connection, stream) => {
-            tracing::info!(
-                "utils stream created for shard: connection={} stream={}",
+            info!(
+                "broker stream created for shard: connection={} stream={}",
                 connection.connection_id,
                 stream.stream_id
             );
 
-        broker.handle.stream = Some(stream);
-        broker.handle.state = BrokerConnectionState::Ready;
-        broker.handle.reset_backoff();
+            broker.handle.stream = Some(stream);
+            broker.handle.state = BrokerConnectionState::Ready;
+            broker.handle.reset_backoff();
 
         }
 
         GameNetworkEvent::StreamClosed(connection, stream) => {
-            tracing::info!(
-                "utils stream closed for shard: connection={} stream={}",
+            info!(
+                "broker stream closed for shard: connection={} stream={}",
                 connection.connection_id,
                 stream.stream_id
             );
@@ -146,18 +187,18 @@ fn handle_broker_event(
             stream,
             data,
         } => {
-            tracing::debug!(
-                "utils message received by shard: connection={} stream={} bytes={}",
+            debug!(
+                "broker message received: connection={} stream={} bytes={}",
                 connection.connection_id,
                 stream.stream_id,
                 data.len()
             );
 
-            handle_broker_message(config, registry, &data);
+            handle_broker_message(config, registry, &data, velocities);
         }
 
         GameNetworkEvent::Error { connection, inner } => {
-            tracing::warn!(
+            warn!(
                 "utils socket error for shard on connection {}: {}",
                 connection.connection_id,
                 inner
@@ -174,7 +215,7 @@ fn register_shard_with_broker(
     config: &ServerConfig,
     broker: &mut BrokerShardPeer,
 ) {
-    if broker.handle.state == BrokerConnectionState::Connected {
+    if !broker.is_ready() {
         return;
     }
 
@@ -184,7 +225,7 @@ fn register_shard_with_broker(
         }) {
             Ok(packet) => packet,
             Err(error) => {
-                tracing::warn!(
+                warn!(
                 "cannot encode RegisterShard for topic {}: {}",
                 &config.shard_topic.to_string(),
                 error
@@ -201,16 +242,17 @@ fn register_shard_with_broker(
 
     broker.handle.state = BrokerConnectionState::Connected;
 
-    tracing::info!(
-        "registered shard with utils topic={}",
+    info!(
+        "registered shard with broker topic={}",
         &config.shard_topic.to_string()
     );
 }
 
 fn handle_broker_message(
     config: &ServerConfig,
-    registry: &SharedPlayerRegistry,
+    registry: &SharedEntityRegistry,
     data: &[u8],
+    velocities: &mut Query<&mut Velocity>,
 ) {
     let message = match decode_message(data) {
         Ok(message) => message,
@@ -222,15 +264,19 @@ fn handle_broker_message(
 
     match message {
 
-        NetworkMessage::ClientInput { client_id, input } => {
-
+        NetworkMessage::ClientInput {
+            client_id,
+            input } => {
+            apply_client_input(&registry, client_id, input,velocities);
         }
-        NetworkMessage::RegisterClient {client_id, username} => {
+        NetworkMessage::RegisterClient {
+            client_id,
+            username} => {
 
         }
 
         other => {
-            tracing::warn!("unexpected broker message received by shard: {:?}", other);
+            warn!("unexpected broker message received by shard: {:?}", other);
         }
     }
 }

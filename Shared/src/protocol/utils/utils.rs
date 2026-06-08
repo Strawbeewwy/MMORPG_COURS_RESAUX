@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use anyhow::Context;
-use crate::protocol::{ClientId, EntityType, NetVec2, Username};
+use crate::protocol::{ClientId, EntityId, EntityType, NetVec2, Username};
 use crate::protocol::game::PlayerId;
 pub use crate::protocol::message::network_message::{
     NetworkMessage,
@@ -63,6 +63,10 @@ pub fn write_u128(output: &mut Vec<u8>, value: u128) {
 
 pub fn write_client_id(output: &mut Vec<u8>, client_id: ClientId) {
     write_u32(output, client_id.0);
+}
+
+pub fn write_entity_id(output: &mut Vec<u8>, entity_id: EntityId) {
+    write_u32(output, entity_id.0);
 }
 
 pub fn write_player_id(output: &mut Vec<u8>, player_id: PlayerId) {
@@ -144,6 +148,11 @@ pub fn read_u128(input: &mut &[u8]) -> anyhow::Result<u128> {
 
 pub fn read_client_id(input: &mut &[u8]) -> anyhow::Result<ClientId> {
     Ok(ClientId(read_u32(input)?))
+}
+
+
+pub fn read_entity_id(input: &mut &[u8]) -> anyhow::Result<EntityId> {
+    Ok(EntityId(read_u32(input)?))
 }
 
 pub fn read_player_id(input: &mut &[u8]) -> anyhow::Result<PlayerId> {

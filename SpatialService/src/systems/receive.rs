@@ -83,9 +83,9 @@ fn handle_shard_message(
         }
 
         // Direct PositionUpdate from shard — propagate the source connection.
-        NetworkMessage::PositionUpdate { client_id, position } => {
+        NetworkMessage::PositionUpdate { entity_id, position } => {
             ev_writer.write(PositionUpdateMsg {
-                client_id,
+                entity_id,
                 shard_connection: Some(connection),
                 // f32 → f64 widening: lossless, intentional (see PositionUpdateMsg doc).
                 x: f64::from(position.x),
@@ -94,7 +94,7 @@ fn handle_shard_message(
         }
 
         // Destination shard accepted the client — clear the pending handoff state.
-        NetworkMessage::HandoffCompleted { entity_id } => {
+        NetworkMessage::HandoffCompleted { entity_id,.. } => {
             tracing::info!(
                 "HandoffAck received: client {}",
                 entity_id.0,
@@ -187,9 +187,9 @@ pub fn handle_broker_message(
     };
 
     match message {
-        NetworkMessage::PositionUpdate { client_id, position } => {
+        NetworkMessage::PositionUpdate { entity_id, position } => {
             ev_writer.write(PositionUpdateMsg {
-                client_id,
+                entity_id,
                 // Relayed via broker — no direct shard connection available.
                 shard_connection: None,
                 x: f64::from(position.x),

@@ -1,16 +1,12 @@
 use crate::config::ServerConfig;
-use crate::net::heartbeat::{
-    bind_heartbeat_socket, send_heartbeat
+
+use crate::net::{
+    send_heartbeat, bind_heartbeat_socket,
+    SharedEntityRegistry, connect_to_broker,
+    poll_broker_events, ClientInputEvent,
+    publish_world_update, publish_player_position_updates
 };
-use crate::net::network_event::{
-    SharedPlayerRegistry, connect_to_broker,
-    poll_broker_events, };
-use crate::world::state::{
-    EntityRegistry, update_players_registry
-};
-use crate::net::publish::{
-publish_world_update, publish_player_position_updates
-};
+use crate::world::{ClientEntityRegistry, EntityRegistry, SpawnGenericEntityEvent, SpawnGhostEntityEvent, SpawnPlayerEntityEvent};
 
 use bevy::app::ScheduleRunnerPlugin;
 use bevy::prelude::*;
@@ -18,6 +14,7 @@ use shared::config::DEFAULT_DS_TICK_RATE;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
+
 
 pub fn run() {
     tracing_subscriber::fmt()
@@ -39,9 +36,14 @@ pub fn run() {
             Duration::from_millis(1000 / DEFAULT_DS_TICK_RATE),
         )))
         .insert_resource(config)
-        .insert_resource(SharedPlayerRegistry {
-            inner: Arc::new(Mutex::new(EntityRegistry::default())),
+        .insert_resource(SharedEntityRegistry {
+            entity_reg_shared: Arc::new(Mutex::new(EntityRegistry::default())),
+            client_reg_shared: Arc::new(Mutex::new(ClientEntityRegistry::default()))
         })
+        .add_message::<SpawnPlayerEntityEvent>()
+        .add_message::<SpawnGhostEntityEvent>()
+        .add_message::<SpawnGenericEntityEvent>()
+        .add_message::<ClientInputEvent>()
         .add_systems(
             Startup,
             (
@@ -53,7 +55,6 @@ pub fn run() {
             Update,
             (
                 poll_broker_events,
-                update_players_registry,
                 publish_player_position_updates,
                 publish_world_update,
                 send_heartbeat,

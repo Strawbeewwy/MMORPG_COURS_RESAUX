@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use crate::protocol::{PlayerPublicInfo, PlayerSnapshot, ClientId};
+use crate::protocol::snapshots::entity_snapshot::EntitySnapshot;
 use crate::protocol::utils::utils::{read_arc_str, read_client_id, read_u16, read_u64, read_u8, write_arc_str, write_client_id, write_len_u16, write_u64, write_u8, BinaryDecode, BinaryEncode};
 
 /// Shared zone identifier — uses `Arc<str>` instead of `String` to avoid repeated
@@ -16,7 +17,7 @@ const WORLD_UPDATE_PLAYER_LEFT: u8 = 0x03;
 
 
 /// World-state update broadcast by the utils to subscribed clients.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone,)]
 pub enum WorldUpdate {
     /// Full world snapshot for initial sync or re-sync.
     Snapshot { snapshot: WorldSnapshot },
@@ -31,10 +32,11 @@ pub enum WorldUpdate {
 /**
 snapshot of the world, sent to the client
 **/
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct WorldSnapshot {
     pub zone: ZoneId,
     pub players: Vec<PlayerSnapshot>,
+    pub entities: Vec<EntitySnapshot>,
     pub server_tick: u64,
 }
 
@@ -92,10 +94,15 @@ impl BinaryEncode for WorldSnapshot {
     fn encode_binary(&self, output: &mut Vec<u8>) -> anyhow::Result<()> {
         write_arc_str(output, &self.zone)?;
         write_u64(output, self.server_tick);
-        write_len_u16(output, self.players.len(), "player count")?;
 
+        write_len_u16(output, self.players.len(), "player count")?;
         for player in &self.players {
             player.encode_binary(output)?;
+        }
+
+        write_len_u16(output,self.entities.len(), "entity count")?;
+        for entity in &self.entities {
+            entity.encode_binary(output)?;
         }
 
         Ok(())
@@ -114,9 +121,16 @@ impl BinaryDecode for WorldSnapshot {
             players.push(PlayerSnapshot::decode_binary(input)?);
         }
 
+        let entity_count = read_u16(input)? as usize;
+        let mut entities = Vec::with_capacity(entity_count);
+        for _ in 0..entity_count {
+            entities.push(EntitySnapshot::decode_binary(input)?);
+        }
+
         Ok(WorldSnapshot {
             zone,
             players,
+            entities,
             server_tick,
         })
     }
