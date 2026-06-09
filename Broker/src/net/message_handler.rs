@@ -40,7 +40,7 @@ pub fn handle_message(
         TAG_PUBLISH => relay_to_client(peer, state, &connection, &stream, data),
         TAG_CLIENT_INPUT => relay_client_input_to_shard(peer,state,&connection,&stream,data),
         TAG_REGISTER_SHARD => handle_register_shard(peer_roles,state,&connection,&stream,&mut input),
-        TAG_REGISTER_SPATIAL_SERVICE => handle_register_spatial_service(peer_roles,state,&connection,&stream),
+        TAG_REGISTER_SPATIAL_SERVICE => handle_register_spatial_service(peer,peer_roles,state,&connection,&stream),
         TAG_CLIENT_HELLO => handle_client_hello(peer,peer_roles,state,&connection,&stream,&mut input),
         TAG_REQUEST_ENTITY_ID_BLOCK => relay_to_spatial_services(peer,state,data),
         TAG_ENTITY_ID_BLOCK_ALLOCATED => relay_entity_id_block_allocated_to_shard(peer, state, &connection, &stream, data.clone()),
@@ -107,6 +107,7 @@ fn handle_register_shard(
 }
 
 fn handle_register_spatial_service(
+    peer: &GamePeer,
     peer_roles: &mut PeerRoles,
     state: &mut PubSubState,
     connection: &GameConnection,
@@ -120,7 +121,7 @@ fn handle_register_spatial_service(
         return;
     }
 
-    state.register_spatial_service(*connection, stream.clone());
+    state.register_spatial_service(connection, stream);
 
     tracing::info!(
         "registered spatial service connection={}",

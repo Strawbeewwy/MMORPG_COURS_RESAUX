@@ -6,6 +6,8 @@ use shared::protocol::{ClientId, EntityId, ShardId, Topic, Username};
 use std::collections::{
     HashMap, HashSet
 };
+use game_sockets::GamePeer;
+use shared::protocol::net_handles::spatial_handler::SpatialHandle;
 use crate::net::peer_roles::PeerRole;
 
 
@@ -43,6 +45,7 @@ pub struct PubSubState {
     pub shard_streams_by_topic: BiMap<Topic, ConnectionStream>,
     // spatial
     pub spatial_service_streams: Option<ConnectionStream>,
+    pub spatial_handle: SpatialHandle,
 
 }
 impl PubSubState {
@@ -87,20 +90,18 @@ impl PubSubState {
 
     pub fn register_spatial_service(
         &mut self,
-        connection: GameConnection,
-        stream: GameStream,
+        connection: &GameConnection,
+        stream: &GameStream,
     ) {
         tracing::info!(
             "register spatial service stream connection={} stream={}",
             connection.connection_id,
             stream.stream_id
         );
-        let connection_stream = ConnectionStream{
-            connection: connection.clone(),
-            stream : stream.clone()
-        };
 
-        self.spatial_service_streams = Some(connection_stream);
+        self.spatial_handle.connection = Some(connection.clone());
+        self.spatial_handle.stream = Some(stream.clone());
+
     }
 
 

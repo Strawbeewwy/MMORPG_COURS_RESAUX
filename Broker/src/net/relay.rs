@@ -133,24 +133,9 @@ pub fn relay_to_spatial_services(
     state: &mut PubSubState,
     data: &[u8],
 ) {
-
-    let spatial_connection = match state.spatial_service_streams.clone(){
-        Some(spatial_connection) => spatial_connection,
-        None => {
-            tracing::warn!(
-                " no spatial service registered",
-            );
-            return;
-        }
-    };
-
-    let packet = Vec::from(data);
-
     if let Err(error) =
-        peer.send(
-            &spatial_connection.connection,
-            &spatial_connection.stream,
-            Bytes::from(packet)) {
+        state.spatial_handle.send_to_spatial
+        (peer, data.into()){
         tracing::warn!(
             "failed to send PositionUpdate to spatial service: {}",
             error
