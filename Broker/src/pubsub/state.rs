@@ -6,7 +6,6 @@ use shared::protocol::{ClientId, EntityId, ShardId, Topic, Username};
 use std::collections::{
     HashMap, HashSet
 };
-use game_sockets::GamePeer;
 use shared::protocol::net_handles::spatial_handler::SpatialHandle;
 use crate::net::peer_roles::PeerRole;
 
@@ -39,12 +38,11 @@ pub struct PubSubState {
 
     pub topic_subscribers: HashMap<Topic, HashSet<ClientId>>,
     pub client_topics: HashMap<ClientId, HashSet<Topic>>,
-
+    //entity
     pub ghost_entity: HashMap<EntityId, GhostRoute>,
     //shard
     pub shard_streams_by_topic: BiMap<Topic, ConnectionStream>,
     // spatial
-    pub spatial_service_streams: Option<ConnectionStream>,
     pub spatial_handle: SpatialHandle,
 
 }
@@ -263,10 +261,11 @@ impl PubSubState {
                     self.remove_dead_shard_topic(topic);
                 }
             },
-            _ => {}
+            PeerRole::SpatialService =>{
+                self.spatial_handle.connection = None;
+                self.spatial_handle.stream = None;
+            }
         };
-
-
     }
 
     fn remove_dead_shard_topic(
