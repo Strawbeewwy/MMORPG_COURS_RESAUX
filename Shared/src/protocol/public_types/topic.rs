@@ -1,5 +1,5 @@
 use std::hash::{Hash, Hasher};
-use crate::protocol::{EntityId, NetVec2};
+use crate::protocol::{EntityId};
 use crate::protocol::utils::utils::{
     BinaryDecode,
     BinaryEncode,
@@ -81,10 +81,13 @@ impl Hash for Topic {
 }
 impl Topic {
 
-    pub fn get_id(&self)->u32{
+    pub fn get_id_as_u32(&self) ->u32{
         match self {
             Topic::Entity { id } => id.0,
-            _ => 0,
+            Topic::Chat { id } => *id,
+            Topic::Zone { id } => *id,
+            Topic::ShardInstance { id } => id.0,
+            Topic::Global { id } => *id,
         }
     }
     pub fn to_string(&self) -> String {

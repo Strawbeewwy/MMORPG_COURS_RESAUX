@@ -1,9 +1,10 @@
 use bevy::platform::collections::HashMap;
 use bevy::prelude::{Query, Res, ResMut, Resource};
-use shared::protocol::{ClientId, EntityId, NetVec2, NetworkMessage, Topic, WorldSnapshot, WorldUpdate};
-use shared::protocol::utils::utils::BinaryEncode;
+use shared::protocol::{
+    EntityId, NetVec2, NetworkMessage, Topic,
+    WorldSnapshot, WorldUpdate
+};
 use crate::config::ServerConfig;
-use crate::net::area_of_interest::{is_inside_area_of_interest, DEFAULT_AREA_OF_INTEREST_RADIUS};
 use crate::net::network_event::BrokerShardPeer;
 use crate::world::{Position};
 use crate::world::state::SharedEntityRegistry;
@@ -80,118 +81,93 @@ pub fn publish_world_update(
         return;
     }
 
-    let Topic::ShardInstance(shard_id) = config.shard_topic else {
-        tracing::warn!(
-            "cannot publish WorldUpdate to unsupported topic {}",
-            config.shard_topic.to_string()
-        );
-        return;
-    };
+    // let topic = config.shard_topic else {
+    //     tracing::warn!(
+    //         "cannot publish WorldUpdate to unsupported topic {}",
+    //         config.shard_topic.to_string()
+    //     );
+    //     return;
+    // };
+    //
+    //
+    // match shared_registry.try_lock() {
+    //     Some((cli_registry, ent_registry))=> {
+    //         if cli_registry.client_to_entity.is_empty() {
+    //             tracing::warn!("no players connected, skipping world update");
+    //             return;
+    //         }
+    //
+    //         TODO HERE publish world update,
+    //     }
+    //     None => {
+    //         tracing::warn!("could not lock player registry for client input");
+    //         return;
+    //     }
+    // }
 
 
-    match shared_registry.try_lock() {
-        Some((cli_registry, ent_registry))=> {
-            if cli_registry.client_to_entity.is_empty() {
-                tracing::warn!("no players connected, skipping world update");
-                return;
-            }
-            
-            
-        }
-        None => {
-            tracing::warn!("could not lock player registry for client input");
-            return;
-        }
-    }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    let Ok(registry) = registry.entity_reg_shared.try_lock() else {
-        tracing::warn!("could not lock player registry for world update");
-        return;
-    };
-
-    if(registry.players.is_empty()){
-        return;
-    }
-
-
-    let full_players = registry.generate_player_snapshot();
-
-    for observer in &full_players {
-        let players = full_players
-            .iter()
-            .filter(|player| {
-                player.client_id == observer.client_id
-                    || is_inside_area_of_interest(
-                    observer.position,
-                    player.position,
-                    DEFAULT_AREA_OF_INTEREST_RADIUS,
-                )
-            })
-            .cloned()
-            .collect();
-
-        let snapshot = WorldSnapshot {
-            zone: config.zone.clone(),
-            players,
-            server_tick: config.server_tick,
-        };
-
-        let update = WorldUpdate::Snapshot { snapshot };
-
-        let mut payload = Vec::new();
-
-        match (update.encode_binary(&mut payload)) {
-            Ok(payload) => payload,
-            Err(error) => {
-                tracing::error!(
-                    "failed to encode WorldUpdate for client_id={}: {error:#}",
-                    observer.client_id.0
-                );
-                continue;
-            }
-        };
-
-        let payload_len = match u16::try_from(payload.len()) {
-            Ok(payload_len) => payload_len,
-            Err(_) => {
-                tracing::error!(
-                    "WorldUpdate payload too large for client_id={}: {} bytes",
-                    observer.client_id.0,
-                    payload.len()
-                );
-                continue;
-            }
-        };
-
-        let message = NetworkMessage::Publish {
-            shard_id,
-            client_id: observer.client_id,
-            payload_len,
-            payload,
-        };
-
-        if let Err(error) = broker.send_message(&message) {
-            tracing::error!(
-                "failed to publish WorldUpdate for client_id={}: {error:#}",
-                observer.client_id.0
-            );
-            return;
-        }
-    }
+//OLD CODE
+//     let full_players = registry.generate_player_snapshot();
+//
+//     for observer in &full_players {
+//         let players = full_players
+//             .iter()
+//             .filter(|player| {
+//                 player.client_id == observer.client_id
+//                     || is_inside_area_of_interest(
+//                     observer.position,
+//                     player.position,
+//                     DEFAULT_AREA_OF_INTEREST_RADIUS,
+//                 )
+//             })
+//             .cloned()
+//             .collect();
+//
+//         let snapshot = WorldSnapshot {
+//             zone: config.zone.clone(),
+//             players,
+//             server_tick: config.server_tick,
+//         };
+//
+//         let update = WorldUpdate::Snapshot { snapshot };
+//
+//         let mut payload = Vec::new();
+//
+//         match (update.encode_binary(&mut payload)) {
+//             Ok(payload) => payload,
+//             Err(error) => {
+//                 tracing::error!(
+//                     "failed to encode WorldUpdate for client_id={}: {error:#}",
+//                     observer.client_id.0
+//                 );
+//                 continue;
+//             }
+//         };
+//
+//         let payload_len = match u16::try_from(payload.len()) {
+//             Ok(payload_len) => payload_len,
+//             Err(_) => {
+//                 tracing::error!(
+//                     "WorldUpdate payload too large for client_id={}: {} bytes",
+//                     observer.client_id.0,
+//                     payload.len()
+//                 );
+//                 continue;
+//             }
+//         };
+//
+//         let message = NetworkMessage::Publish {
+//             topic,
+//             payload_len,
+//             payload,
+//         };
+//
+//         if let Err(error) = broker.send_message(&message) {
+//             tracing::error!(
+//                 "failed to publish WorldUpdate for client_id={}: {error:#}",
+//                 observer.client_id.0
+//             );
+//             return;
+//         }
+//     }
 }

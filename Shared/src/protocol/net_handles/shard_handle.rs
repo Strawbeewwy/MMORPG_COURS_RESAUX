@@ -30,7 +30,7 @@ impl ShardHandle {
 
     /// Send a raw payload to a specific shard by its id.
     /// Returns `true` if the shard is connected and the send succeeded.
-    pub fn send_to_shard(&self, shard_id: ShardId, payload: Vec<u8>) -> anyhow::Result<(bool)> {
+    pub fn send_to_shard(&self, shard_id: ShardId, payload: Vec<u8>) -> anyhow::Result<bool> {
         let Some(conn) = self.connection_by_shard_id.get(&shard_id) else {
             anyhow::bail!("send_to_shard: shard {} not connected", shard_id.0)
         };

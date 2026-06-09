@@ -63,7 +63,7 @@ impl ServerConfig {
 
 
         let shard_topic = Topic::ShardInstance{
-            id:ShardId(shard_id?)
+            id: ShardId(shard_id?)
         };
 
         Ok(Self {

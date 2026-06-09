@@ -1,6 +1,10 @@
 
 use crate::protocol::{EntityId, EntityType, NetVec2};
-use crate::protocol::utils::utils::{read_entity_id, read_entity_type, read_net_vec2, read_player_id, read_username, write_client_id, write_entity_id, write_entity_type, write_net_vec2, write_player_id, write_username, BinaryDecode, BinaryEncode};
+use crate::protocol::utils::utils::{
+    read_entity_id, read_entity_type, read_net_vec2,
+    write_entity_id, write_entity_type, write_net_vec2,
+    BinaryDecode, BinaryEncode
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EntitySnapshot {

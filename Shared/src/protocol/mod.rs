@@ -29,8 +29,6 @@ pub use public_types::netvec2::*;
 pub use message::encode::encode_message;
 pub use message::decode::decode_message;
 
-pub use utils::*;
-
 
 pub use net_handles::broker_handle::{
     BrokerHandle, BrokerConnectionState,

@@ -3,7 +3,6 @@ use shared::protocol::{
     ClientId,
     EntityId,
     EntityType,
-    NetVec2,
     ShardId,
     Username,
 };

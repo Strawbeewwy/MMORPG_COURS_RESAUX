@@ -38,7 +38,7 @@ Easy copy and paste:
 
 **/
 impl SharedEntityRegistry {
-    pub fn try_lock(&self) -> Option<(MutexGuard<ClientEntityRegistry>, MutexGuard<EntityRegistry>)> {
+    pub fn try_lock(&'_ self) -> Option<(MutexGuard<'_, ClientEntityRegistry>, MutexGuard<'_, EntityRegistry>)> {
         let client_lock = self.client_reg_shared.try_lock().ok()?;
         let entity_lock = self.entity_reg_shared.try_lock().ok()?;
         Some((client_lock, entity_lock))

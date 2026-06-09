@@ -1,19 +1,18 @@
 use crate::config::ServerConfig;
 
-use crate::world::state::{EntityRegistry, SharedEntityRegistry};
+use crate::world::state::{SharedEntityRegistry};
 use bevy::prelude::*;
 use shared::game_sockets::protocols::QuicBackend;
 use shared::game_sockets::{
     GameNetworkEvent, GamePeer, GameStreamReliability,
 };
-use shared::protocol::{NetworkMessage, Topic, decode_message, encode_message, BrokerHandle, BrokerConnectionState, ClientId, NetVec2, WorldSnapshot, WorldUpdate};
-use std::sync::{Arc};
-use tokio::sync::{Mutex, MutexGuard};
-use shared::protocol::utils::utils::BinaryEncode;
+use shared::protocol::{
+    NetworkMessage, decode_message, encode_message, BrokerHandle, BrokerConnectionState, ClientId,
+    NetVec2, WorldSnapshot, WorldUpdate, ShardId
+};
+use tokio::sync::{MutexGuard};
 use crate::net::apply_client_input;
-use crate::net::area_of_interest::{is_inside_area_of_interest, DEFAULT_AREA_OF_INTEREST_RADIUS};
-use crate::net::handoff::handle_handoff_request;
-use crate::world::{ClientEntityRegistry, Velocity};
+use crate::world::{ Velocity};
 
 
 
@@ -179,32 +178,33 @@ fn register_shard_with_broker(
         return;
     }
 
-    if let Topic::ShardInstance(shard_id) = config.shard_topic {
-        let packet = match encode_message(&NetworkMessage::RegisterShard {
-           shard_id,
+    let topic = config.shard_topic;
+
+    let packet = match encode_message(&NetworkMessage::RegisterShard {
+        shard_id: ShardId(topic.get_id_as_u32()),
         }) {
             Ok(packet) => packet,
             Err(error) => {
                 warn!(
                 "cannot encode RegisterShard for topic {}: {}",
-                &config.shard_topic.to_string(),
+                topic.to_string(),
                 error
             );
                 return;
             }
         };
 
-        if let Err(error) = broker.handle.send(packet) {
-            tracing::error!("failed to send packet to broker: {error:#}");
-            return;
-        }
+    if let Err(error) = broker.handle.send(packet) {
+        tracing::error!("failed to send packet to broker: {error:#}");
+        return;
     }
+
 
     broker.handle.state = BrokerConnectionState::Connected;
 
     info!(
         "registered shard with broker topic={}",
-        &config.shard_topic.to_string()
+        topic.to_string()
     );
 }
 
@@ -232,7 +232,16 @@ fn handle_broker_message(
         NetworkMessage::RegisterClient {
             client_id,
             username} => {
-
+            //TODO
+        }
+        NetworkMessage::GhostUpdate{..} => {
+            //TODO
+        }
+        NetworkMessage::HandoffRequest{..} => {
+            //TODO
+        }
+        NetworkMessage::HandoffCompleted{..} => {
+            //TODO
         }
 
         other => {

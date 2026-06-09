@@ -13,7 +13,7 @@ pub struct ClientConfig {
     pub broker_ip: String,
     pub broker_port: u16,
     pub zone: ZoneId,
-    pub broker_topics: Vec<Topic>,
+    pub topic: Topic,
 }
 
 impl ClientConfig {
@@ -40,14 +40,16 @@ impl ClientConfig {
             .parse::<u32>()
             .context("invalid SHARD_ID env var")?;
 
-        let broker_topics = vec![Topic::ShardInstance(ShardId(shard_id))];
+        let topic = Topic::ShardInstance{
+            id:ShardId(shard_id)
+        };
 
         Ok(Self {
             username,
             broker_ip,
             broker_port,
             zone,
-            broker_topics,
+            topic,
         })
     }
 
