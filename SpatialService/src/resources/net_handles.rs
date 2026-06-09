@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use game_sockets::{GameConnection, GameNetworkEvent, GamePeer, GameSocketError, GameStream};
+use shared::game_sockets::{GameConnection, GameNetworkEvent, GamePeer, GameSocketError, GameStream};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 pub(crate) use shared::protocol::{BrokerConnectionState, BrokerHandle, ShardId};

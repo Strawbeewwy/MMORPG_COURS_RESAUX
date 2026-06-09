@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use game_sockets::GameConnection;
+use shared::game_sockets::GameConnection;
 use std::collections::{HashMap, HashSet};
 use shared::protocol::{ClientId, ShardId};
 

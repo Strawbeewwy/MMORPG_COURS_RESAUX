@@ -1,5 +1,4 @@
-use shared::protocol::{EntityId, NetVec2, ShardId};
-use shared::protocol::game::EntityState;
+use shared::protocol::public_types::*;
 use crate::config::ServerConfig;
 use crate::world::state::SharedEntityRegistry;
 

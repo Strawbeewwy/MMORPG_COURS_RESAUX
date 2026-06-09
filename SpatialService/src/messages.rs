@@ -2,7 +2,7 @@
 /// These wrap or mirror the shared wire protocol structs,
 /// keeping the `shared` crate free of any Bevy dependency.
 use bevy::prelude::*;
-use game_sockets::GameConnection;
+use shared::game_sockets::GameConnection;
 use shared::protocol::{ClientId, EntityId, ShardId};
 
 /// Bevy message produced by `poll_shard_events` from an incoming PositionUpdate wire packet.

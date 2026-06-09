@@ -1,6 +1,6 @@
 use bevy::prelude::Resource;
 use shared::protocol::{EntityId, NetVec2, ShardId};
-use shared::protocol::game::EntityType;
+use shared::EntityType;
 
 
 #[derive(Resource, Debug)]

@@ -65,7 +65,7 @@ pub fn send_player_input(
     broker_client.send_raw(packet);
 }
 
-fn encode_movement_input(
+pub fn encode_movement_input(
     movement_x: f32,
     movement_y: f32,
 ) -> [u8; CLIENT_INPUT_LEN] {

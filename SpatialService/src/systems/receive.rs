@@ -1,5 +1,7 @@
 use bevy::prelude::*;
-use game_sockets::{GameConnection, GameNetworkEvent, GameStreamReliability};
+use shared::game_sockets::{
+    GameConnection, GameNetworkEvent, GameStreamReliability
+};
 use shared::protocol::{decode_message, NetworkMessage};
 use crate::messages::PositionUpdateMsg;
 use crate::resources::client_map::ClientMap;
@@ -30,31 +32,30 @@ fn handle_shard_event(
     ev_writer: &mut MessageWriter<PositionUpdateMsg>,
     event: GameNetworkEvent,
 ) {
-    use game_sockets::GameNetworkEvent::*;
     match event {
-        Connected(conn) => {
+        GameNetworkEvent::Connected(conn) => {
             tracing::info!("shard connected: {}", conn.connection_id);
             if let Err(e) = listener.handle.peer.create_stream(conn, GameStreamReliability::Reliable) {
                 tracing::error!("failed to create stream for shard {}: {e}", conn.connection_id);
             }
         }
-        Disconnected(conn) => {
+        GameNetworkEvent::Disconnected(conn) => {
             tracing::info!("shard disconnected: {}", conn.connection_id);
             listener.handle.unregister_shard(conn);
             // Remove all clients that were tracked via this shard connection
             // to prevent unbounded growth of ClientMap.
             client_map.remove_by_connection(conn);
         }
-        StreamCreated(conn, stream) => {
+        GameNetworkEvent::StreamCreated(conn, stream) => {
             listener.handle.streams.insert(conn, stream);
         }
-        StreamClosed(conn, _stream) => {
+        GameNetworkEvent::StreamClosed(conn, _stream) => {
             listener.handle.streams.remove(&conn);
         }
-        Error { connection, inner } => {
+        GameNetworkEvent::Error { connection, inner } => {
             tracing::warn!("shard socket error on {}: {inner}", connection.connection_id);
         }
-        Message { connection, data, .. } => {
+        GameNetworkEvent::Message { connection, data, .. } => {
             handle_shard_message(listener, client_map, ev_writer, connection, &data);
         }
     }
@@ -135,9 +136,8 @@ fn handle_broker_event(
     event: GameNetworkEvent,
     ev_writer: &mut MessageWriter<PositionUpdateMsg>,
 ) {
-    use game_sockets::GameNetworkEvent::*;
     match event {
-        Connected(conn) => {
+        GameNetworkEvent::Connected(conn) => {
             tracing::info!("connected to utils: {}", conn.connection_id);
             broker.handle.connection = Some(conn);
             broker.handle.state = BrokerConnectionState::Connected;
@@ -145,27 +145,27 @@ fn handle_broker_event(
                 tracing::error!("failed to create stream towards utils: {e}");
             }
         }
-        Disconnected(_conn) => {
+        GameNetworkEvent::Disconnected(_conn) => {
             tracing::warn!("utils connection lost — will reconnect next tick");
             broker.handle.connection = None;
             broker.handle.stream = None;
             broker.handle.state = BrokerConnectionState::Disconnected;
         }
-        StreamCreated(_conn, stream) => {
+        GameNetworkEvent::StreamCreated(_conn, stream) => {
             tracing::info!("utils stream ready");
             broker.handle.stream = Some(stream);
             broker.handle.state = BrokerConnectionState::Ready;
             broker.handle.reset_backoff();
         }
-        StreamClosed(_conn, _stream) => {
+        GameNetworkEvent::StreamClosed(_conn, _stream) => {
             broker.handle.stream = None;
             broker.handle.state = BrokerConnectionState::Disconnected;
         }
-        Error { connection, inner } => {
+        GameNetworkEvent::Error { connection, inner } => {
             tracing::warn!("utils error on {}: {inner}", connection.connection_id);
             broker.handle.state = BrokerConnectionState::Disconnected;
         }
-        Message { connection, data, .. } => {
+        GameNetworkEvent::Message { connection, data, .. } => {
             handle_broker_message(connection, &data, ev_writer);
         }
     }

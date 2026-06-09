@@ -1,6 +1,6 @@
 use bevy::prelude::*;
-use game_sockets::protocols::QuicBackend;
-use game_sockets::GamePeer;
+use shared::game_sockets::protocols::QuicBackend;
+use shared::game_sockets::GamePeer;
 use std::time::{Duration, Instant};
 use shared::protocol::BrokerHandle;
 use crate::resources::config::SpatialConfig;

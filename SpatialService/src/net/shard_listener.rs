@@ -1,6 +1,6 @@
 use bevy::prelude::*;
-use game_sockets::protocols::QuicBackend;
-use game_sockets::GamePeer;
+use shared::game_sockets::protocols::QuicBackend;
+use shared::game_sockets::GamePeer;
 use std::collections::HashMap;
 use shared::protocol::net_handles::shard_handle::ShardHandle;
 use crate::resources::config::SpatialConfig;

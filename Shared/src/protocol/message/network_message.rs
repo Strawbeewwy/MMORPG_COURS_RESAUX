@@ -1,7 +1,6 @@
-use crate::protocol::message::config::CLIENT_INPUT_LEN;
-use crate::protocol::public_types::topic::*;
-use crate::protocol::{ClientId, EntityId, EntityType, NetVec2, Username};
-use crate::protocol::public_types::entity::EntityState;
+use crate::protocol::message::config::*;
+use crate::protocol::public_types::*;
+use crate::Username;
 
 #[derive(Debug, Clone)]
 pub enum NetworkMessage {
