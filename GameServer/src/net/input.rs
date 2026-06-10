@@ -8,13 +8,6 @@ use crate::world::state::SharedEntityRegistry;
 use crate::world::Velocity;
 
 
-#[derive(Message, Debug, Clone, Copy)]
-pub struct ClientInputEvent {
-    pub client_id: ClientId,
-    pub input: [u8; CLIENT_INPUT_LEN],
-}
-
-
 pub fn apply_client_input(
     shared_registry: &SharedEntityRegistry,
     client_id: ClientId,

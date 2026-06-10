@@ -13,6 +13,14 @@ use crate::world::state::SharedEntityRegistry;
 pub struct PublishedEntityPositions {
     positions_by_entity: HashMap<EntityId, Position>,
 }
+impl PublishedEntityPositions {
+    pub fn track(&mut self, entity_id: EntityId, position: Position) {
+        self.positions_by_entity.insert(entity_id, position);
+    }
+    pub fn get(&self, entity_id: EntityId) -> Option<&Position> {
+        self.positions_by_entity.get(&entity_id)
+    }
+}
 
 pub fn publish_player_position_updates(
     broker: Res<BrokerShardPeer>,
@@ -47,7 +55,7 @@ pub fn publish_player_position_updates(
                             position: NetVec2::from_f32(ent_position.0.x, ent_position.0.y,NetVec2::DEFAULT_PRECISION),
                         };
 
-                        if let Err(error) = broker.send_message(&message) {
+                        if let Err(error) = broker.send_message_to_broker(&message) {
                             tracing::error!(
                             "failed to publish position update for entity_id={}: {error:#}",
                                 entity_id.0

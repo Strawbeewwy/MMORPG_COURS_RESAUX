@@ -16,7 +16,6 @@ pub use heartbeat::{
 };
 
 pub use input::{
-    ClientInputEvent,
     apply_client_input,
 };
 

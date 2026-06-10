@@ -18,7 +18,6 @@ pub struct PositionUpdateMsg {
     /// The direct QUIC connection of the shard that sent this update.
     /// `Some` when received via the shard listener (direct shard → SpatialService path).
     /// `None` when relayed through the utils.
-    pub shard_connection: Option<GameConnection>,
     pub x: f64,
     pub y: f64,
 }
@@ -32,7 +31,7 @@ pub const MAX_CROSSING_SHARDS: usize = 4;
 /// Stub for Part 3 (HandoffRequest).
 #[derive(Message, Debug, Clone, Copy)]
 pub struct CrossingAlertMsg {
-    pub client_id: ClientId,
+    pub entity_id: EntityId,
     /// Inline shard ids — valid entries are `shards[..shard_count]`.
     pub shards: [ShardId; MAX_CROSSING_SHARDS],
     pub shard_count: usize,
@@ -40,12 +39,12 @@ pub struct CrossingAlertMsg {
 
 impl CrossingAlertMsg {
     /// Build from a slice (truncates beyond MAX_CROSSING_SHARDS with a warning).
-    pub fn from_slice(client_id: ClientId, ids: &[ShardId]) -> Self {
+    pub fn from_slice(entity_id: EntityId, ids: &[ShardId]) -> Self {
         if ids.len() > MAX_CROSSING_SHARDS {
             tracing::warn!(
-                "CrossingAlertMsg: client {} has {} crossing shards but only {} can be tracked — \
+                "CrossingAlertMsg: entity {} has {} crossing shards but only {} can be tracked — \
                  excess shards silently dropped (QuadTree depth may be too shallow)",
-                client_id.0,
+                entity_id.0,
                 ids.len(),
                 MAX_CROSSING_SHARDS,
             );
@@ -60,7 +59,7 @@ impl CrossingAlertMsg {
             .for_each(|(slot, &id)| *slot = id);
 
         Self {
-            client_id,
+            entity_id,
             shards,
             shard_count
         }
@@ -76,7 +75,7 @@ impl CrossingAlertMsg {
 /// to a neighbouring shard. Consumed by `handle_handoff_requests`.
 #[derive(Message, Debug, Clone, Copy)]
 pub struct HandoffRequestMsg {
-    pub client_id: ClientId,
+    pub entity_id: EntityId,
     /// The shard the client is currently subscribed to.
     pub from_shard: ShardId,
     /// The shard the client is crossing into.

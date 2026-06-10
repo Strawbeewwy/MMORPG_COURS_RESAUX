@@ -1,5 +1,5 @@
 pub use crate::protocol::*;
-   
+
 pub fn encode_message(
     message: &NetworkMessage
 ) -> anyhow::Result<Vec<u8>> {
@@ -10,16 +10,8 @@ pub fn encode_message(
         NetworkMessage::Unsubscribe { client_id, topic } => {
             encode_unsubscribe(*client_id, *topic)
         }
-        NetworkMessage::Publish {
-            topic,
-            payload_len,
-            payload,
-        } => {
-            encode_publish(
-                *topic,
-                *payload_len,
-                payload,
-            )
+        NetworkMessage::Publish { topic, payload_len, payload, } => {
+            encode_publish(*topic, *payload_len, payload, )
         }
         NetworkMessage::Broadcast { payload_len, payload } => {
             encode_broadcast(*payload_len, payload)
@@ -42,59 +34,41 @@ pub fn encode_message(
         NetworkMessage::RequestEntityIdBlock { shard_id, count } => {
             encode_request_entity_id_block(*shard_id, *count)
         }
-        NetworkMessage::EntityIdBlockAllocated {
-            shard_id,
-            start,
-            count,
-        } => {
-            encode_entity_id_block_allocated(*shard_id, *start, *count)
+        NetworkMessage::EntityIdBlockAllocated { start, count, } => {
+            encode_entity_id_block_allocated(*start, *count)
         }
         NetworkMessage::PositionUpdate { entity_id, position } => {
             encode_position_update(*entity_id, *position)
         }
-        NetworkMessage::HandoffRequest {
-            entity_id,
-
-            position,
-            velocity,
-            entity_state,
-        } => {
-            encode_handoff_request(
-                *entity_id,
-                *position,
-                *velocity,
-                *entity_state,
-            )
+        NetworkMessage::HandoffRequest { entity_id, position, velocity, entity_state, } => {
+            encode_handoff_request(*entity_id, *position, *velocity, *entity_state, )
         }
-        NetworkMessage::HandoffAccepted {
-            entity_id,
-
-        } => {
+        NetworkMessage::HandoffAccepted { entity_id, } => {
             encode_handoff_accepted(*entity_id)
         }
-        NetworkMessage::HandoffRejected {
-            entity_id,
-        } => {
+        NetworkMessage::HandoffRejected { entity_id, } => {
             encode_handoff_rejected(*entity_id)
         }
-        NetworkMessage::GhostUpdate {
-            entity_id,
-            position,
-            velocity,
-        } => {
-            encode_ghost_update(
-                *entity_id,
-                *position,
-                *velocity,
-            )
+        NetworkMessage::GhostUpdate { entity_id, position, velocity, } => {
+            encode_ghost_update(*entity_id, *position, *velocity, )
         }
-        NetworkMessage::HandoffCompleted {
-            entity_id,
-        } => {
+        NetworkMessage::HandoffCompleted { entity_id, } => {
             encode_handoff_completed(*entity_id)
         }
         NetworkMessage::RegisterClient { client_id, username } => {
             encode_register_client(*client_id, username)
+        }
+        NetworkMessage::HandoffStart { entity_id, source, destination } => {
+            encode_handoff_start(*entity_id,*source,*destination)
+        }
+        NetworkMessage::RegisterEntity { entity_id,position } => {
+            encode_register_entity(*entity_id, *position)
+        }
+        NetworkMessage::UnregisterClient { client_id } => {
+            encode_unregister_client(*client_id)
+        }
+        NetworkMessage::UnregisterEntity { entity_id } => {
+            encode_unregister_entity(*entity_id)
         }
     }
 }
@@ -255,7 +229,9 @@ fn encode_request_entity_id_block(
     shard_id: ShardId,
     count: u32,
 ) -> anyhow::Result<Vec<u8>> {
-    let mut packet = Vec::with_capacity(TAG_LEN + TOPIC_ID_LEN + size_of::<u32>());
+    let mut packet = Vec::with_capacity(
+        TAG_LEN + TOPIC_ID_LEN + size_of::<u32>()
+    );
 
     write_u8(&mut packet, TAG_REQUEST_ENTITY_ID_BLOCK);
     write_u32(&mut packet, shard_id.0);
@@ -265,14 +241,14 @@ fn encode_request_entity_id_block(
 }
 
 fn encode_entity_id_block_allocated(
-    shard_id: ShardId,
     start: u32,
     count: u32,
 ) -> anyhow::Result<Vec<u8>> {
-    let mut packet = Vec::with_capacity(TAG_LEN + TOPIC_ID_LEN + size_of::<u32>() + size_of::<u32>());
+    let mut packet = Vec::with_capacity(
+        TAG_LEN + size_of::<u32>() + size_of::<u32>()
+    );
 
     write_u8(&mut packet, TAG_ENTITY_ID_BLOCK_ALLOCATED);
-    write_u32(&mut packet, shard_id.0);
     write_u32(&mut packet, start);
     write_u32(&mut packet, count);
 
@@ -368,6 +344,65 @@ fn encode_ghost_update(
     write_u32(&mut packet, entity_id.0);
     write_net_vec2(&mut packet, position);
     write_net_vec2(&mut packet, velocity);
+
+    Ok(packet)
+}
+
+fn encode_handoff_start(
+    entity_id: EntityId,
+    source: ShardId,
+    destination: ShardId
+)-> anyhow::Result<Vec<u8>> {
+    let mut packet = Vec::with_capacity(
+        TAG_LEN + ENTITY_ID_LEN + (2*TOPIC_ID_LEN)
+    );
+
+    write_u8(&mut packet, TAG_HANDOFF_START);
+    write_u32(&mut packet, entity_id.0);
+    write_u32(&mut packet, source.0);
+    write_u32(&mut packet, destination.0);
+
+    Ok(packet)
+}
+
+fn encode_register_entity(
+    entity_id: EntityId,
+    position: NetVec2
+)->anyhow::Result<Vec<u8>> {
+
+    let mut packet = Vec::with_capacity(
+        TAG_LEN + ENTITY_ID_LEN + 10
+    );
+
+    write_u8(&mut packet, TAG_REGISTER_ENTITY);
+    write_u32(&mut packet, entity_id.0);
+    write_net_vec2(&mut packet, position);
+
+    Ok(packet)
+}
+
+fn encode_unregister_client(
+    client_id: ClientId,
+)->anyhow::Result<Vec<u8>>{
+    let mut packet = Vec::with_capacity(
+        TAG_LEN + CLIENT_ID_LEN
+    );
+
+    write_u8(&mut packet, TAG_UNREGISTER_CLIENT);
+    write_u32(&mut packet, client_id.0);
+
+    Ok(packet)
+}
+
+fn encode_unregister_entity(
+    entity_id: EntityId
+)->anyhow::Result<Vec<u8>>{
+    let mut packet = Vec::with_capacity(
+        TAG_LEN + ENTITY_ID_LEN
+    );
+
+    write_u8(&mut packet, TAG_UNREGISTER_ENTITY);
+    write_u32(&mut packet, entity_id.0);
 
     Ok(packet)
 }

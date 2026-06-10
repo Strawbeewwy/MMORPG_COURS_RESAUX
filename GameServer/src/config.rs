@@ -1,6 +1,6 @@
 use bevy::prelude::Resource;
 use shared::config::{
-    DEFAULT_DS_IP, DEFAULT_FIRST_DS_PORT, DEFAULT_MAX_PLAYERS, DEFAULT_ORCHESTRATOR_HOST,
+    DEFAULT_DS_IP, DEFAULT_FIRST_DS_PORT, DEFAULT_MAX_ENTITIES, DEFAULT_ORCHESTRATOR_HOST,
     DEFAULT_ORCHESTRATOR_PORT, DEFAULT_ZONE,
 };
 use shared::protocol::{ShardId, Topic};
@@ -17,7 +17,7 @@ pub struct ServerConfig {
     pub ip: String,
     pub port: u16,
     pub zone: ZoneId,
-    pub max_players: usize,
+    pub max_entity: u32,
     pub orchestrator_addr: SocketAddr,
     pub broker_ip: String,
     pub broker_port: u16,
@@ -43,10 +43,10 @@ impl ServerConfig {
             env::var("ZONE").unwrap_or_else(|_| DEFAULT_ZONE.to_string())
         );
 
-        let max_players = env::var("MAX_PLAYERS")
+        let max_entities = env::var("MAX_ENTITY")
             .ok()
             .and_then(|value| value.parse().ok())
-            .unwrap_or(DEFAULT_MAX_PLAYERS);
+            .unwrap_or(DEFAULT_MAX_ENTITIES);
 
         let orchestrator_addr = env::var("ORCH_ADDR")
             .unwrap_or_else(|_| format!("{DEFAULT_ORCHESTRATOR_HOST}:{DEFAULT_ORCHESTRATOR_PORT}"))
@@ -70,7 +70,7 @@ impl ServerConfig {
             ip,
             port,
             zone,
-            max_players,
+            max_entity: max_entities,
             orchestrator_addr,
             broker_ip,
             broker_port,

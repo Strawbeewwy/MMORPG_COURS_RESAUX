@@ -2,11 +2,15 @@ use bevy::prelude::*;
 use shared::game_sockets::{
     GameConnection, GameNetworkEvent, GameStreamReliability
 };
+use shared::{NetVec2, ShardId};
 use shared::protocol::{decode_message, NetworkMessage};
 use crate::messages::PositionUpdateMsg;
 use crate::resources::client_map::ClientMap;
+use crate::resources::entity_map::{EntityMap, SpatialEntityRecord};
 use crate::resources::net_handles::{BrokerClient, BrokerConnectionState, ShardListener};
+use crate::resources::quad_tree::QuadTree;
 
+#[deprecated]/// The spatial should not communicate directly with a shard
 /// Poll the shard listener peer each frame (non-blocking).
 /// Handles shard lifecycle events, ShardRegister identification, PositionUpdate and HandoffAck.
 pub fn poll_shard_events(
@@ -25,7 +29,7 @@ pub fn poll_shard_events(
         }
     }
 }
-
+#[deprecated]/// The spatial should not communicate directly with a shard
 fn handle_shard_event(
     listener: &mut ShardListener,
     client_map: &mut ClientMap,
@@ -60,7 +64,7 @@ fn handle_shard_event(
         }
     }
 }
-
+#[deprecated]/// The spatial should not communicate directly with a shard
 /// Decode and dispatch a message received directly from a connected shard.
 fn handle_shard_message(
     listener: &mut ShardListener,
@@ -87,7 +91,7 @@ fn handle_shard_message(
         NetworkMessage::PositionUpdate { entity_id, position } => {
             ev_writer.write(PositionUpdateMsg {
                 entity_id,
-                shard_connection: Some(connection),
+                //shard_connection: Some(connection),
                 // f32 → f64 widening: lossless, intentional (see PositionUpdateMsg doc).
                 x: f64::from(position.x),
                 y: f64::from(position.y),
@@ -117,11 +121,13 @@ fn handle_shard_message(
 /// Poll the utils peer to advance handshake state and maintain the connection.
 pub fn poll_broker_connection(
     mut broker: ResMut<BrokerClient>,
+    mut entity_map: ResMut<EntityMap>,
     mut ev_writer: MessageWriter<PositionUpdateMsg>,
+    mut quad_tree: ResMut<QuadTree>,
 ) {
     loop {
         match broker.handle.peer.poll() {
-            Ok(Some(event)) => handle_broker_event(&mut broker, event, &mut ev_writer),
+            Ok(Some(event)) => handle_broker_event(&mut broker, event, &mut ev_writer, &mut entity_map, &mut quad_tree),
             Ok(None) => break,
             Err(e) => {
                 tracing::error!("utils client poll error: {e}");
@@ -135,6 +141,8 @@ fn handle_broker_event(
     broker: &mut BrokerClient,
     event: GameNetworkEvent,
     ev_writer: &mut MessageWriter<PositionUpdateMsg>,
+    entity_map: &mut EntityMap,
+    quad_tree: &mut QuadTree,
 ) {
     match event {
         GameNetworkEvent::Connected(conn) => {
@@ -166,7 +174,7 @@ fn handle_broker_event(
             broker.handle.state = BrokerConnectionState::Disconnected;
         }
         GameNetworkEvent::Message { connection, data, .. } => {
-            handle_broker_message(connection, &data, ev_writer);
+            handle_broker_message(connection, &data, ev_writer, entity_map,quad_tree);
         }
     }
 }
@@ -177,6 +185,8 @@ pub fn handle_broker_message(
     connection: GameConnection,
     data: &[u8],
     ev_writer: &mut MessageWriter<PositionUpdateMsg>,
+    entity_map: &mut EntityMap,
+    quad_tree: &mut QuadTree,
 ) {
     let message = match decode_message(data) {
         Ok(msg) => msg,
@@ -190,11 +200,32 @@ pub fn handle_broker_message(
         NetworkMessage::PositionUpdate { entity_id, position } => {
             ev_writer.write(PositionUpdateMsg {
                 entity_id,
-                // Relayed via broker — no direct shard connection available.
-                shard_connection: None,
                 x: f64::from(position.x),
                 y: f64::from(position.y),
             });
+        }
+        NetworkMessage::RegisterEntity {entity_id,position} => {
+
+            let f32_position= Vec2::from(NetVec2::to_f32(&position));
+
+            let Some(shard) = quad_tree.shard_for(f32_position.x,f32_position.y) else {
+                tracing::warn!("no shard for specified position : x{} y{}",
+                    f32_position.x,
+                    f32_position.y
+                );
+                return;
+            };
+
+
+            let record = SpatialEntityRecord {
+                entity_id,
+                position : f32_position,
+                current_shard: shard,
+            };
+            entity_map.insert(entity_id, record);
+        }
+        NetworkMessage::UnregisterEntity {entity_id} => {
+            entity_map.remove(entity_id);
         }
         _ => {}
     }

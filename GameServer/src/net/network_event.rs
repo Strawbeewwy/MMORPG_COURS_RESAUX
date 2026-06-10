@@ -1,3 +1,4 @@
+use std::time::{Duration, Instant};
 use crate::config::ServerConfig;
 
 use crate::world::state::{SharedEntityRegistry};
@@ -12,7 +13,7 @@ use shared::protocol::{
 };
 use tokio::sync::{MutexGuard};
 use crate::net::apply_client_input;
-use crate::world::{ Velocity};
+use crate::world::{EntityIdAllocator, SpawnPlayerEntityEvent, Velocity};
 
 
 
@@ -32,13 +33,25 @@ impl BrokerShardPeer{
         self.handle.is_ready()
     }
 
-    pub fn send_message(&self, message: &NetworkMessage) -> anyhow::Result<()> {
-        let packet = encode_message(message)?;
-        self.handle.send(packet)
+    pub fn send_message_to_broker(&self, message: &NetworkMessage) -> anyhow::Result<()> {
+        match encode_message(message) {
+            Ok(packet) => {
+                if let Err(error) = self.handle.send(packet){
+                    return Err(anyhow::anyhow!("failed to send message: {error:#}"));
+                }
+                Ok(())
+            }
+            Err(_) => {
+                Err(anyhow::anyhow!("failed to encode message"))
+            }
+        }
     }
 }
 
-pub fn connect_to_broker(mut commands: Commands, config: Res<ServerConfig>) {
+pub fn connect_to_broker(
+    mut commands: Commands,
+    config: Res<ServerConfig>
+) {
     let peer = GamePeer::new(QuicBackend::new());
     let state = match peer.connect(&config.broker_ip, config.broker_port) {
         Ok(_) => {
@@ -59,13 +72,52 @@ pub fn connect_to_broker(mut commands: Commands, config: Res<ServerConfig>) {
     let handle = BrokerHandle::with_state(peer,state);
 
     commands.insert_resource(BrokerShardPeer::new(handle));
+
+}
+
+pub fn reconnect_broker_if_needed(
+    mut broker: ResMut<BrokerShardPeer>,
+    config: Res<ServerConfig>,
+) {
+    if broker.handle.state != BrokerConnectionState::Disconnected {
+        return;
+    }
+
+    // Honour the backoff window — skip this tick if too early.
+    if let Some(after) = broker.handle.reconnect_after {
+        if Instant::now() < after {
+            return;
+        }
+    }
+
+    tracing::info!(
+        "utils disconnected — reconnect attempt #{} to {}:{}",
+        broker.handle.reconnect_attempt + 1,
+        config.broker_ip,
+        config.broker_port
+    );
+
+    broker.handle.reset_for_reconnect();
+
+    if let Err(e) = broker.handle.peer.connect(&config.broker_ip, config.broker_port) {
+        tracing::error!("reconnect to utils failed: {e}");
+        // Exponential backoff: 1s, 2s, 4s, 8s, 16s, capped at 30s.
+        let delay_secs = (1u64 << broker.handle.reconnect_attempt.min(5)).min(30);
+        broker.handle.reconnect_after = (Some(Instant::now() + Duration::from_secs(delay_secs)));
+        broker.handle.reconnect_attempt = broker.handle.reconnect_attempt.saturating_add(1);
+        broker.handle.state = BrokerConnectionState::Disconnected;
+    }
+    // On success, backoff is reset once the `Ready` state is reached
+    // (in `poll_broker_connection` via `utils.reset_backoff()`).
 }
 
 pub fn poll_broker_events(
     config: Res<ServerConfig>,
     mut broker: ResMut<BrokerShardPeer>,
-    registry: Res<SharedEntityRegistry>,
+    mut registry: ResMut<SharedEntityRegistry>,
+    mut allocator: ResMut<EntityIdAllocator>,
     mut velocities: Query<&mut Velocity>,
+    mut spawn_players: MessageWriter<SpawnPlayerEntityEvent>,
 ) {
 
     loop {
@@ -78,16 +130,25 @@ pub fn poll_broker_events(
             }
         };
 
-        handle_broker_event(&config, &mut broker, &registry, event,&mut velocities);
+        handle_broker_event(
+            &config,
+            &mut broker,
+            &mut registry,
+            &mut allocator,
+            event,
+            &mut velocities,
+            &mut spawn_players);
     }
 }
 
 fn handle_broker_event(
     config: &ServerConfig,
     broker: &mut BrokerShardPeer,
-    registry: &SharedEntityRegistry,
+    registry: &mut SharedEntityRegistry,
+    allocator: &mut EntityIdAllocator,
     event: GameNetworkEvent,
     velocities: &mut Query<&mut Velocity>,
+    spawn_players: &mut MessageWriter<SpawnPlayerEntityEvent>,
 ) {
     match event {
         GameNetworkEvent::Connected(connection) => {
@@ -128,6 +189,31 @@ fn handle_broker_event(
             broker.handle.state = BrokerConnectionState::Ready;
             broker.handle.reset_backoff();
 
+
+            register_shard_with_broker(config, broker);
+
+
+            let topic = config.shard_topic;
+
+            let packet = match encode_message(&NetworkMessage::RequestEntityIdBlock{
+                shard_id: ShardId(topic.get_id_as_u32()),
+                count: config.max_entity,
+            }) {
+                Ok(packet) => packet,
+                Err(error) => {
+                    warn!(
+                "cannot encode Request EntityId Block for topic {}: {}",
+                topic.to_string(),
+                error
+            );
+                    return;
+                }
+            };
+
+            if let Err(error) = broker.handle.send(packet) {
+                tracing::error!("failed to send packet to broker: {error:#}");
+                return;
+            }
         }
 
         GameNetworkEvent::StreamClosed(connection, stream) => {
@@ -153,7 +239,15 @@ fn handle_broker_event(
                 data.len()
             );
 
-            handle_broker_message(config, registry, &data, velocities);
+            handle_broker_message(
+                config,
+                broker,
+                registry,
+                allocator,
+                &data,
+                velocities,
+                spawn_players
+            );
         }
 
         GameNetworkEvent::Error { connection, inner } => {
@@ -200,8 +294,6 @@ fn register_shard_with_broker(
     }
 
 
-    broker.handle.state = BrokerConnectionState::Connected;
-
     info!(
         "registered shard with broker topic={}",
         topic.to_string()
@@ -210,9 +302,12 @@ fn register_shard_with_broker(
 
 fn handle_broker_message(
     config: &ServerConfig,
-    registry: &SharedEntityRegistry,
+    broker: &mut BrokerShardPeer,
+    registry: &mut SharedEntityRegistry,
+    allocator: &mut EntityIdAllocator,
     data: &[u8],
     velocities: &mut Query<&mut Velocity>,
+    spawn_players: &mut MessageWriter<SpawnPlayerEntityEvent>,
 ) {
     let message = match decode_message(data) {
         Ok(message) => message,
@@ -225,16 +320,61 @@ fn handle_broker_message(
     match message {
 
         NetworkMessage::ClientInput {
-            client_id,
-            input } => {
-            apply_client_input(&registry, client_id, input,velocities);
+            client_id, input
+        } => {
+            apply_client_input(
+                &registry,
+                client_id,
+                input,velocities
+            );
         }
         NetworkMessage::RegisterClient {
             client_id,
             username} => {
-            //TODO
+            spawn_players.write(
+                SpawnPlayerEntityEvent {
+                client_id,
+                username,
+                position: Vec2::ZERO,
+            });
+
+            info!(
+                "queued player spawn for registered client_id={}",
+                client_id.0
+            );
         }
-        NetworkMessage::GhostUpdate{..} => {
+        NetworkMessage::UnregisterClient {client_id} =>{
+            match registry.try_lock() {
+                Some((mut cli_registry, mut ent_registry))=> {
+                    let Some(entity_id) = cli_registry.remove_client(&client_id) else {
+                        tracing::warn!("could not find player for client_id={}", client_id.0);
+                        return;
+                    };
+                    ent_registry.remove_by_entity_id(&entity_id);
+
+                    let message = &NetworkMessage::UnregisterEntity {
+                        entity_id,
+                    };
+
+                    if let Err(error) = broker.send_message_to_broker(message) {
+                        tracing::error!("failed to send packet to broker: {error:#}");
+                        return;
+                    }
+                }
+                None => {
+                    tracing::warn!("could not lock player registry for client unregistering");
+                    return;
+                }
+            }
+        }
+        NetworkMessage::EntityIdBlockAllocated {
+            start, count
+        } => {
+            allocator.add_range(start,count);
+        }
+        NetworkMessage::GhostUpdate{
+            entity_id, position, velocity
+        } => {
             //TODO
         }
         NetworkMessage::HandoffRequest{..} => {

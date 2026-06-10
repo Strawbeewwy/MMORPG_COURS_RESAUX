@@ -32,6 +32,9 @@ pub enum NetworkMessage {
         client_id: ClientId,
         username: Username,
     },
+    UnregisterClient {
+        client_id: ClientId,
+    },
     RegisterSpatialService,// a spatial service registers itself with the broker
     ClientHello {//first contact from client to broker
         username: Username,
@@ -47,7 +50,6 @@ pub enum NetworkMessage {
     },
     //the spatial sends a block of ids to a shard
     EntityIdBlockAllocated {
-        shard_id: ShardId,
         start: u32,
         count: u32,
     },
@@ -56,30 +58,37 @@ pub enum NetworkMessage {
         entity_id: EntityId,
         position: NetVec2,
     },
-
-
-    //TODO decide how the handoff needs to be done
-    // if a client moves diagonally, how are we supposed
-    // to handle it?
-    HandoffRequest {
+    RegisterEntity{
+        entity_id: EntityId,
+        position: NetVec2,
+    },
+    UnregisterEntity{
+        entity_id: EntityId,
+    },
+    HandoffStart{//the spatial sends a handoff start to the source shard
+        entity_id: EntityId,
+        source: ShardId,
+        destination: ShardId,
+    },
+    HandoffRequest { // after the source shard receives a handoff start, it sends a handoff request to the destination shard
         entity_id: EntityId,
         position: NetVec2,
         velocity: NetVec2,
         entity_state: EntityState,
     },
 
-    HandoffAccepted {
+    HandoffAccepted { // the destination shard sends a handoff accepted to the source shard
         entity_id: EntityId,
     },
-    HandoffRejected {
+    HandoffRejected { // the destination shard sends a handoff rejected to the source shard
         entity_id: EntityId,
     },
-    GhostUpdate {
+    GhostUpdate { // the source shard sends a ghost update to the destination shard
         entity_id: EntityId,
         position: NetVec2,
         velocity: NetVec2,
     },
-    HandoffCompleted {
+    HandoffCompleted { //the source shard sends a handoff completed to the destination shard
         entity_id: EntityId,
     },
 }

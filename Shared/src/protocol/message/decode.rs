@@ -27,7 +27,10 @@ pub fn decode_message(
         TAG_HANDOFF_REJECTED => decode_handoff_rejected(&mut input)?,
         TAG_HANDOFF_COMPLETE => decode_handoff_complete(&mut input)?,
         TAG_GHOST_UPDATE => decode_ghost_update(&mut input)?,
-        unknown => anyhow::bail!("unknown utils message tag: 0x{unknown:02x}"),
+        TAG_HANDOFF_START => decode_handoff_start(&mut input)?,
+        TAG_UNREGISTER_CLIENT => decode_unregister_client(&mut input)?,
+        TAG_UNREGISTER_ENTITY => decode_unregister_entity(&mut input)?,
+        unknown => anyhow::bail!("unknown broker message tag: 0x{unknown:02x}"),
     };
 
     if !input.is_empty() {
@@ -176,12 +179,10 @@ fn decode_request_entity_id_block(
 fn decode_entity_id_block_allocated(
     input: &mut &[u8]
 ) -> anyhow::Result<NetworkMessage> {
-    let shard_id = ShardId(read_u32(input)?);
     let start = read_u32(input)?;
     let count = read_u32(input)?;
 
     Ok(NetworkMessage::EntityIdBlockAllocated {
-        shard_id,
         start,
         count,
     })
@@ -262,5 +263,39 @@ fn decode_ghost_update(
         entity_id,
         position,
         velocity,
+    })
+}
+
+fn decode_handoff_start(
+    input: &mut &[u8]
+) -> anyhow::Result<NetworkMessage>{
+    let entity_id = EntityId(read_u32(input)?);
+    let from = ShardId(read_u32(input)?);
+    let to = ShardId(read_u32(input)?);
+
+    Ok(NetworkMessage::HandoffStart {
+        entity_id,
+        source: from,
+        destination: to
+    })
+}
+
+fn decode_unregister_client(
+    input: &mut &[u8]
+) -> anyhow::Result<NetworkMessage> {
+    let client_id = ClientId(read_u32(input)?);
+
+    Ok(NetworkMessage::UnregisterClient {
+        client_id,
+    })
+}
+
+fn decode_unregister_entity(
+    input: &mut &[u8]
+) -> anyhow::Result<NetworkMessage> {
+    let entity_id = EntityId(read_u32(input)?);
+
+    Ok(NetworkMessage::UnregisterEntity {
+        entity_id,
     })
 }

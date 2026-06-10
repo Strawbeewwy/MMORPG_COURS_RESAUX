@@ -1,7 +1,8 @@
-use bevy::prelude::Resource;
-use shared::protocol::{EntityId, NetVec2, ShardId};
-use shared::EntityType;
-
+use bevy::platform::collections::HashMap;
+use bevy::prelude::{Resource, Vec2};
+use shared::{ClientId, ShardId};
+use shared::protocol::{EntityId, NetVec2,};
+use crate::resources::client_map::ClientTransferState;
 
 #[derive(Resource, Debug)]
 pub struct GlobalEntityIdAllocator {
@@ -29,10 +30,71 @@ impl Default for GlobalEntityIdAllocator {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EntityTransferState {
+    /// Client is stable on its current shard — handoff may be initiated.
+    Stable,
+    /// A HandoffRequest has been sent to `destination_shard`; awaiting HandoffAck.
+    PendingHandoff { destination_shard: u32 },
+}
+
 
 pub struct SpatialEntityRecord {
     pub entity_id: EntityId,
-    pub entity_type: EntityType,
-    pub current_shard_id: ShardId,
-    pub position: NetVec2,
+    pub position: Vec2,
+    pub current_shard: ShardId,
+}
+
+#[derive(Resource, Default)]
+pub struct EntityMap {
+    pub entities: HashMap<EntityId,SpatialEntityRecord>,
+    client_states: HashMap<EntityId, EntityTransferState>,
+
+}
+
+impl EntityMap{
+
+    pub fn get(&self, entity_id: EntityId) -> Option<&SpatialEntityRecord> {
+        self.entities.get(&entity_id)
+    }
+
+    pub fn insert(&mut self, entity_id: EntityId, record: SpatialEntityRecord) {
+        self.entities.insert(entity_id, record);
+    }
+
+    pub fn remove(&mut self, entity_id: EntityId) {
+        self.entities.remove(&entity_id);
+    }
+
+    pub fn contains(&self, entity_id: EntityId) -> bool {
+        self.entities.contains_key(&entity_id)
+    }
+
+    // ── Transfer state ─────────────────────────────────────────────────────
+
+    /// Returns `true` if the entity is in `Stable` state (no handoff in progress).
+    pub fn is_stable(&self, entity_id: EntityId) -> bool {
+        !matches!(
+            self.client_states.get(&entity_id),
+            Some(EntityTransferState::PendingHandoff { .. })
+        )
+    }
+
+    /// Mark an entity as pending handoff. Idempotent if called twice for the same destination.
+    pub fn set_state(&mut self, entity_id: EntityId, state: EntityTransferState) {
+        self.client_states.insert(entity_id, state);
+    }
+
+    /// Clear the transfer state (called on Handoff Completed or on client disconnect).
+    pub fn clear_state(&mut self, entity_id: EntityId) {
+        self.client_states.remove(&entity_id);
+    }
+
+    /// Read the transfer state for an entity (absent = Stable).
+    pub fn get_state(&self, entity_id: EntityId) -> EntityTransferState {
+        self.client_states
+            .get(&entity_id)
+            .cloned()
+            .unwrap_or(EntityTransferState::Stable)
+    }
 }

@@ -25,7 +25,7 @@ pub const DEFAULT_DS_BINARY: &str = "GameServer";
 
 pub const DEFAULT_DS_TICK_RATE: u64 = 20;
 
-pub const DEFAULT_MAX_PLAYERS: usize = 100;
+pub const DEFAULT_MAX_ENTITIES: u32 = 100;
 
 pub const DEFAULT_HEARTBEAT_BUFFER_SIZE: usize = 1024;
 

@@ -11,8 +11,8 @@ use crate::net::peer_roles::PeerRole;
 
 
 pub struct GhostRoute {
-    pub from_shard_id: ShardId,
-    pub to_shard_id: ShardId,
+    pub source: ShardId,
+    pub destination: ShardId,
 }
 
 #[derive(Hash, Clone)]
@@ -39,7 +39,7 @@ pub struct PubSubState {
     pub topic_subscribers: HashMap<Topic, HashSet<ClientId>>,
     pub client_topics: HashMap<ClientId, HashSet<Topic>>,
     //entity
-    pub ghost_entity: HashMap<EntityId, GhostRoute>,
+    pub ghost_entities: HashMap<EntityId, GhostRoute>,
     //shard
     pub shard_streams_by_topic: BiMap<Topic, ConnectionStream>,
     // spatial
@@ -230,6 +230,12 @@ impl PubSubState {
                             connection.connection_id,
                             stream.stream_id
                         );
+
+
+                        //TODO send unregister client to shard
+
+
+
                     }
                     None => {
                         tracing::warn!(
@@ -348,5 +354,34 @@ impl PubSubState {
 
         Some(&connection_stream)
     }
+
+    pub fn add_ghost_entity(&mut self, entity_id: EntityId, ghost_route: GhostRoute) {
+        self.ghost_entities.insert(entity_id, ghost_route);
+    }
+
+    pub fn remove_ghost_entity(&mut self, entity_id: EntityId) {
+        self.ghost_entities.remove(&entity_id);
+    }
+
+    pub fn get_ghost_entity_destination(&self, entity_id: &EntityId) -> Option<Topic> {
+        let Some(ghost_route) = self.ghost_entities.get(entity_id) else {
+            return None;
+        };
+
+        Some(Topic::ShardInstance {
+            id: ghost_route.destination,
+        })
+    }
+
+    pub fn get_ghost_entity_source(&self, entity_id: &EntityId) -> Option<Topic> {
+        let Some(ghost_route) = self.ghost_entities.get(entity_id) else {
+            return None;
+        };
+
+        Some(Topic::ShardInstance {
+            id: ghost_route.source,
+        })
+    }
+    
 
 }

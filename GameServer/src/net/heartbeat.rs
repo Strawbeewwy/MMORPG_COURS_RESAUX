@@ -57,7 +57,7 @@ pub fn send_heartbeat(
                 port: config.port,
                 zone: config.zone.clone(),
                 player_count,
-                max_players: config.max_players,
+                max_players: config.max_entity,
             };
 
             let payload = match codec::encode(&heartbeat) {

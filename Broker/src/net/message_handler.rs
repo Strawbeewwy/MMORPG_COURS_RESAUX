@@ -7,17 +7,7 @@ use crate::pubsub::state::{PubSubState};
 use shared::game_sockets::{
     GameConnection, GamePeer, GameStream
 };
-use shared::protocol::{
-    NetworkMessage, decode_message, encode_message,
-    TAG_SUBSCRIBE, TAG_UNSUBSCRIBE,
-    TAG_PUBLISH, TAG_CLIENT_INPUT,
-    TAG_REGISTER_SHARD, TAG_REGISTER_SPATIAL_SERVICE,
-    TAG_CLIENT_HELLO, TAG_REQUEST_ENTITY_ID_BLOCK,
-    TAG_ENTITY_ID_BLOCK_ALLOCATED, TAG_POSITION_UPDATE,
-    TAG_HANDOFF_REQUEST, TAG_HANDOFF_ACCEPTED,
-    TAG_HANDOFF_REJECTED, TAG_HANDOFF_COMPLETE,
-    TAG_GHOST_UPDATE
-};
+use shared::protocol::*;
 
 pub fn handle_message(
     peer: &GamePeer,
@@ -46,10 +36,13 @@ pub fn handle_message(
         TAG_ENTITY_ID_BLOCK_ALLOCATED => relay_entity_id_block_allocated_to_shard(peer, state, &connection, &stream, data.clone()),
         TAG_POSITION_UPDATE => relay_to_spatial_services(peer,state,data),
         TAG_HANDOFF_REQUEST => relay_handoff_request_to_shards(peer, state, &connection, &stream, data),
-        TAG_HANDOFF_ACCEPTED => relay_to_spatial_services(peer,state,data),
-        TAG_HANDOFF_REJECTED => relay_to_spatial_services(peer,state,data),
+        TAG_HANDOFF_ACCEPTED => relay_handoff_accepted_to_shard(peer,state,data),
+        TAG_HANDOFF_REJECTED => relay_handoff_rejected_to_shard(peer,state,data),
         TAG_HANDOFF_COMPLETE => relay_handoff_completed_to_shard(peer, state, &connection, &stream, data),
         TAG_GHOST_UPDATE => relay_ghost_update(peer, state, &connection, &stream, data),
+        TAG_HANDOFF_START => relay_handoff_start_to_shards(peer,peer_roles, state, &connection, &stream, data),
+        TAG_REGISTER_ENTITY => relay_to_spatial_services(peer, state, data),
+        TAG_UNREGISTER_ENTITY => relay_to_spatial_services(peer, state, data),
         _ => {
             tracing::warn!(
                 "unknown tag or unexpected tag for message sent by : {}",
