@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use shared::protocol::EntityId;
-use shared::protocol::game::EntityType;
+use shared::protocol::public_types::EntityType;
 
 #[derive(Debug, Clone)]
 pub struct ClientRenderEntity {

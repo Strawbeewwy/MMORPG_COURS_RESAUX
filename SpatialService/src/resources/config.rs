@@ -12,7 +12,7 @@ pub struct SpatialConfig {
     /// Address the spatial service listens on for incoming shard connections.
     pub listen_host: String,
     pub listen_port: u16,
-    /// Address of the broker the spatial service connects to.
+    /// Address of the utils the spatial service connects to.
     pub broker_host: String,
     pub broker_port: u16,
     /// World half-extent used to build the QuadTree root bounds.

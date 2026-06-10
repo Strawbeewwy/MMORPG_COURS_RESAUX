@@ -18,23 +18,20 @@
 //!     drain outbox → peer.send │    take outbox → peer.send
 
 use bytes::Bytes;
-use game_sockets::{
-    protocols::QuicBackend, GameNetworkEvent, GamePeer, GameStream,
-    GameStreamReliability,
+
+use shared::{
+    CLIENT_INPUT_LEN,
+    NetworkMessage,encode_message,
+    decode_message,
+    Username, ClientId,
 };
+use shared::game_sockets::*;
+
 use godot::classes::INode;
 use godot::prelude::*;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-
-// ── Wire protocol tags (mirrors Shared/src/protocol/broker/config.rs) ─────────
-const TAG_CLIENT_HELLO:   u8 = 0x08;
-const TAG_CLIENT_INPUT:   u8 = 0x05;
-const TAG_CLIENT_ACCEPTED:u8 = 0x0A;
-const TAG_BROADCAST:      u8 = 0x04;
-/// Size of the ClientInput payload array (mirrors CLIENT_INPUT_LEN in Shared).
-/// Layout: [move_x f32][move_y f32][action_flags u8][look_x f32][look_y f32] = 17 bytes.
-const CLIENT_INPUT_LEN: usize = 17;
+use shared::game_sockets::protocols::QuicBackend;
 
 // ── Shared channel types ───────────────────────────────────────────────────────
 pub type Inbox  = Arc<Mutex<Vec<IncomingEvent>>>;
@@ -65,76 +62,76 @@ pub enum IncomingEvent {
 
 /// Encode a ClientHello packet (TAG_CLIENT_HELLO).
 pub fn encode_client_hello(username: &str) -> Vec<u8> {
-    let name = username.as_bytes();
-    let mut buf = Vec::with_capacity(1 + 2 + name.len());
-    buf.push(TAG_CLIENT_HELLO);
-    buf.extend_from_slice(&(name.len() as u16).to_le_bytes());
-    buf.extend_from_slice(name);
-    buf
+    let arc_username: Username = Arc::from(username.to_string());
+    let packet = match encode_message(&NetworkMessage::ClientHello {
+        username: arc_username,
+    }) {
+        Ok(packet) => packet,
+        Err(error) => {
+            tracing::warn!(
+                "failed to encode ClientAccepted for user {}: {}",
+                username.to_string(),
+                error
+            );
+            return Vec::new();
+        }
+    };
+    packet
 }
 
 /// Encode a ClientInput packet (TAG_CLIENT_INPUT) with movement x/y.
 /// Matches `encode_movement_input` in GameClient/src/net/input.rs.
 pub fn encode_client_input(client_id: u32, x: f32, y: f32) -> Vec<u8> {
-    encode_full_input(client_id, x, y, 0, x, y)
-}
+    let mut input = [0_u8; CLIENT_INPUT_LEN];
 
-/// Full input packet: movement + action flags + look direction.
-/// Payload layout (CLIENT_INPUT_LEN = 17 bytes):
-///   [0..4]   move_x f32 LE
-///   [4..8]   move_y f32 LE
-///   [8]      action_flags bitmask (bit0=dash, bit1=melee, bit2=shoot)
-///   [9..13]  look_x f32 LE
-///   [13..17] look_y f32 LE
-pub fn encode_full_input(
-    client_id: u32,
-    move_x: f32, move_y: f32,
-    action_flags: u8,
-    look_x: f32, look_y: f32,
-) -> Vec<u8> {
-    let mut input = [0u8; CLIENT_INPUT_LEN];
-    input[0..4].copy_from_slice(&move_x.to_le_bytes());
-    input[4..8].copy_from_slice(&move_y.to_le_bytes());
-    input[8] = action_flags;
-    input[9..13].copy_from_slice(&look_x.to_le_bytes());
-    input[13..17].copy_from_slice(&look_y.to_le_bytes());
+    input[0..4].copy_from_slice(&x.to_le_bytes());
+    input[4..8].copy_from_slice(&y.to_le_bytes());
 
-    let mut buf = Vec::with_capacity(1 + 4 + CLIENT_INPUT_LEN);
-    buf.push(TAG_CLIENT_INPUT);
-    buf.extend_from_slice(&client_id.to_le_bytes());
-    buf.extend_from_slice(&input);
-    buf
+    let packet = match encode_message(&NetworkMessage::ClientInput {
+        client_id : ClientId(client_id),
+        input,
+    }) {
+        Ok(packet) => packet,
+        Err(error) => {
+            tracing::warn!(
+                "cannot encode ClientInput for client {}: {}",
+                client_id,
+                error
+            );
+            return Vec::new();
+        }
+    };
+
+    packet
 }
 
 /// Decode a single Broker message from raw bytes.
 fn decode(data: &[u8]) -> Option<IncomingEvent> {
-    use shared::protocol::WorldUpdate;
 
-    let (&tag, body) = data.split_first()?;
-    match tag {
-        TAG_CLIENT_ACCEPTED if body.len() >= 4 => {
-            let client_id = u32::from_le_bytes(body[0..4].try_into().ok()?);
-            Some(IncomingEvent::ClientAccepted { client_id })
+    let message = match decode_message(data) {
+        Ok(message) => message,
+        Err(error) => {
+            tracing::warn!(
+                "could not decode message: {error}"
+            );
+            return None;
         }
-        TAG_BROADCAST if body.len() >= 2 => {
-            let declared_len = u16::from_le_bytes(body[0..2].try_into().ok()?) as usize;
-            let payload = body[2..2 + declared_len.min(body.len().saturating_sub(2))].to_vec();
+    };
 
-            // Try to deserialise as WorldUpdate.
-            match shared::protocol::transport::codec::decode::<WorldUpdate>(&payload) {
-                Ok(update) => decode_world_update(update),
-                Err(_) => {
-                    // Unknown payload — forward raw bytes.
-                    Some(IncomingEvent::Broadcast { payload })
-                }
-            }
+    match message{
+        NetworkMessage::ClientAccepted { client_id } => {
+            Some(IncomingEvent::ClientAccepted { client_id: client_id.0 })
+        }
+        NetworkMessage::Broadcast {payload,payload_len} =>{
+            Some(IncomingEvent::Broadcast {payload})
         }
         _ => {
-            tracing::debug!("mmo_client: ignoring broker tag 0x{tag:02X} ({} bytes)", body.len());
+            tracing::debug!("mmo_client: ignoring message {:?}", message);
             None
         }
     }
 }
+
 
 fn decode_world_update(update: shared::protocol::WorldUpdate) -> Option<IncomingEvent> {
     use shared::protocol::WorldUpdate;
@@ -419,7 +416,7 @@ async fn try_connect_and_run(
     tracing::info!("mmo_quic: connecting to broker {host}:{port}");
 
     let mut peer = peer;
-    let mut connection: Option<game_sockets::GameConnection> = None;
+    let mut connection: Option<GameConnection> = None;
     let mut stream:     Option<GameStream> = None;
     let mut hello_sent = false;
 
@@ -458,7 +455,7 @@ async fn try_connect_and_run(
 fn handle_event(
     peer:        &mut GamePeer,
     event:       GameNetworkEvent,
-    connection:  &mut Option<game_sockets::GameConnection>,
+    connection:  &mut Option<GameConnection>,
     stream:      &mut Option<GameStream>,
     hello_sent:  &mut bool,
     inbox:       &Inbox,

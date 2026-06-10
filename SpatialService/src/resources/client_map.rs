@@ -1,7 +1,7 @@
 use bevy::prelude::*;
-use game_sockets::GameConnection;
+use shared::game_sockets::GameConnection;
 use std::collections::{HashMap, HashSet};
-use shared::protocol::broker::{ClientId, ShardId};
+use shared::protocol::{ClientId, ShardId};
 
 /// Tracks whether a client is idle or mid-handoff.
 /// Prevents duplicate HandoffRequest messages for the same client.

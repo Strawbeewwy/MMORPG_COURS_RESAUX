@@ -1,65 +1,50 @@
 use bevy::prelude::*;
-use shared::protocol::broker::{encode_message, BrokerMessage};
+use shared::protocol::{encode_message, NetworkMessage};
 use crate::messages::HandoffRequestMsg;
-use crate::resources::client_map::{ClientMap, ClientTransferState};
-use crate::resources::net_handles::ShardListener;
+use crate::resources::entity_map::{EntityMap, EntityTransferState};
+use crate::resources::net_handles::BrokerClient;
 
-/// Consume HandoffRequestMsg events and send the wire-level HandoffRequest to
-/// the destination shard via the ShardListener.
-///
-/// Marks the client as `PendingHandoff` to prevent duplicate requests.
-/// The state is cleared when the destination shard replies with HandoffAck
-/// (handled in `poll_shard_events` → `handle_shard_message`).
-pub fn handle_handoff_requests(
+/// Send HandoffStart to the broker and mark entity as PendingHandoff.
+pub fn handle_handoff_start(
     mut ev_reader: MessageReader<HandoffRequestMsg>,
-    mut client_map: ResMut<ClientMap>,
-    listener: Res<ShardListener>,
+    mut entity_map: ResMut<EntityMap>,
+    broker: ResMut<BrokerClient>,
 ) {
     for req in ev_reader.read() {
-        // Guard: skip if already transferring.
-        if !client_map.is_stable(req.client_id.into()) {
+        if !entity_map.is_stable(req.entity_id) {
             tracing::debug!(
-                "HandoffRequest for client {} dropped — already in PendingHandoff",
-                req.client_id.0
+                "HandoffStart for entity {} dropped — already PendingHandoff",
+                req.entity_id.0
             );
             continue;
         }
 
-        let payload =  Vec::default();
-        //TODO Fix this request
-        //     = match encode_message(&BrokerMessage::HandoffRequest {
-        //     client_id: req.client_id,
-        //     from_shard: req.from_shard,
-        //     to_shard: req.to_shard,
-        // }) {
-        //     Ok(p) => p,
-        //     Err(e) => {
-        //         tracing::error!(
-        //             "failed to encode HandoffRequest for client {}: {e}",
-        //             req.client_id.0
-        //         );
-        //         continue;
-        //     }
-        // };
+        let payload = match encode_message(&NetworkMessage::HandoffStart {
+            entity_id: req.entity_id,
+            source: req.from_shard,
+            destination: req.to_shard,
+        }) {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::error!("failed to encode HandoffStart for entity {}: {e}", req.entity_id.0);
+                continue;
+            }
+        };
 
-        if listener.send_to_shard(req.to_shard.0, payload) {
-            client_map.set_state(
-                req.client_id.into(),
-                ClientTransferState::PendingHandoff {
-                    destination_shard: req.to_shard.0,
-                },
-            );
-            tracing::info!(
-                "HandoffRequest sent: client {} from shard {} → shard {}",
-                req.client_id.0, req.from_shard.0, req.to_shard.0
-            );
-        } else {
-            tracing::warn!(
-                "HandoffRequest for client {} dropped — shard {} not reachable",
-                req.client_id.0, req.to_shard.0
-            );
-            // Do not mark as pending — the next CrossingAlert will retry.
+        if let Err(e) = broker.handle.send(payload) {
+            tracing::error!("failed to send HandoffStart to broker: {e:#}");
+            continue;
         }
+
+        entity_map.set_state(
+            req.entity_id,
+            EntityTransferState::PendingHandoff { destination_shard: req.to_shard.0 },
+        );
+
+        tracing::info!(
+            "HandoffStart sent: entity {} from shard {} → shard {}",
+            req.entity_id.0, req.from_shard.0, req.to_shard.0
+        );
     }
 }
 

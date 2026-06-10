@@ -1,7 +1,7 @@
 use crate::{config::OrchestratorConfig, redis_registry::RedisRegistry};
 use anyhow::{Context, Result};
 use shared::protocol::Heartbeat;
-use shared::protocol::transport::codec;
+use shared::protocol::http::codec;
 use std::sync::Arc;
 use tokio::net::UdpSocket;
 use tracing::{error, info, warn};

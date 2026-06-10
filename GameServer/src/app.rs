@@ -1,4 +1,14 @@
 use crate::config::ServerConfig;
+
+use crate::net::{
+    send_heartbeat, bind_heartbeat_socket,
+    connect_to_broker,
+    poll_broker_events,
+    publish_world_update, publish_player_position_updates
+};
+use crate::world::{ClientEntityRegistry, EntityRegistry, SpawnGenericEntityEvent, SpawnGhostEntityEvent, SpawnPlayerEntityEvent, SharedEntityRegistry, EntityIdAllocator};
+use crate::world::entity::PromoteGhostEvent;
+
 use crate::net::heartbeat::{bind_heartbeat_socket, send_heartbeat};
 use crate::net::network_event::{
     SharedPlayerRegistry, connect_to_broker, poll_broker_events,
@@ -19,6 +29,10 @@ use shared::config::DEFAULT_DS_TICK_RATE;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
+use crate::net::handoff::promote_ghost_entities;
+use crate::net::network_event::reconnect_broker_if_needed;
+use crate::world::spawn_entity::{spawn_generic_entities, spawn_ghost_entities, spawn_player_entities};
+use crate::net::publish::PublishedEntityPositions;
 
 pub fn run() {
     tracing_subscriber::fmt()
@@ -39,9 +53,16 @@ pub fn run() {
             Duration::from_millis(1000 / DEFAULT_DS_TICK_RATE),
         )))
         .insert_resource(config)
-        .insert_resource(SharedPlayerRegistry {
-            inner: Arc::new(Mutex::new(PlayerRegistry::default())),
+        .insert_resource(SharedEntityRegistry {
+            entity_reg_shared: Arc::new(Mutex::new(EntityRegistry::default())),
+            client_reg_shared: Arc::new(Mutex::new(ClientEntityRegistry::default()))
         })
+        .insert_resource(EntityIdAllocator::default())
+        .init_resource::<PublishedEntityPositions>()
+        .add_message::<SpawnPlayerEntityEvent>()
+        .add_message::<SpawnGhostEntityEvent>()
+        .add_message::<SpawnGenericEntityEvent>()
+        .add_message::<PromoteGhostEvent>()
         // ── 5SecsSwap resources ────────────────────────────────────────────
         .insert_resource(EnemyRegistry::default())
         .insert_resource(ProjectileRegistry::default())
@@ -57,6 +78,13 @@ pub fn run() {
             (
                 // Network ingress.
                 poll_broker_events,
+                reconnect_broker_if_needed,
+                spawn_player_entities,
+                spawn_ghost_entities,
+                spawn_generic_entities,
+                promote_ghost_entities,
+                publish_player_position_updates,
+                publish_world_update,
                 sync_combat_registry,
                 // Physics & AI.
                 update_players_registry,

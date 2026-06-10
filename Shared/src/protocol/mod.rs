@@ -1,15 +1,17 @@
-pub mod broker;
+pub mod utils;
 pub mod discovery;
 pub mod game;
 pub mod http;
-pub mod transport;
+pub mod message;
+pub mod public_types;
+pub mod net_handles;
+pub mod snapshots;
 
-pub use discovery::{Heartbeat, ServerInfo};
-pub use game::{
-    EntityId, PlayerPublicInfo, PlayerSnapshot, PlayerSpawnInfo,
-    Username, NetVec2, WorldSnapshot, WorldUpdate, ZoneId,
-    ColorTeam, AttackType, ActionFlags, EnemySnapshot, ProjectileSnapshot,
-};
-pub use http::{ErrorResponse, HealthResponse, LoginHttpRequest, LoginHttpResponse};
-
-
+pub use discovery::*;
+pub use game::*;
+pub use http::*;
+pub use message::*;
+pub use public_types::*;
+pub use net_handles::*;
+pub use snapshots::*;
+pub use utils::*;

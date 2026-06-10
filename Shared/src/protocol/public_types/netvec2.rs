@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use crate::protocol::broker::ClientId;
 use crate::protocol::{PlayerPublicInfo, PlayerSnapshot};
@@ -51,7 +50,7 @@ pub enum WorldUpdate {
 }
 
 /**
-2D vector sent on the network, not used for math
+2D vector sent on the utils, not used for math
 just for values
 **/
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq,Eq)]
@@ -102,15 +101,3 @@ impl TryFrom <[u8; 10]> for NetVec2{
     }
 }
 
-
-
-
-/**
-snapshot of the world, sent to the client
-**/
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct WorldSnapshot {
-    pub zone: ZoneId,
-    pub players: Vec<PlayerSnapshot>,
-    pub server_tick: u64,
-}

@@ -2,7 +2,7 @@ use crate::config::DEFAULT_RECONNECT_INTERVAL;
 use bevy::prelude::*;
 use bytes::Bytes;
 use shared::game_sockets::{GameConnection, GamePeer, GameStream};
-use shared::protocol::broker::{Topic, ClientId};
+use shared::protocol::{Topic, ClientId};
 use std::collections::HashSet;
 use std::time::Duration;
 
@@ -63,24 +63,24 @@ impl BrokerClient {
 
     pub fn send_raw(&self, payload: Vec<u8>) -> bool {
         let Some(peer) = self.peer.as_ref() else {
-            tracing::warn!("cannot send broker packet: peer is not ready");
+            tracing::warn!("cannot send utils packet: peer is not ready");
             return false;
         };
 
         let Some(connection) = self.connection else {
-            tracing::warn!("cannot send broker packet: not connected to broker yet");
+            tracing::warn!("cannot send utils packet: not connected to utils yet");
             return false;
         };
 
         let Some(stream) = self.reliable_stream.as_ref() else {
-            tracing::warn!("cannot send broker packet: reliable stream is not ready yet");
+            tracing::warn!("cannot send utils packet: reliable stream is not ready yet");
             return false;
         };
 
         match peer.send(&connection, stream, Bytes::from(payload)) {
             Ok(()) => true,
             Err(error) => {
-                tracing::error!("failed to send broker packet: {}", error);
+                tracing::error!("failed to send utils packet: {}", error);
                 false
             }
         }

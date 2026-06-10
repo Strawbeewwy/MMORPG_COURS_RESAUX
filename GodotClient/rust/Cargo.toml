@@ -10,13 +10,11 @@ crate-type = ["cdylib"]
 [dependencies]
 godot = { git = "https://github.com/godot-rust/gdext", branch = "master" }
 # Same QUIC transport as every Bevy actor — no Bevy dependency needed.
-game_sockets = { git = "https://github.com/VALERE91/game_sockets.git", branch = "master", default-features = false, features = ["quic"] }
 bytes   = "1"
-anyhow  = "1"
 # Tokio current-thread runtime is required by quinn (used internally by game_sockets).
 tokio   = { version = "1", features = ["rt", "time"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-# Shared protocol types (WorldUpdate, EnemySnapshot, etc.)
-shared  = { path = "../../Shared" }
+shared = { path = "../../Shared" }
+anyhow = "1"
 serde   = { version = "1", features = ["derive", "rc"] }

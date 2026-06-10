@@ -1,6 +1,6 @@
 use crate::render::renderable::{ClientRenderEntity, };
 use bevy::prelude::*;
-use shared::protocol::game::EntityType;
+use shared::protocol::public_types::*;
 use shared::protocol::game::player::PlayerId;
 use shared::protocol::{EntityId, PlayerSnapshot};
 

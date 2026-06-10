@@ -12,7 +12,7 @@ pub struct Heartbeat {
     pub port: u16,
     pub zone: ZoneId,
     pub player_count: usize,
-    pub max_players: usize,
+    pub max_players: u32,
 }
 
 /**
@@ -21,7 +21,7 @@ with a method to get the status of the server.
 **/
 impl Heartbeat {
     pub fn status(&self) -> &'static str {
-        if self.player_count >= self.max_players {
+        if self.player_count >= self.max_players as usize {
             "full"
         } else {
             "available"

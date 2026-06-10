@@ -1,207 +1,162 @@
+use std::collections::VecDeque;
 use std::sync::Arc;
-use crate::net::network_event::SharedPlayerRegistry;
-use bevy::prelude::*;
-use shared::protocol::{NetVec2, WorldSnapshot, ZoneId, PlayerSpawnInfo, EntityId, Username};
-use crate::net::area_of_interest::{
-    is_inside_area_of_interest, DEFAULT_AREA_OF_INTEREST_RADIUS,
-};
-
 use bevy::platform::collections::HashMap;
-use uuid::Uuid;
-use shared::protocol::broker::ClientId;
-use shared::protocol::game::EntityType;
-use shared::protocol::game::player::{
-    Player, PlayerId, PLAYER_DEFAULT_MOVE_SPEED, PlayerSnapshot, PlayerPublicInfo,
-};
-use shared::protocol::transport::codec;
-use crate::config::ServerConfig;
-use crate::world::combat::PlayerCombatRegistry;
+use bevy::prelude::*;
+use tokio::sync::{Mutex, MutexGuard};
+use shared::protocol::{ClientId, EntityId, PlayerSnapshot};
+use shared::protocol::snapshots::entity_snapshot::EntitySnapshot;
 
-#[derive(Debug, Default, Resource)]
-pub struct PlayerRegistry {
-    // player id -> player
-    // used to perform actions on players
-    pub players: HashMap<PlayerId, Player>,
-    // player -> client
-    // used for shard-to-client communication
-    pub player_client: HashMap<PlayerId, ClientId>,
-    // client -> player
-    // used for client-to-shard communication
-    pub client_player: HashMap<ClientId, PlayerId>,
-    // entity -> type
-    pub entity_type: HashMap<EntityId, EntityType>,
-
+/**
+World interaction should always be done through the SharedPlayerRegistry resource.
+All interaction on entities must be done with entity_reg_shared,
+client_reg_shared is used to get an entity_id from the client_id,
+then we use the entity_id on entity_reg_shared to interact with the entity.
+**/
+#[derive(Resource, Clone)]
+pub struct SharedEntityRegistry {
+    pub entity_reg_shared: Arc<Mutex<EntityRegistry>>,
+    pub client_reg_shared: Arc<Mutex<ClientEntityRegistry>>,
 }
 
-impl PlayerRegistry {
-    pub fn player_count(&self) -> usize {
-        self.players.len()
-    }
 
-    pub fn is_full(&self, max_players: usize) -> bool {
-        self.players.len() >= max_players
-    }
+/**
+When accessing the SharedEntityRegistry, use the try_lock method to acquire both locks.
+This ensures that both locks are acquired atomically, preventing partial lock acquisition and potential deadlocks.
 
-    pub fn update_players(&mut self, delta_seconds: f32) {
-        for player in self.players.values_mut() {
-            player.update_movement(delta_seconds);
-            /*
-                we can add more stuff the players need updated on
-                like health, inventory, etc.
-             */
+Easy copy and paste:
+
+        match shared_registry.try_lock() {
+            Some((cli_registry, ent_registry))=> {
+                // Do Something
+            }
+            None => {
+                tracing::warn!("could not lock player registry for client input");
+                return;
+            }
         }
 
+
+**/
+impl SharedEntityRegistry {
+    pub fn try_lock(&'_ self) -> Option<(MutexGuard<'_, ClientEntityRegistry>, MutexGuard<'_, EntityRegistry>)> {
+        let client_lock = self.client_reg_shared.try_lock().ok()?;
+        let entity_lock = self.entity_reg_shared.try_lock().ok()?;
+        Some((client_lock, entity_lock))
+    }
+}
+
+
+#[derive(Resource, Default)]
+pub struct EntityRegistry {
+    pub by_network_id: HashMap<EntityId, Entity>,
+    pub by_bevy_entity: HashMap<Entity, EntityId>,
+}
+
+impl EntityRegistry {
+    pub fn insert(&mut self, entity_id: EntityId, bevy_entity: Entity) {
+        self.by_network_id.insert(entity_id, bevy_entity);
+        self.by_bevy_entity.insert(bevy_entity, entity_id);
     }
 
-
-    pub fn register_client(&mut self,client_id: ClientId, player_id: PlayerId) {
-
-        self.client_player.insert(client_id, player_id);
+    pub fn remove_by_entity_id(&mut self, entity_id: &EntityId) -> Option<Entity> {
+        let bevy_entity = self.by_network_id.remove(entity_id)?;
+        self.by_bevy_entity.remove(&bevy_entity);
+        Some(bevy_entity)
     }
 
-    pub fn register_player(&mut self, player: Player, client_id: ClientId) {
-        self.player_client.insert(player.player_id, client_id);
+    pub fn remove_by_bevy_entity(&mut self, bevy_entity: &Entity) -> Option<EntityId> {
+        let entity_id = self.by_bevy_entity.remove(bevy_entity)?;
+        self.by_network_id.remove(&entity_id);
+        Some(entity_id)
     }
 
-    pub fn remove_player(&mut self, player: &Player) {
-        self.player_client.remove(&player.player_id);
+    pub fn get_bevy_entity(&self, entity_id: &EntityId) -> Option<Entity> {
+        self.by_network_id.get(entity_id).copied()
+    }
+}
+
+#[derive(Resource, Default)]
+pub struct ClientEntityRegistry {
+    pub client_to_entity: HashMap<ClientId, EntityId>,
+    pub entity_to_client: HashMap<EntityId, ClientId>,
+}
+
+impl ClientEntityRegistry {
+    pub fn insert(&mut self, client_id: ClientId, entity_id: EntityId) {
+        self.client_to_entity.insert(client_id, entity_id);
+        self.entity_to_client.insert(entity_id, client_id);
     }
 
-
-    pub fn remove_client(&mut self, client_id: &ClientId) {
-        self.client_player.remove(client_id);
+    pub fn remove_client(&mut self, client_id: &ClientId) -> Option<EntityId> {
+        let entity_id = self.client_to_entity.remove(client_id)?;
+        self.entity_to_client.remove(&entity_id);
+        Some(entity_id)
     }
 
-    pub fn snapshot(&self, zone: ZoneId) -> WorldSnapshot {
-        let players = self
-            .players
-            .values()
-            .map(|player| PlayerSnapshot {
-                client_id: self.player_client.get(&player.player_id).unwrap().clone(),
-                player_id: player.player_id.clone(),
-                username: player.username.clone(),
-                position: player.position.clone(),
-                velocity: player.velocity.clone(),
-            })
-            .collect();
+    pub fn remove_entity(&mut self, entity_id: &EntityId) -> Option<ClientId> {
+        let client_id = self.entity_to_client.remove(entity_id)?;
+        self.client_to_entity.remove(&client_id);
+        Some(client_id)
+    }
+}
 
-        WorldSnapshot {
-            zone,
-            players,
-            server_tick: 0,
+#[derive(Debug, Clone, Copy)]
+pub struct EntityIdRange {
+    pub next: u32,
+    pub end_exclusive: u32,
+}
+
+#[derive(Resource, Debug, Default)]
+pub struct EntityIdAllocator {
+    pub ranges: VecDeque<EntityIdRange>,
+    pub pending_request: bool,
+}
+
+impl EntityIdAllocator {
+    pub fn allocate(&mut self) -> Option<EntityId> {
+        let range = self.ranges.front_mut()?;
+
+        if range.next >= range.end_exclusive {
+            self.ranges.pop_front();
+            return self.allocate();
         }
-    }
 
-    pub fn snapshot_for_player(
-        &self,
-        zone: ZoneId,
-        observer_player: &ClientId,
-        radius: f32,
-    ) -> Option<WorldSnapshot> {
-        // let observer = self.client_player.get(observer_player)?;
-        //
-        // let players = self
-        //     .client_player
-        //     .values()
-        //     .filter(|player| {
-        //         player == observer
-        //             || is_inside_area_of_interest(observer.position, player.position, radius)
-        //     })
-        //     .map(|player| PlayerSnapshot {
-        //         client_id,
-        //         player_id:player.player_id,
-        //         username: player.username,
-        //         position: player.position,
-        //         velocity: player.velocity,
-        //     })
-        //     .collect();
-        //
-        // Some(WorldSnapshot {
-        //     zone,
-        //     players,
-        //     server_tick: 0,
-        // })
-        None
-    }
+        let entity_id = EntityId(range.next);
+        range.next += 1;
 
-
-
-}
-
-pub fn update_players_registry(
-    registry: Res<SharedPlayerRegistry>,
-    time: Res<Time>,
-) {
-    let Ok(mut registry) = registry.inner.try_lock() else {
-        return;
-    };
-
-    registry.update_players(time.delta_secs());
-}
-
-/// Bevy system: register every known client_id in the combat registry.
-/// Runs after poll_broker_events so newly registered clients are picked up.
-pub fn sync_combat_registry(
-    registry: Res<SharedPlayerRegistry>,
-    mut combat_reg: ResMut<crate::world::combat::PlayerCombatRegistry>,
-) {
-    let Ok(reg) = registry.inner.try_lock() else { return };
-    for client_id in reg.client_player.keys() {
-        if !combat_reg.states.contains_key(client_id) {
-            combat_reg.register(*client_id);
-            tracing::info!("combat registry: registered new client_id={}", client_id.0);
+        if range.next >= range.end_exclusive {
+            self.ranges.pop_front();
         }
-    }
-}
 
-pub fn handle_add_client_to_shard(
-    config: &ServerConfig,
-    registry: &SharedPlayerRegistry,
-    client_id: ClientId,
-    payload: &[u8],
-) {
-    let spawn_info = match codec::decode::<PlayerSpawnInfo>(payload) {
-        Ok(spawn_info) => spawn_info,
-        Err(error) => {
-            tracing::warn!(
-                "failed to decode PlayerSpawnInfo for client {}: {error:#}",
-                client_id.0
-            );
+        Some(entity_id)
+    }
+
+    pub fn add_range(&mut self, start: u32, count: u32) {
+        if count == 0 {
             return;
         }
-    };
 
-    let Ok(mut registry) = registry.inner.try_lock() else {
-        tracing::warn!("could not lock player registry for AddClientToShard");
-        return;
-    };
+        let Some(end_exclusive) = start.checked_add(count) else {
+            tracing::warn!(
+                "invalid entity id range start={} count={}",
+                start,
+                count
+            );
+            return;
+        };
 
-    let player = Player {
-        player_id: Default::default(),
-        username: spawn_info.username.clone(),
-        zone: spawn_info.zone.clone(),
-        position: NetVec2::ZERO,
-        velocity: NetVec2::ZERO,
-        movement_speed: PLAYER_DEFAULT_MOVE_SPEED,
-    };
+        self.ranges.push_back(EntityIdRange {
+            next: start,
+            end_exclusive,
+        });
 
-}
+        self.pending_request = false;
+    }
 
-pub fn handle_register_client(
-    config: &ServerConfig,
-    registry: &SharedPlayerRegistry,
-    client_id: ClientId,
-    username: Username,
-) {
-    let Ok(mut registry) = registry.inner.try_lock() else {
-        tracing::warn!("could not lock player registry for shard world snapshot publish");
-        return;
-    };
-    let player = Player::new(
-        Uuid::new_v4().as_u128(),
-        username,
-        config.zone.clone(),
-    );
-
-    registry.register_client(client_id, player.player_id);
+    pub fn remaining(&self) -> u32 {
+        self.ranges
+            .iter()
+            .map(|range| range.end_exclusive.saturating_sub(range.next))
+            .sum()
+    }
 }
