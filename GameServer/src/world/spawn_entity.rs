@@ -88,7 +88,7 @@ pub fn spawn_player_entities(
                 event.client_id.0
                  );
 
-                register_entity_to_spatial(entity_id,&mut published_positions, &mut broker,&mut config);
+                register_entity_to_spatial(entity_id, event.client_id, &mut published_positions, &mut broker, &mut config);
             }
         }
         None => {
@@ -184,7 +184,7 @@ pub fn spawn_generic_entities(
                  entity_id.0,
                 );
 
-                register_entity_to_spatial(entity_id,&mut published_positions, &mut broker,&mut config);
+                register_entity_to_spatial(entity_id, shared::protocol::ClientId(0), &mut published_positions, &mut broker, &mut config);
 
             }
         }
@@ -197,6 +197,7 @@ pub fn spawn_generic_entities(
 
 fn register_entity_to_spatial(
     entity_id: EntityId,
+    client_id: shared::protocol::ClientId,
     published_positions: &mut PublishedEntityPositions,
     broker: &mut BrokerShardPeer,
     config: &mut ServerConfig,
@@ -215,6 +216,7 @@ fn register_entity_to_spatial(
 
     let message = &NetworkMessage::RegisterEntity {
         entity_id,
+        client_id,
         position: network_position,
     };
 
@@ -223,11 +225,9 @@ fn register_entity_to_spatial(
         return;
     }
 
-
     info!(
         "registered entity with spatial id={}",
         entity_id.0
     );
-
 
 }

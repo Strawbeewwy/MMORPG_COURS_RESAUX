@@ -1,7 +1,6 @@
 use bevy::platform::collections::HashMap;
 use bevy::prelude::{Resource, Vec2};
-use shared::{ClientId, ShardId};
-use shared::protocol::{EntityId, NetVec2,};
+use shared::protocol::{ClientId, EntityId, NetVec2, ShardId};
 use crate::resources::client_map::ClientTransferState;
 
 #[derive(Resource, Debug)]
@@ -41,8 +40,16 @@ pub enum EntityTransferState {
 
 pub struct SpatialEntityRecord {
     pub entity_id: EntityId,
+    /// ClientId(0) means non-player entity.
+    pub client_id: ClientId,
     pub position: Vec2,
     pub current_shard: ShardId,
+}
+
+impl SpatialEntityRecord {
+    pub fn is_player(&self) -> bool {
+        self.client_id.0 != 0
+    }
 }
 
 #[derive(Resource, Default)]

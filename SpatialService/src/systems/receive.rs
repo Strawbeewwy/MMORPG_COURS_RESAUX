@@ -3,10 +3,10 @@ use shared::game_sockets::{
     GameConnection, GameNetworkEvent, GameStreamReliability
 };
 use shared::{NetVec2, ShardId};
-use shared::protocol::{decode_message, NetworkMessage};
+use shared::protocol::{ClientId, Topic, decode_message, encode_message, NetworkMessage};
 use crate::messages::PositionUpdateMsg;
 use crate::resources::client_map::ClientMap;
-use crate::resources::entity_map::{EntityMap, SpatialEntityRecord};
+use crate::resources::entity_map::{EntityMap, EntityTransferState, SpatialEntityRecord};
 use crate::resources::net_handles::{BrokerClient, BrokerConnectionState, ShardListener};
 use crate::resources::quad_tree::QuadTree;
 
@@ -174,7 +174,7 @@ fn handle_broker_event(
             broker.handle.state = BrokerConnectionState::Disconnected;
         }
         GameNetworkEvent::Message { connection, data, .. } => {
-            handle_broker_message(connection, &data, ev_writer, entity_map,quad_tree);
+            handle_broker_message(connection, &data, ev_writer, entity_map, quad_tree, broker);
         }
     }
 }
@@ -187,6 +187,7 @@ pub fn handle_broker_message(
     ev_writer: &mut MessageWriter<PositionUpdateMsg>,
     entity_map: &mut EntityMap,
     quad_tree: &mut QuadTree,
+    broker: &mut BrokerClient,
 ) {
     let message = match decode_message(data) {
         Ok(msg) => msg,
@@ -204,7 +205,7 @@ pub fn handle_broker_message(
                 y: f64::from(position.y),
             });
         }
-        NetworkMessage::RegisterEntity {entity_id,position} => {
+        NetworkMessage::RegisterEntity {entity_id, client_id, position} => {
 
             let f32_position= Vec2::from(NetVec2::to_f32(&position));
 
@@ -216,9 +217,9 @@ pub fn handle_broker_message(
                 return;
             };
 
-
             let record = SpatialEntityRecord {
                 entity_id,
+                client_id,
                 position : f32_position,
                 current_shard: shard,
             };
@@ -226,6 +227,46 @@ pub fn handle_broker_message(
         }
         NetworkMessage::UnregisterEntity {entity_id} => {
             entity_map.remove(entity_id);
+        }
+        NetworkMessage::HandoffCompleted { entity_id } => {
+            // Broker CCs spatial on HandoffCompleted so it can update subscriptions.
+            if let EntityTransferState::PendingHandoff { destination_shard } = entity_map.get_state(entity_id) {
+                let dest_shard_id = ShardId(destination_shard);
+
+                if let Some(record) = entity_map.entities.get_mut(&entity_id) {
+                    if record.is_player() {
+                        let client_id = record.client_id;
+                        let old_shard = record.current_shard;
+
+                        // Unsubscribe from source shard.
+                        if let Ok(packet) = encode_message(&NetworkMessage::Unsubscribe {
+                            client_id,
+                            topic: Topic::ShardInstance { id: old_shard },
+                        }) {
+                            if let Err(e) = broker.handle.send(packet) {
+                                tracing::error!("HandoffCompleted: failed unsubscribe: {e:#}");
+                            }
+                        }
+
+                        // Subscribe to destination shard.
+                        if let Ok(packet) = encode_message(&NetworkMessage::Subscribe {
+                            client_id,
+                            topic: Topic::ShardInstance { id: dest_shard_id },
+                        }) {
+                            if let Err(e) = broker.handle.send(packet) {
+                                tracing::error!("HandoffCompleted: failed subscribe: {e:#}");
+                            }
+                        }
+                    }
+                    record.current_shard = dest_shard_id;
+                }
+                entity_map.clear_state(entity_id);
+
+                tracing::info!(
+                    "HandoffCompleted: entity {} moved to shard {}",
+                    entity_id.0, destination_shard
+                );
+            }
         }
         _ => {}
     }

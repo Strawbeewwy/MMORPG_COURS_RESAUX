@@ -61,8 +61,8 @@ pub fn encode_message(
         NetworkMessage::HandoffStart { entity_id, source, destination } => {
             encode_handoff_start(*entity_id,*source,*destination)
         }
-        NetworkMessage::RegisterEntity { entity_id,position } => {
-            encode_register_entity(*entity_id, *position)
+        NetworkMessage::RegisterEntity { entity_id, client_id, position } => {
+            encode_register_entity(*entity_id, *client_id, *position)
         }
         NetworkMessage::UnregisterClient { client_id } => {
             encode_unregister_client(*client_id)
@@ -367,15 +367,17 @@ fn encode_handoff_start(
 
 fn encode_register_entity(
     entity_id: EntityId,
+    client_id: ClientId,
     position: NetVec2
 )->anyhow::Result<Vec<u8>> {
 
     let mut packet = Vec::with_capacity(
-        TAG_LEN + ENTITY_ID_LEN + 10
+        TAG_LEN + ENTITY_ID_LEN + CLIENT_ID_LEN + 10
     );
 
     write_u8(&mut packet, TAG_REGISTER_ENTITY);
     write_u32(&mut packet, entity_id.0);
+    write_u32(&mut packet, client_id.0);
     write_net_vec2(&mut packet, position);
 
     Ok(packet)

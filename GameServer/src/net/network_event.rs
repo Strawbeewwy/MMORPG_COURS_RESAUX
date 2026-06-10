@@ -13,7 +13,15 @@ use shared::protocol::{
 };
 use tokio::sync::{MutexGuard};
 use crate::net::apply_client_input;
+use crate::net::handoff::{
+    handle_handoff_start_on_source,
+    handle_handoff_request_on_dest,
+    handle_handoff_accepted_on_source,
+    handle_handoff_rejected_on_source,
+};
 use crate::world::{EntityIdAllocator, SpawnPlayerEntityEvent, Velocity};
+use crate::world::entity::PromoteGhostEvent;
+use crate::world::spawn_entity::SpawnGhostEntityEvent;
 
 
 
@@ -113,11 +121,14 @@ pub fn reconnect_broker_if_needed(
 
 pub fn poll_broker_events(
     config: Res<ServerConfig>,
+    mut commands: Commands,
     mut broker: ResMut<BrokerShardPeer>,
     mut registry: ResMut<SharedEntityRegistry>,
     mut allocator: ResMut<EntityIdAllocator>,
     mut velocities: Query<&mut Velocity>,
     mut spawn_players: MessageWriter<SpawnPlayerEntityEvent>,
+    mut spawn_ghosts: MessageWriter<SpawnGhostEntityEvent>,
+    mut promote_ghosts: MessageWriter<PromoteGhostEvent>,
 ) {
 
     loop {
@@ -132,23 +143,30 @@ pub fn poll_broker_events(
 
         handle_broker_event(
             &config,
+            &mut commands,
             &mut broker,
             &mut registry,
             &mut allocator,
             event,
             &mut velocities,
-            &mut spawn_players);
+            &mut spawn_players,
+            &mut spawn_ghosts,
+            &mut promote_ghosts,
+        );
     }
 }
 
 fn handle_broker_event(
     config: &ServerConfig,
+    commands: &mut Commands,
     broker: &mut BrokerShardPeer,
     registry: &mut SharedEntityRegistry,
     allocator: &mut EntityIdAllocator,
     event: GameNetworkEvent,
     velocities: &mut Query<&mut Velocity>,
     spawn_players: &mut MessageWriter<SpawnPlayerEntityEvent>,
+    spawn_ghosts: &mut MessageWriter<SpawnGhostEntityEvent>,
+    promote_ghosts: &mut MessageWriter<PromoteGhostEvent>,
 ) {
     match event {
         GameNetworkEvent::Connected(connection) => {
@@ -241,12 +259,15 @@ fn handle_broker_event(
 
             handle_broker_message(
                 config,
+                commands,
                 broker,
                 registry,
                 allocator,
                 &data,
                 velocities,
-                spawn_players
+                spawn_players,
+                spawn_ghosts,
+                promote_ghosts,
             );
         }
 
@@ -302,12 +323,15 @@ fn register_shard_with_broker(
 
 fn handle_broker_message(
     config: &ServerConfig,
+    commands: &mut Commands,
     broker: &mut BrokerShardPeer,
     registry: &mut SharedEntityRegistry,
     allocator: &mut EntityIdAllocator,
     data: &[u8],
     velocities: &mut Query<&mut Velocity>,
     spawn_players: &mut MessageWriter<SpawnPlayerEntityEvent>,
+    spawn_ghosts: &mut MessageWriter<SpawnGhostEntityEvent>,
+    promote_ghosts: &mut MessageWriter<PromoteGhostEvent>,
 ) {
     let message = match decode_message(data) {
         Ok(message) => message,
@@ -317,71 +341,82 @@ fn handle_broker_message(
         }
     };
 
-    match message {
+    let my_shard_id = ShardId(config.shard_topic.get_id_as_u32());
 
-        NetworkMessage::ClientInput {
-            client_id, input
-        } => {
-            apply_client_input(
-                &registry,
-                client_id,
-                input,velocities
-            );
+    match message {
+        NetworkMessage::ClientInput { client_id, input } => {
+            apply_client_input(&registry, client_id, input, velocities);
         }
-        NetworkMessage::RegisterClient {
-            client_id,
-            username} => {
-            spawn_players.write(
-                SpawnPlayerEntityEvent {
+        NetworkMessage::RegisterClient { client_id, username } => {
+            spawn_players.write(SpawnPlayerEntityEvent {
                 client_id,
                 username,
                 position: Vec2::ZERO,
             });
-
-            info!(
-                "queued player spawn for registered client_id={}",
-                client_id.0
-            );
+            info!("queued player spawn for registered client_id={}", client_id.0);
         }
-        NetworkMessage::UnregisterClient {client_id} =>{
+        NetworkMessage::UnregisterClient { client_id } => {
             match registry.try_lock() {
-                Some((mut cli_registry, mut ent_registry))=> {
+                Some((mut cli_registry, mut ent_registry)) => {
                     let Some(entity_id) = cli_registry.remove_client(&client_id) else {
                         tracing::warn!("could not find player for client_id={}", client_id.0);
                         return;
                     };
                     ent_registry.remove_by_entity_id(&entity_id);
-
-                    let message = &NetworkMessage::UnregisterEntity {
-                        entity_id,
-                    };
-
-                    if let Err(error) = broker.send_message_to_broker(message) {
-                        tracing::error!("failed to send packet to broker: {error:#}");
-                        return;
+                    if let Err(error) = broker.send_message_to_broker(&NetworkMessage::UnregisterEntity { entity_id }) {
+                        tracing::error!("failed to send UnregisterEntity to broker: {error:#}");
                     }
                 }
-                None => {
-                    tracing::warn!("could not lock player registry for client unregistering");
-                    return;
+                None => tracing::warn!("could not lock registry for client unregistering"),
+            }
+        }
+        NetworkMessage::EntityIdBlockAllocated { start, count } => {
+            allocator.add_range(start, count);
+        }
+        // Ghost position sync from source shard — update ghost entity on this (dest) shard.
+        NetworkMessage::GhostUpdate { entity_id, position, velocity } => {
+            if let Some((_, ent_reg)) = registry.try_lock() {
+                if let Some(bevy_entity) = ent_reg.get_bevy_entity(&entity_id) {
+                    commands.entity(bevy_entity).insert((
+                        crate::world::Position(Vec2::new(position.x as f32, position.y as f32)),
+                        crate::world::Velocity(Vec2::new(velocity.x as f32, velocity.y as f32)),
+                    ));
                 }
             }
         }
-        NetworkMessage::EntityIdBlockAllocated {
-            start, count
-        } => {
-            allocator.add_range(start,count);
+        // Source shard: broker relays HandoffStart → send HandoffRequest to dest.
+        NetworkMessage::HandoffStart { entity_id, source, destination } => {
+            if source != my_shard_id {
+                tracing::warn!(
+                    "HandoffStart for entity {} has wrong source {} (my={})",
+                    entity_id.0, source.0, my_shard_id.0
+                );
+                return;
+            }
+            handle_handoff_start_on_source(
+                config, broker, registry, entity_id, destination,
+                NetVec2::ZERO, NetVec2::ZERO,
+            );
         }
-        NetworkMessage::GhostUpdate{
-            entity_id, position, velocity
-        } => {
-            //TODO
+        // Dest shard: broker relays HandoffRequest → spawn ghost + send HandoffAccepted.
+        NetworkMessage::HandoffRequest { entity_id, position, velocity, .. } => {
+            handle_handoff_request_on_dest(
+                broker, spawn_ghosts, registry, entity_id,
+                ShardId(0), // source implicit via broker routing
+                position, velocity,
+            );
         }
-        NetworkMessage::HandoffRequest{..} => {
-            //TODO
+        // Source shard: HandoffAccepted from dest → enter ghost phase.
+        NetworkMessage::HandoffAccepted { entity_id } => {
+            handle_handoff_accepted_on_source(commands, registry, entity_id, ShardId(0));
         }
-        NetworkMessage::HandoffCompleted{..} => {
-            //TODO
+        // Source shard: HandoffRejected from dest → cancel.
+        NetworkMessage::HandoffRejected { entity_id } => {
+            handle_handoff_rejected_on_source(commands, registry, entity_id);
+        }
+        // Dest shard: HandoffCompleted from source → promote ghost.
+        NetworkMessage::HandoffCompleted { entity_id } => {
+            promote_ghosts.write(PromoteGhostEvent { entity_id });
         }
 
         other => {

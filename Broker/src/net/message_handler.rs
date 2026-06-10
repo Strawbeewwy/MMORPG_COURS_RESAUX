@@ -32,7 +32,7 @@ pub fn handle_message(
         TAG_REGISTER_SHARD => handle_register_shard(peer_roles,state,&connection,&stream,&mut input),
         TAG_REGISTER_SPATIAL_SERVICE => handle_register_spatial_service(peer,peer_roles,state,&connection,&stream),
         TAG_CLIENT_HELLO => handle_client_hello(peer,peer_roles,state,&connection,&stream,&mut input),
-        TAG_REQUEST_ENTITY_ID_BLOCK => relay_to_spatial_services(peer,state,data),
+        TAG_REQUEST_ENTITY_ID_BLOCK => handle_request_entity_id_block(peer, peer_roles, state, &connection, &stream, data),
         TAG_ENTITY_ID_BLOCK_ALLOCATED => relay_entity_id_block_allocated_to_shard(peer, state, &connection, &stream, data.clone()),
         TAG_POSITION_UPDATE => relay_to_spatial_services(peer,state,data),
         TAG_HANDOFF_REQUEST => relay_handoff_request_to_shards(peer, state, &connection, &stream, data),
@@ -97,6 +97,36 @@ fn handle_register_shard(
     }
 
 
+}
+
+fn handle_request_entity_id_block(
+    peer: &GamePeer,
+    peer_roles: &mut PeerRoles,
+    state: &mut PubSubState,
+    connection: &GameConnection,
+    stream: &GameStream,
+    data: &[u8],
+) {
+    if !peer_roles.ensure(*connection, PeerRole::Shard, "RequestEntityIdBlock") {
+        tracing::warn!(
+            "RequestEntityIdBlock not from a shard: {}",
+            connection.connection_id
+        );
+        return;
+    }
+
+    let message = match decode_message(data) {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::warn!("could not decode RequestEntityIdBlock: {e}");
+            return;
+        }
+    };
+
+    if let NetworkMessage::RequestEntityIdBlock { shard_id, .. } = message {
+        state.push_entity_id_block_request(shard_id);
+        relay_to_spatial_services(peer, state, data);
+    }
 }
 
 fn handle_register_spatial_service(

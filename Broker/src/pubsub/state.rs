@@ -4,7 +4,7 @@ use shared::game_sockets::{
 };
 use shared::protocol::{ClientId, EntityId, ShardId, Topic, Username};
 use std::collections::{
-    HashMap, HashSet
+    HashMap, HashSet, VecDeque
 };
 use shared::protocol::net_handles::spatial_handler::SpatialHandle;
 use crate::net::peer_roles::PeerRole;
@@ -40,6 +40,8 @@ pub struct PubSubState {
     pub client_topics: HashMap<ClientId, HashSet<Topic>>,
     //entity
     pub ghost_entities: HashMap<EntityId, GhostRoute>,
+    // EntityIdBlock request queue: FIFO by requesting shard
+    pub entity_id_block_request_queue: VecDeque<ShardId>,
     //shard
     pub shard_streams_by_topic: BiMap<Topic, ConnectionStream>,
     // spatial
@@ -355,8 +357,15 @@ impl PubSubState {
         Some(&connection_stream)
     }
 
-    pub fn add_ghost_entity(&mut self, entity_id: EntityId, ghost_route: GhostRoute) {
-        self.ghost_entities.insert(entity_id, ghost_route);
+    pub fn push_entity_id_block_request(&mut self, shard_id: ShardId) {
+        self.entity_id_block_request_queue.push_back(shard_id);
+    }
+
+    pub fn pop_entity_id_block_request(&mut self) -> Option<ShardId> {
+        self.entity_id_block_request_queue.pop_front()
+    }
+
+    pub fn add_ghost_entity(&mut self, entity_id: EntityId, ghost_route: GhostRoute) {        self.ghost_entities.insert(entity_id, ghost_route);
     }
 
     pub fn remove_ghost_entity(&mut self, entity_id: EntityId) {

@@ -60,6 +60,7 @@ pub enum NetworkMessage {
     },
     RegisterEntity{
         entity_id: EntityId,
+        client_id: ClientId, // ClientId(0) = non-player entity
         position: NetVec2,
     },
     UnregisterEntity{

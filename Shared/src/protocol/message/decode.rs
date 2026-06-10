@@ -22,6 +22,7 @@ pub fn decode_message(
         TAG_REQUEST_ENTITY_ID_BLOCK => decode_request_entity_id_block(&mut input)?,
         TAG_ENTITY_ID_BLOCK_ALLOCATED => decode_entity_id_block_allocated(&mut input)?,
         TAG_POSITION_UPDATE => decode_position_update(&mut input)?,
+        TAG_REGISTER_ENTITY => decode_register_entity(&mut input)?,
         TAG_HANDOFF_REQUEST => decode_handoff_request(&mut input)?,
         TAG_HANDOFF_ACCEPTED => decode_handoff_accepted(&mut input)?,
         TAG_HANDOFF_REJECTED => decode_handoff_rejected(&mut input)?,
@@ -196,6 +197,20 @@ fn decode_position_update(
 
     Ok(NetworkMessage::PositionUpdate {
         entity_id,
+        position,
+    })
+}
+
+fn decode_register_entity(
+    input: &mut &[u8]
+) -> anyhow::Result<NetworkMessage> {
+    let entity_id = EntityId(read_u32(input)?);
+    let client_id = ClientId(read_u32(input)?);
+    let position = read_net_vec2(input)?;
+
+    Ok(NetworkMessage::RegisterEntity {
+        entity_id,
+        client_id,
         position,
     })
 }

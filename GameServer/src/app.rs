@@ -7,6 +7,7 @@ use crate::net::{
     publish_world_update, publish_player_position_updates
 };
 use crate::world::{ClientEntityRegistry, EntityRegistry, SpawnGenericEntityEvent, SpawnGhostEntityEvent, SpawnPlayerEntityEvent, SharedEntityRegistry, EntityIdAllocator};
+use crate::world::entity::PromoteGhostEvent;
 
 use bevy::app::ScheduleRunnerPlugin;
 use bevy::prelude::*;
@@ -14,8 +15,10 @@ use shared::config::DEFAULT_DS_TICK_RATE;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
+use crate::net::handoff::promote_ghost_entities;
 use crate::net::network_event::reconnect_broker_if_needed;
 use crate::world::spawn_entity::{spawn_generic_entities, spawn_ghost_entities, spawn_player_entities};
+use crate::net::publish::PublishedEntityPositions;
 
 pub fn run() {
     tracing_subscriber::fmt()
@@ -42,9 +45,11 @@ pub fn run() {
             client_reg_shared: Arc::new(Mutex::new(ClientEntityRegistry::default()))
         })
         .insert_resource(EntityIdAllocator::default())
+        .init_resource::<PublishedEntityPositions>()
         .add_message::<SpawnPlayerEntityEvent>()
         .add_message::<SpawnGhostEntityEvent>()
         .add_message::<SpawnGenericEntityEvent>()
+        .add_message::<PromoteGhostEvent>()
         .add_systems(
             Startup,
             (
@@ -60,6 +65,7 @@ pub fn run() {
                 spawn_player_entities,
                 spawn_ghost_entities,
                 spawn_generic_entities,
+                promote_ghost_entities,
                 publish_player_position_updates,
                 publish_world_update,
                 send_heartbeat,

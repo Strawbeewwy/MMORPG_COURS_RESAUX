@@ -9,6 +9,7 @@ pub use entity::{
     EntityKind,
     Ghost,
     NetworkEntityId,
+    PendingHandoff,
     Position,
     Velocity,
 };
@@ -26,3 +27,6 @@ pub use spawn_entity::{
     SpawnGenericEntityEvent,
     SpawnPlayerEntityEvent,
 };
+
+pub use entity::PromoteGhostEvent;
+

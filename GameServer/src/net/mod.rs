@@ -28,3 +28,5 @@ pub use publish::{
     publish_player_position_updates,
     publish_world_update,
 };
+
+pub use handoff::promote_ghost_entities;
