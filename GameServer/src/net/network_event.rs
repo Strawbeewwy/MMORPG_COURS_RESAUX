@@ -1,12 +1,12 @@
 use std::time::{Duration, Instant};
 use crate::config::ServerConfig;
-use crate::net::input::handle_broker_client_input;
+
 use crate::world::combat::{
     PendingActions, PendingSwapEvents, PlayerCombatRegistry,
 };
 use crate::world::enemy::EnemyRegistry;
 use crate::world::projectile::ProjectileRegistry;
-use crate::world::state::{PlayerRegistry, handle_add_client_to_shard, handle_register_client};
+
 
 use crate::world::state::{SharedEntityRegistry};
 use bevy::prelude::*;
@@ -19,7 +19,7 @@ use shared::protocol::{
     NetVec2, WorldSnapshot, WorldUpdate, ShardId
 };
 use tokio::sync::{MutexGuard};
-use crate::net::apply_client_input;
+use crate::net::{apply_client_input, publish_world_update};
 use crate::net::handoff::{
     handle_handoff_start_on_source,
     handle_handoff_request_on_dest,
@@ -151,6 +151,7 @@ pub fn poll_broker_events(
 
         handle_broker_event(
             &config,
+            &mut pending,
             &mut commands,
             &mut broker,
             &mut registry,
@@ -272,6 +273,7 @@ fn handle_broker_event(
                 broker,
                 registry,
                 allocator,
+                pending,
                 &data,
                 velocities,
                 spawn_players,
@@ -435,29 +437,6 @@ fn handle_broker_message(
     }
 }
 
-fn send_raw_to_broker(
-    broker_peer: &BrokerShardPeer,
-    packet: Vec<u8>,
-    label: &str,
-) -> bool {
-    let Some(connection) = broker_peer.connection else {
-        tracing::warn!("cannot send {label}: shard is not connected to broker");
-        return false;
-    };
-
-    let Some(stream) = broker_peer.reliable_stream.as_ref() else {
-        tracing::warn!("cannot send {label}: shard reliable stream is not ready");
-        return false;
-    };
-
-    match broker_peer.peer.send(&connection, stream, Bytes::from(packet)) {
-        Ok(()) => true,
-        Err(error) => {
-            tracing::error!("failed to send {label} to broker: {}", error);
-            false
-        }
-    }
-}
 
 /// Publish 5SecsSwap gameplay updates (enemies, projectiles, colour swaps, scores).
 pub fn publish_gameplay_updates(
@@ -468,48 +447,48 @@ pub fn publish_gameplay_updates(
     mut swap_events: ResMut<PendingSwapEvents>,
     mut combat_reg: ResMut<PlayerCombatRegistry>,
 ) {
-    if !broker_peer.registered { return; }
+    if !broker_peer.is_ready() { return; }
 
     // 1. Enemy batch update.
     let enemies = enemy_reg.snapshots();
     if !enemies.is_empty() {
-        publish_world_update(
-            &broker_peer,
-            config.shard_topic,
-            WorldUpdate::EnemiesUpdate { enemies },
-        );
+        // publish_world_update(
+        //     broker_peer,
+        //     config.shard_topic,
+        //     WorldUpdate::EnemiesUpdate { enemies },
+        // );
     }
 
     // 2. Projectile batch update.
     let projectiles = proj_reg.snapshots();
     if !projectiles.is_empty() {
-        publish_world_update(
-            &broker_peer,
-            config.shard_topic,
-            WorldUpdate::ProjectilesUpdate { projectiles },
-        );
+        // publish_world_update(
+        //     &broker_peer,
+        //     config.shard_topic,
+        //     WorldUpdate::ProjectilesUpdate { projectiles },
+        // );
     }
 
     // 3. Colour swap events.
     for swap_index in swap_events.0.drain(..) {
-        publish_world_update(
-            &broker_peer,
-            config.shard_topic,
-            WorldUpdate::ColorSwap { swap_index },
-        );
+        // publish_world_update(
+        //     &broker_peer,
+        //     config.shard_topic,
+        //     WorldUpdate::ColorSwap { swap_index },
+        // );
     }
 
     // 4. Score updates (delta only).
     for (client_id, state) in combat_reg.states.iter_mut() {
         if state.score > state.score_sent {
-            publish_world_update(
-                &broker_peer,
-                config.shard_topic,
-                WorldUpdate::PlayerScoreUpdate {
-                    client_id: *client_id,
-                    score: state.score,
-                },
-            );
+            // publish_world_update(
+            //     &broker_peer,
+            //     config.shard_topic,
+            //     WorldUpdate::PlayerScoreUpdate {
+            //         client_id: *client_id,
+            //         score: state.score,
+            //     },
+            // );
             state.score_sent = state.score;
         }
     }

@@ -4,7 +4,7 @@
 /// here each tick.  Collision against enemies is also resolved here.
 use bevy::prelude::*;
 use bevy::platform::collections::HashMap;
-use shared::protocol::broker::ClientId;
+use shared::ClientId;
 use shared::protocol::game::combat::ColorTeam;
 use shared::protocol::game::projectile::{ProjectileId, ProjectileSnapshot};
 use shared::protocol::NetVec2;

@@ -4,8 +4,8 @@
 /// broadcast as `WorldUpdate::ProjectilesUpdate` every tick.
 /// Dead projectiles have `alive = false` — clients remove them.
 use serde::{Deserialize, Serialize};
+use crate::ClientId;
 use crate::protocol::game::combat::ColorTeam;
-use crate::protocol::broker::ClientId;
 use crate::protocol::NetVec2;
 
 /// Unique identifier for a server-side projectile.

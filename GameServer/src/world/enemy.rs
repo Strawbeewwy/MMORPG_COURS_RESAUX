@@ -7,10 +7,12 @@
 /// Bevy thread so no extra Mutex is needed.
 use bevy::prelude::*;
 use bevy::platform::collections::HashMap;
+use shared::ClientId;
 use shared::protocol::game::combat::ColorTeam;
 use shared::protocol::game::enemy::{EnemyId, EnemySnapshot};
 use shared::protocol::NetVec2;
-
+pub use world::SharedEntityRegistry;
+use crate::world;
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /// Pixels (world units) per second enemies move toward their target.
@@ -62,7 +64,7 @@ pub struct EnemyRegistry {
     spawn_counter:     u64,
     spawn_accumulator: f32,
     /// Enemies that died this tick — published once then cleared.
-    pub died_this_tick: Vec<(EnemyId, Option<shared::protocol::broker::ClientId>)>,
+    pub died_this_tick: Vec<(EnemyId, Option<ClientId>)>,
 }
 
 impl EnemyRegistry {
@@ -95,7 +97,7 @@ impl EnemyRegistry {
         &mut self,
         enemy_id: EnemyId,
         dmg: u8,
-        killer: Option<shared::protocol::broker::ClientId>,
+        killer: Option<ClientId>,
     ) -> bool {
         if let Some(e) = self.enemies.get_mut(&enemy_id) {
             if e.hp <= dmg {
@@ -140,36 +142,36 @@ pub fn enemy_spawn_system(
 pub fn enemy_ai_system(
     time: Res<Time>,
     mut enemies: ResMut<EnemyRegistry>,
-    player_reg: Res<crate::net::network_event::SharedPlayerRegistry>,
+    player_reg: Res<SharedEntityRegistry>,
 ) {
     // Snapshot player positions without holding the lock during movement.
-    let player_positions: Vec<Vec2> = {
-        let Ok(reg) = player_reg.inner.try_lock() else { return };
-        reg.players.values().map(|p| {
-            let (x, y) = p.position.to_f32();
-            Vec2::new(x, y)
-        }).collect()
-    };
-
-    if player_positions.is_empty() { return; }
-
-    let dt   = time.delta_secs();
-    let speed = ENEMY_SPEED * dt;
-
-    for enemy in enemies.enemies.values_mut() {
-        // Find the nearest player.
-        let nearest = player_positions.iter().copied()
-            .min_by(|a, b| {
-                let da = a.distance_squared(enemy.position);
-                let db = b.distance_squared(enemy.position);
-                da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
-            });
-
-        if let Some(target) = nearest {
-            let dir = (target - enemy.position).normalize_or_zero();
-            enemy.velocity = dir;
-            enemy.position += dir * speed;
-        }
-    }
+    // let player_positions: Vec<Vec2> = {
+    //     let Ok(reg) = player_reg.inner.try_lock() else { return };
+    //     reg.players.values().map(|p| {
+    //         let (x, y) = p.position.to_f32();
+    //         Vec2::new(x, y)
+    //     }).collect()
+    // };
+    // 
+    // if player_positions.is_empty() { return; }
+    // 
+    // let dt   = time.delta_secs();
+    // let speed = ENEMY_SPEED * dt;
+    // 
+    // for enemy in enemies.enemies.values_mut() {
+    //     // Find the nearest player.
+    //     let nearest = player_positions.iter().copied()
+    //         .min_by(|a, b| {
+    //             let da = a.distance_squared(enemy.position);
+    //             let db = b.distance_squared(enemy.position);
+    //             da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+    //         });
+    // 
+    //     if let Some(target) = nearest {
+    //         let dir = (target - enemy.position).normalize_or_zero();
+    //         enemy.velocity = dir;
+    //         enemy.position += dir * speed;
+    //     }
+    // }
 }
 

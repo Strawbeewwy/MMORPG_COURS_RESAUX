@@ -11,11 +11,13 @@
 /// Action flags are read from `PendingActions` which is populated by `input.rs`.
 use bevy::prelude::*;
 use bevy::platform::collections::HashMap;
-use shared::protocol::broker::ClientId;
+use shared::ClientId;
 use shared::protocol::game::combat::{ActionFlags, ColorTeam};
 use shared::protocol::game::enemy::EnemyId;
 use shared::protocol::NetVec2;
-
+use crate::world::enemy::EnemyRegistry;
+use crate::world::projectile::ProjectileRegistry;
+use crate::world::SharedEntityRegistry;
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /// Seconds between global colour swaps.
@@ -144,111 +146,111 @@ pub fn player_combat_system(
     time: Res<Time>,
     mut pending: ResMut<PendingActions>,
     mut combat_reg: ResMut<PlayerCombatRegistry>,
-    mut proj_reg: ResMut<crate::world::projectile::ProjectileRegistry>,
-    mut enemy_reg: ResMut<crate::world::enemy::EnemyRegistry>,
-    player_reg: Res<crate::net::network_event::SharedPlayerRegistry>,
+    mut proj_reg: ResMut<ProjectileRegistry>,
+    mut enemy_reg: ResMut<EnemyRegistry>,
+    player_reg: Res<SharedEntityRegistry>,
 ) {
-    use crate::world::enemy::{MELEE_RANGE, MELEE_HALF_ANGLE, PROJECTILE_HIT_RADIUS};
-
-    let dt = time.delta_secs();
-
-    // Snapshot player positions for melee/shoot origin.
-    let player_positions: HashMap<ClientId, Vec2> = {
-        let Ok(reg) = player_reg.inner.try_lock() else { return };
-        reg.player_client
-            .iter()
-            .filter_map(|(pid, cid)| {
-                reg.players.get(pid).map(|p| {
-                    let (x, y) = p.position.to_f32();
-                    (*cid, Vec2::new(x, y))
-                })
-            })
-            .collect()
-    };
-
-    let actions: Vec<(ClientId, u8, Vec2)> = pending
-        .actions
-        .drain()
-        .map(|(cid, (flags, look))| (cid, flags, look))
-        .collect();
-
-    for (client_id, flags_byte, look_dir) in actions {
-        let flags = ActionFlags(flags_byte);
-        let Some(state) = combat_reg.states.get_mut(&client_id) else { continue };
-
-        // Tick cooldowns.
-        state.dash_cd   = (state.dash_cd   - dt).max(0.0);
-        state.shoot_cd  = (state.shoot_cd  - dt).max(0.0);
-        state.melee_cd  = (state.melee_cd  - dt).max(0.0);
-        state.dash_timer = (state.dash_timer - dt).max(0.0);
-
-        let origin = player_positions.get(&client_id).copied().unwrap_or(Vec2::ZERO);
-
-        // Dash.
-        if flags.dash() && state.dash_cd <= 0.0 {
-            let dir = if look_dir.length_squared() > 0.001 {
-                look_dir.normalize()
-            } else {
-                Vec2::Y
-            };
-            state.dash_dir   = dir;
-            state.dash_timer = DASH_DURATION;
-            state.dash_cd    = DASH_COOLDOWN;
-            // Apply dash impulse to player velocity via player registry.
-            let dash_vel = dir * DASH_SPEED;
-            if let Ok(mut reg) = player_reg.inner.try_lock() {
-                if let Some(&pid) = reg.client_player.get(&client_id) {
-                    if let Some(player) = reg.players.get_mut(&pid) {
-                        player.velocity = NetVec2::from_f32(
-                            dash_vel.x, dash_vel.y, NetVec2::DEFAULT_PRECISION,
-                        );
-                    }
-                }
-            }
-        }
-
-        // Shoot.
-        if flags.shoot() && state.shoot_cd <= 0.0 {
-            state.shoot_cd = SHOOT_COOLDOWN;
-            let dir = if look_dir.length_squared() > 0.001 {
-                look_dir.normalize()
-            } else {
-                Vec2::NEG_Y
-            };
-            proj_reg.spawn(client_id, origin, dir, state.color);
-        }
-
-        // Melee — raycast: check every enemy inside range + cone.
-        if flags.melee() && state.melee_cd <= 0.0 {
-            state.melee_cd = MELEE_COOLDOWN;
-            let forward = if look_dir.length_squared() > 0.001 {
-                look_dir.normalize()
-            } else {
-                Vec2::NEG_Y
-            };
-
-            let enemy_ids: Vec<EnemyId> = enemy_reg.enemies.keys().copied().collect();
-            for eid in enemy_ids {
-                let Some(enemy) = enemy_reg.enemies.get(&eid) else { continue };
-                if enemy.color != state.color { continue }
-
-                let to_enemy = enemy.position - origin;
-                let dist     = to_enemy.length();
-                if dist > MELEE_RANGE { continue }
-
-                let angle = forward.angle_to(to_enemy.normalize_or_zero()).abs();
-                if angle <= MELEE_HALF_ANGLE {
-                    let killer = Some(client_id);
-                    let killed = enemy_reg.damage(eid, 2, killer);
-                    if killed {
-                        if let Some(cs) = combat_reg.states.get_mut(&client_id) {
-                            cs.score += 10;
-                        }
-                    }
-                }
-            }
-        }
-    }
+    // use crate::world::enemy::{MELEE_RANGE, MELEE_HALF_ANGLE, PROJECTILE_HIT_RADIUS};
+    // 
+    // let dt = time.delta_secs();
+    // 
+    // // Snapshot player positions for melee/shoot origin.
+    // let player_positions: HashMap<ClientId, Vec2> = {
+    //     let Ok(reg) = player_reg.inner.try_lock() else { return };
+    //     reg.player_client
+    //         .iter()
+    //         .filter_map(|(pid, cid)| {
+    //             reg.players.get(pid).map(|p| {
+    //                 let (x, y) = p.position.to_f32();
+    //                 (*cid, Vec2::new(x, y))
+    //             })
+    //         })
+    //         .collect()
+    // };
+    // 
+    // let actions: Vec<(ClientId, u8, Vec2)> = pending
+    //     .actions
+    //     .drain()
+    //     .map(|(cid, (flags, look))| (cid, flags, look))
+    //     .collect();
+    // 
+    // for (client_id, flags_byte, look_dir) in actions {
+    //     let flags = ActionFlags(flags_byte);
+    //     let Some(state) = combat_reg.states.get_mut(&client_id) else { continue };
+    // 
+    //     // Tick cooldowns.
+    //     state.dash_cd   = (state.dash_cd   - dt).max(0.0);
+    //     state.shoot_cd  = (state.shoot_cd  - dt).max(0.0);
+    //     state.melee_cd  = (state.melee_cd  - dt).max(0.0);
+    //     state.dash_timer = (state.dash_timer - dt).max(0.0);
+    // 
+    //     let origin = player_positions.get(&client_id).copied().unwrap_or(Vec2::ZERO);
+    // 
+    //     // Dash.
+    //     if flags.dash() && state.dash_cd <= 0.0 {
+    //         let dir = if look_dir.length_squared() > 0.001 {
+    //             look_dir.normalize()
+    //         } else {
+    //             Vec2::Y
+    //         };
+    //         state.dash_dir   = dir;
+    //         state.dash_timer = DASH_DURATION;
+    //         state.dash_cd    = DASH_COOLDOWN;
+    //         // Apply dash impulse to player velocity via player registry.
+    //         let dash_vel = dir * DASH_SPEED;
+    //         if let Ok(mut reg) = player_reg.inner.try_lock() {
+    //             if let Some(&pid) = reg.client_player.get(&client_id) {
+    //                 if let Some(player) = reg.players.get_mut(&pid) {
+    //                     player.velocity = NetVec2::from_f32(
+    //                         dash_vel.x, dash_vel.y, NetVec2::DEFAULT_PRECISION,
+    //                     );
+    //                 }
+    //             }
+    //         }
+    //     }
+    // 
+    //     // Shoot.
+    //     if flags.shoot() && state.shoot_cd <= 0.0 {
+    //         state.shoot_cd = SHOOT_COOLDOWN;
+    //         let dir = if look_dir.length_squared() > 0.001 {
+    //             look_dir.normalize()
+    //         } else {
+    //             Vec2::NEG_Y
+    //         };
+    //         proj_reg.spawn(client_id, origin, dir, state.color);
+    //     }
+    // 
+    //     // Melee — raycast: check every enemy inside range + cone.
+    //     if flags.melee() && state.melee_cd <= 0.0 {
+    //         state.melee_cd = MELEE_COOLDOWN;
+    //         let forward = if look_dir.length_squared() > 0.001 {
+    //             look_dir.normalize()
+    //         } else {
+    //             Vec2::NEG_Y
+    //         };
+    // 
+    //         let enemy_ids: Vec<EnemyId> = enemy_reg.enemies.keys().copied().collect();
+    //         for eid in enemy_ids {
+    //             let Some(enemy) = enemy_reg.enemies.get(&eid) else { continue };
+    //             if enemy.color != state.color { continue }
+    // 
+    //             let to_enemy = enemy.position - origin;
+    //             let dist     = to_enemy.length();
+    //             if dist > MELEE_RANGE { continue }
+    // 
+    //             let angle = forward.angle_to(to_enemy.normalize_or_zero()).abs();
+    //             if angle <= MELEE_HALF_ANGLE {
+    //                 let killer = Some(client_id);
+    //                 let killed = enemy_reg.damage(eid, 2, killer);
+    //                 if killed {
+    //                     if let Some(cs) = combat_reg.states.get_mut(&client_id) {
+    //                         cs.score += 10;
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
 }
 
 /// Accumulate kill credits from projectile collisions into player scores.

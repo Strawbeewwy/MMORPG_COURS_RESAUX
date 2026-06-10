@@ -6,8 +6,7 @@
 ///   - Each player is assigned a `ColorTeam` at spawn (random 50/50).
 ///   - A player attacks only enemies whose `ColorTeam` matches their own.
 use serde::{Deserialize, Serialize};
-use crate::protocol::broker::ClientId;
-
+use crate::ClientId;
 // ─── Color team ───────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
