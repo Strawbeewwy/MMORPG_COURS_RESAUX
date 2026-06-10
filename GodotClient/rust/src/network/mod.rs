@@ -18,22 +18,20 @@
 //!     drain outbox → peer.send │    take outbox → peer.send
 
 use bytes::Bytes;
-use game_sockets::{
-    protocols::QuicBackend, GameNetworkEvent, GamePeer, GameStream,
-    GameStreamReliability,
+
+use shared::{
+    CLIENT_INPUT_LEN,
+    NetworkMessage,encode_message,
+    decode_message,
+    Username, ClientId,
 };
+use shared::game_sockets::*;
+
 use godot::classes::INode;
 use godot::prelude::*;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-
-// ── Wire protocol tags (mirrors Shared/src/protocol/broker/config.rs) ─────────
-const TAG_CLIENT_HELLO:   u8 = 0x08;
-const TAG_CLIENT_INPUT:   u8 = 0x05;
-const TAG_CLIENT_ACCEPTED:u8 = 0x0A;
-const TAG_BROADCAST:      u8 = 0x04;
-/// Size of the ClientInput payload array (mirrors CLIENT_INPUT_LEN in Shared).
-const CLIENT_INPUT_LEN: usize = 16;
+use shared::game_sockets::protocols::QuicBackend;
 
 // ── Shared channel types ───────────────────────────────────────────────────────
 pub type Inbox  = Arc<Mutex<Vec<IncomingEvent>>>;
@@ -52,48 +50,77 @@ pub enum IncomingEvent {
 
 /// Encode a ClientHello packet (TAG_CLIENT_HELLO).
 pub fn encode_client_hello(username: &str) -> Vec<u8> {
-    let name = username.as_bytes();
-    let mut buf = Vec::with_capacity(1 + 2 + name.len());
-    buf.push(TAG_CLIENT_HELLO);
-    buf.extend_from_slice(&(name.len() as u16).to_le_bytes());
-    buf.extend_from_slice(name);
-    buf
+    let arc_username: Username = Arc::from(username.to_string());
+    let packet = match encode_message(&NetworkMessage::ClientHello {
+        username: arc_username,
+    }) {
+        Ok(packet) => packet,
+        Err(error) => {
+            tracing::warn!(
+                "failed to encode ClientAccepted for user {}: {}",
+                username.to_string(),
+                error
+            );
+            return Vec::new();
+        }
+    };
+    packet
 }
 
 /// Encode a ClientInput packet (TAG_CLIENT_INPUT) with movement x/y.
 /// Matches `encode_movement_input` in GameClient/src/net/input.rs.
 pub fn encode_client_input(client_id: u32, x: f32, y: f32) -> Vec<u8> {
-    let mut input = [0u8; CLIENT_INPUT_LEN];
+    let mut input = [0_u8; CLIENT_INPUT_LEN];
+
     input[0..4].copy_from_slice(&x.to_le_bytes());
     input[4..8].copy_from_slice(&y.to_le_bytes());
 
-    let mut buf = Vec::with_capacity(1 + 4 + CLIENT_INPUT_LEN);
-    buf.push(TAG_CLIENT_INPUT);
-    buf.extend_from_slice(&client_id.to_le_bytes());
-    buf.extend_from_slice(&input);
-    buf
+    let packet = match encode_message(&NetworkMessage::ClientInput {
+        client_id : ClientId(client_id),
+        input,
+    }) {
+        Ok(packet) => packet,
+        Err(error) => {
+            tracing::warn!(
+                "cannot encode ClientInput for client {}: {}",
+                client_id,
+                error
+            );
+            return Vec::new();
+        }
+    };
+
+    packet
 }
 
 /// Decode a single Broker message from raw bytes.
 /// Returns None for unknown / malformed messages (logged as warnings).
 fn decode(data: &[u8]) -> Option<IncomingEvent> {
-    let (&tag, body) = data.split_first()?;
-    match tag {
-        TAG_CLIENT_ACCEPTED if body.len() >= 4 => {
-            let client_id = u32::from_le_bytes(body[0..4].try_into().ok()?);
-            Some(IncomingEvent::ClientAccepted { client_id })
+
+    let message = match decode_message(data) {
+        Ok(message) => message,
+        Err(error) => {
+            tracing::warn!(
+                "could not decode message: {error}"
+            );
+            return None;
         }
-        TAG_BROADCAST if body.len() >= 2 => {
-            let declared_len = u16::from_le_bytes(body[0..2].try_into().ok()?) as usize;
-            let payload = body[2..2 + declared_len.min(body.len().saturating_sub(2))].to_vec();
-            Some(IncomingEvent::Broadcast { payload })
+    };
+
+    match message{
+        NetworkMessage::ClientAccepted { client_id } => {
+            Some(IncomingEvent::ClientAccepted { client_id: client_id.0 })
+        }
+        NetworkMessage::Broadcast {payload,payload_len} =>{
+            Some(IncomingEvent::Broadcast {payload})
         }
         _ => {
-            tracing::debug!("mmo_client: ignoring broker tag 0x{tag:02X} ({} bytes)", body.len());
+            tracing::debug!("mmo_client: ignoring message {:?}", message);
             None
         }
     }
 }
+
 
 // ── NetworkClient Godot node ───────────────────────────────────────────────────
 
@@ -239,7 +266,7 @@ async fn try_connect_and_run(
     tracing::info!("mmo_quic: connecting to broker {host}:{port}");
 
     let mut peer = peer;
-    let mut connection: Option<game_sockets::GameConnection> = None;
+    let mut connection: Option<GameConnection> = None;
     let mut stream:     Option<GameStream> = None;
     let mut hello_sent = false;
 
@@ -278,7 +305,7 @@ async fn try_connect_and_run(
 fn handle_event(
     peer:        &mut GamePeer,
     event:       GameNetworkEvent,
-    connection:  &mut Option<game_sockets::GameConnection>,
+    connection:  &mut Option<GameConnection>,
     stream:      &mut Option<GameStream>,
     hello_sent:  &mut bool,
     inbox:       &Inbox,

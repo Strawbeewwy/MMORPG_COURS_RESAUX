@@ -7,8 +7,8 @@ use shared::game_sockets::protocols::QuicBackend;
 use shared::game_sockets::{
     GameNetworkEvent, GamePeer, GameStreamReliability,
 };
-use shared::protocol::broker::{
-    BrokerMessage, encode_message
+use shared::protocol::{
+    NetworkMessage, encode_message
 };
 
 
@@ -18,7 +18,7 @@ pub fn connect_to_broker(
     mut world_state: ResMut<LocalWorldState>,
 ) {
     tracing::info!(
-        "starting GameClient for username={} broker={} zone={}",
+        "starting GameClient for username={} utils={} zone={}",
         config.username,
         config.broker_addr(),
         config.zone
@@ -34,13 +34,13 @@ fn try_connect_to_broker(
     config: &ClientConfig,
     broker_client: &mut BrokerClient,
 ) {
-    tracing::info!("trying to connect to broker {}", config.broker_addr());
+    tracing::info!("trying to connect to utils {}", config.broker_addr());
 
     let peer = GamePeer::new(QuicBackend::new());
 
     if let Err(error) = peer.connect(&config.broker_ip, config.broker_port) {
         tracing::error!(
-            "failed to start connection to broker {}: {}",
+            "failed to start connection to utils {}: {}",
             config.broker_addr(),
             error
         );
@@ -50,7 +50,7 @@ fn try_connect_to_broker(
     broker_client.reset_connection();
     broker_client.peer = Some(peer);
 
-    tracing::info!("connection attempt started to broker {}", config.broker_addr());
+    tracing::info!("connection attempt started to utils {}", config.broker_addr());
 }
 
 pub fn retry_broker_connection_if_needed(
@@ -69,7 +69,7 @@ pub fn retry_broker_connection_if_needed(
     }
 
     tracing::info!(
-        "not connected to broker yet; retrying {}",
+        "not connected to utils yet; retrying {}",
         config.broker_addr()
     );
 
@@ -94,7 +94,7 @@ pub fn poll_broker_events(
                 Ok(None) => break,
                 Err(error) => {
                     tracing::warn!(
-                        "broker peer poll failed while connecting to {}: {}",
+                        "utils peer poll failed while connecting to {}: {}",
                         config.broker_addr(),
                         error
                     );
@@ -118,7 +118,7 @@ fn handle_broker_event(
 ) {
     match event {
         GameNetworkEvent::Connected(connection) => {
-            tracing::info!("connected to broker: {}", connection.connection_id);
+            tracing::info!("connected to utils: {}", connection.connection_id);
 
             broker_client.connection = Some(connection);
 
@@ -128,7 +128,7 @@ fn handle_broker_event(
 
             if let Err(error) = peer.create_stream(connection, GameStreamReliability::Reliable) {
                 tracing::error!(
-                    "failed to create reliable stream for broker connection {}: {}",
+                    "failed to create reliable stream for utils connection {}: {}",
                     connection.connection_id,
                     error
                 );
@@ -136,13 +136,13 @@ fn handle_broker_event(
         }
 
         GameNetworkEvent::Disconnected(connection) => {
-            tracing::warn!("disconnected from broker: {}", connection.connection_id);
+            tracing::warn!("disconnected from utils: {}", connection.connection_id);
             broker_client.mark_disconnected();
         }
 
         GameNetworkEvent::StreamCreated(connection, stream) => {
             tracing::info!(
-                "broker stream created: connection={} stream={}",
+                "utils stream created: connection={} stream={}",
                 connection.connection_id,
                 stream.stream_id
             );
@@ -153,11 +153,11 @@ fn handle_broker_event(
                 broker_client.connected = true;
 
                 tracing::info!(
-                    "GameClient connected to broker={}; sending ClientHello",
+                    "GameClient connected to utils={}; sending ClientHello",
                     config.broker_addr()
                 );
 
-                let packet = match encode_message(&BrokerMessage::ClientHello {
+                let packet = match encode_message(&NetworkMessage::ClientHello {
                     username: config.username.clone(),
                 }) {
                     Ok(packet) => packet,
@@ -174,14 +174,14 @@ fn handle_broker_event(
                 broker_client.send_raw(packet);
 
                 tracing::info!(
-                    "sent ClientHello; waiting for broker-assigned client_id"
+                    "sent ClientHello; waiting for utils-assigned client_id"
                 );
             }
         }
 
         GameNetworkEvent::StreamClosed(connection, stream) => {
             tracing::info!(
-                "broker stream closed: connection={} stream={}",
+                "utils stream closed: connection={} stream={}",
                 connection.connection_id,
                 stream.stream_id
             );
@@ -197,7 +197,7 @@ fn handle_broker_event(
             data,
         } => {
             tracing::debug!(
-                "broker message received: connection={} stream={} bytes={}",
+                "utils message received: connection={} stream={} bytes={}",
                 connection.connection_id,
                 stream.stream_id,
                 data.len()
@@ -208,7 +208,7 @@ fn handle_broker_event(
 
         GameNetworkEvent::Error { connection, inner } => {
             tracing::warn!(
-                "broker socket error on connection {} while targeting {}: {}",
+                "utils socket error on connection {} while targeting {}: {}",
                 connection.connection_id,
                 config.broker_addr(),
                 inner

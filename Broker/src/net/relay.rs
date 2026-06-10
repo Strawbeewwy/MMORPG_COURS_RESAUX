@@ -1,90 +1,125 @@
-use crate::pubsub::state::PubSubState;
+use crate::pubsub::state::{ConnectionStream, GhostRoute, PubSubState};
 use bytes::Bytes;
-use shared::game_sockets::{GameConnection, GamePeer, GameStream};
-use shared::protocol::broker::{
-    CLIENT_INPUT_LEN, ClientId, Topic, encode_message,
-     BrokerMessage, };
-use std::collections::HashMap;
-use shared::protocol::NetVec2;
+use game_sockets::{
+    GameConnection, GameStream, GamePeer
+};
+use shared::{decode_message, NetworkMessage};
+use crate::net::peer_roles::{PeerRole, PeerRoles};
 
-pub fn broadcast_to_subscribers(
+pub fn relay_to_client(
     peer: &GamePeer,
-    reliable_streams: &HashMap<GameConnection, GameStream>,
-    state: &PubSubState,
-    topic: Topic,
-    payload_len: &u16,
-    payload: &[u8],
+    state: &mut PubSubState,
+    connection: &GameConnection,
+    stream: &GameStream,
+    data: &[u8],
 ) {
-    let Some(subscribers) = state.topic_subscribers.get(&topic) else {
-        return;
+    let connection_stream = ConnectionStream{
+        connection: *connection,
+        stream: stream.clone(),
     };
 
-    let packet = match encode_message(&BrokerMessage::Broadcast {
-        payload_len: payload_len.clone(),
-        payload: Vec::from(payload),
-    }) {
-        Ok(packet) => packet,
-        Err(error) => {
-            tracing::warn!("cannot encode broadcast: {error}");
+    let shard_topic = match state
+        .get_shard_by_connection_stream(&connection_stream)
+        .copied()
+    {
+        Some(shard_topic_found) => shard_topic_found,
+        None => {
+            tracing::debug!(
+                "cannot publish : no shard registered for connection stream {:?}",
+                connection_stream.connection.connection_id
+            );
             return;
         }
     };
 
-    for client_id in subscribers {
-        let Some(connection) = state.client_connections.get(client_id) else {
-            continue;
-        };
 
-        let Some(stream) = reliable_streams.get(connection) else {
-            continue;
-        };
+    let Some(subscribers) =
+        state.topic_subscribers.get(&shard_topic)
+    else {
+        tracing::debug!(
+            "cannot publish : no subscribers for topic {}",
+            &shard_topic.to_string()
+        );
+        return;
+    };
 
-        if let Err(error) = peer.send(connection, stream, Bytes::from(packet.clone())) {
-            tracing::warn!(
-                "failed to send broadcast to client {} on connection {}: {}",
-                client_id.0,
-                connection.connection_id,
-                error
-            );
-        }
-    }
+    let packet = Vec::from(data);
+
+   for client_id in subscribers.iter() {
+       let Some(connection_stream) =
+           state.client_connections.get_by_left(&client_id)
+       else {
+           tracing::debug!(
+               "cannot publish to client {}: no client connection registered",
+               client_id.0
+           );
+           return;
+       };
+
+       if let Err(error) =
+           peer.send(
+               &connection_stream.connection,
+               &connection_stream.stream,
+               Bytes::from(packet.clone()))
+       {
+           tracing::warn!(
+               "failed to send broadcast to client {} on connection {}: {}",
+               client_id.0,
+               connection.connection_id,
+               error
+           );
+       }
+   }
 }
+
 
 pub fn relay_client_input_to_shard(
     peer: &GamePeer,
-    state: &PubSubState,
-    client_id: ClientId,
-    input: [u8; CLIENT_INPUT_LEN],
+    state: &mut PubSubState,
+    connection: &GameConnection,
+    stream: &GameStream,
+    data: &[u8],
 ) {
-    let Some(topic) = state.input_topic_for_client(client_id) else {
+    let connection_stream = ConnectionStream{
+        connection : connection.clone(),
+        stream: stream.clone(),
+    };
+
+    let Some(client_id) = state.get_client_id_by_connection_stream(&connection_stream) else {
         tracing::warn!(
-            "cannot relay input: client {} has no authoritative or subscribed shard topic",
-            client_id.0
+            "cannot relay input: no client known for connection {}",
+            connection.connection_id
         );
         return;
     };
 
-    let Some((shard_connection, shard_stream)) = state.shard_streams_by_topic.get(&topic) else {
-        tracing::warn!(
-            "cannot relay input: no shard known for topic {}",
-            &topic.to_string()
-        );
-        return;
-    };
-
-    let packet = match encode_message(&BrokerMessage::ClientInput {
-        client_id,
-        input,
-    }) {
-        Ok(packet) => packet,
-        Err(error) => {
-            tracing::warn!("cannot encode broadcast: {error}");
+    let topic = match state.input_topic_for_client(client_id) {
+        Some(found_topic) => found_topic,
+        None => {
+            tracing::warn!(
+                "cannot relay input: no topic known for client {}",
+                client_id.0
+            );
             return;
         }
     };
 
+    let shard_connection = match state.shard_streams_by_topic.get_by_left(&topic){
+        Some(connection) => connection,
+        None => {
+            tracing::warn!("no shard connection found for topic: {:?}", topic);
+            return;
+        }
+    };
 
-    if let Err(error) = peer.send(shard_connection, shard_stream, Bytes::from(packet)) {
+    let packet = Vec::from(data);
+
+
+    if let Err(error) =
+        peer.send(
+            &shard_connection.connection,
+            &shard_connection.stream,
+            Bytes::from(packet)) {
         tracing::warn!(
             "failed to relay input from client {} to shard topic {}: {}",
             client_id.0,
@@ -95,58 +130,403 @@ pub fn relay_client_input_to_shard(
 }
 
 
-pub fn relay_position_update_to_spatial_services(
-    peer : &GamePeer,
-    state: &PubSubState,
-    client_id: ClientId,
-    position: NetVec2,
-){
-
-    if state.spatial_service_streams.is_empty() {
+pub fn relay_to_spatial_services(
+    peer: &GamePeer,
+    state: &mut PubSubState,
+    data: &[u8],
+) {
+    let packet = data.to_vec();
+    if let Err(error) =
+        state.spatial_handle.send_to_spatial(peer, packet.into()){
         tracing::warn!(
-                    "cannot forward PositionUpdate for client {}: no spatial service registered",
-                    client_id.0
-                );
-        return;
+            "failed to send PositionUpdate to spatial service: {}",
+            error
+        );
     }
+}
 
-    let packet = match encode_message(&BrokerMessage::PositionUpdate {
-        client_id,
-        position,
-    }) {
-        Ok(packet) => packet,
+pub fn relay_handoff_request_to_shards(
+    peer: &GamePeer,
+    state: &mut PubSubState,
+    connection: &GameConnection,
+    stream: &GameStream,
+    data: &[u8],
+    ){
+
+    let message = match decode_message(data) {
+        Ok(message) => message,
         Err(error) => {
             tracing::warn!(
-                        "failed to encode PositionUpdate for client {}: {}",
-                        client_id.0,
-                        error
-                    );
+                "could not decode message {}: {error}",
+                connection.connection_id
+            );
             return;
         }
     };
 
-    for (spatial_connection, spatial_stream) in &state.spatial_service_streams {
-        if let Err(error) = peer.send(
-            spatial_connection,
-            spatial_stream,
-            Bytes::from(packet.clone()),
-        ) {
+    match message {
+        NetworkMessage::HandoffRequest{entity_id,..} => {
+            let Some(topic) = state.get_ghost_entity_destination(&entity_id) else {
+                tracing::warn!(
+                    "no destination for {}:",
+                    entity_id.0
+                );
+                return;
+            };
+
+            let Some(shard_connection) = state.get_connection_stream_by_shard(topic)else{
+                tracing::warn!(
+                "could not find shard connection for topic: {}",
+                topic.to_string()
+                );
+                return;
+            };
+
+            let packet = data.to_vec();
+
+            if let Err(error) = peer.send(&shard_connection.connection, &shard_connection.stream, packet.into()){
+                tracing::error!("failed to send packet to shard: {error:#}");
+                return;
+            }
+
+        }
+        _ => {
             tracing::warn!(
-                "failed to forward PositionUpdate for client {} to spatial service connection {}: {}",
-                client_id.0,
-                spatial_connection.connection_id,
-                error
+                "invalid message HandoffStart sent by{}:",
+                connection.connection_id
             );
         }
-    }
 
-    tracing::debug!(
-        "forwarded PositionUpdate client_id={} position=({}, {}) to {} spatial service(s)",
-        client_id.0,
-        position.x,
-        position.y,
-        state.spatial_service_streams.len()
-    );
+    };
+}
+
+pub fn relay_handoff_completed_to_shard(
+    peer: &GamePeer,
+    state: &mut PubSubState,
+    connection: &GameConnection,
+    stream: &GameStream,
+    data: &[u8],
+) {
+
+    let message = match decode_message(data) {
+        Ok(message) => message,
+        Err(error) => {
+            tracing::warn!(
+                "could not decode message {}: {error}",
+                connection.connection_id
+            );
+            return;
+        }
+    };
+
+    match message {
+        NetworkMessage::HandoffCompleted{entity_id,..} => {
+            let Some(topic) = state.get_ghost_entity_destination(&entity_id) else {
+                tracing::warn!(
+                    "no destination for HandoffCompleted entity {}:",
+                    entity_id.0
+                );
+                return;
+            };
+
+            let Some(shard_connection) = state.get_connection_stream_by_shard(topic)else{
+                tracing::warn!(
+                "could not find shard connection for topic: {}",
+                topic.to_string()
+                );
+                return;
+            };
+
+            let packet = data.to_vec();
+
+            if let Err(error) = peer.send(&shard_connection.connection, &shard_connection.stream, Bytes::from(packet.clone())){
+                tracing::error!("failed to send HandoffCompleted to dest shard: {error:#}");
+                return;
+            }
+
+            // Also notify spatial so it can update entity shard + subscription.
+            if let Err(error) = state.spatial_handle.send_to_spatial(peer, packet){
+                tracing::warn!("failed to CC HandoffCompleted to spatial: {error:#}");
+            }
+
+            // Ghost route no longer needed.
+            state.remove_ghost_entity(entity_id);
+        }
+        _ => {
+            tracing::warn!(
+                "invalid message HandoffCompleted sent by{}:",
+                connection.connection_id
+            );
+        }
+
+    };
+}
+
+pub fn relay_handoff_accepted_to_shard(
+    peer: &GamePeer,
+    state: &mut PubSubState,
+    connection: &GameConnection,
+    stream: &GameStream,
+    data: &[u8],
+) {
+
+    let message = match decode_message(data) {
+        Ok(message) => message,
+        Err(error) => {
+            tracing::warn!(
+                "could not decode message {}: {error}",
+                connection.connection_id
+            );
+            return;
+        }
+    };
+
+    match message {
+        NetworkMessage::HandoffAccepted{entity_id,..} => {
+            let Some(topic) = state.get_ghost_entity_source(&entity_id) else {
+                tracing::warn!(
+                    "no source for HandoffAccepted entity {}:",
+                    entity_id.0
+                );
+                return;
+            };
+
+            let Some(shard_connection) = state.get_connection_stream_by_shard(topic) else {
+                tracing::warn!(
+                "could not find source shard connection for entity: {}",
+                entity_id.0
+                );
+                return;
+            };
+
+            let packet = data.to_vec();
+
+            if let Err(error) = peer.send(&shard_connection.connection, &shard_connection.stream, packet.into()){
+                tracing::error!("failed to send HandoffAccepted to source shard: {error:#}");
+                return;
+            }
+
+        }
+        _ => {
+            tracing::warn!(
+                "invalid message HandoffAccepted sent by{}:",
+                connection.connection_id
+            );
+        }
+
+    };
+}
+
+pub fn relay_handoff_rejected_to_shard(
+    peer: &GamePeer,
+    state: &mut PubSubState,
+    connection: &GameConnection,
+    stream: &GameStream,
+    data: &[u8],
+) {
+
+    let message = match decode_message(data) {
+        Ok(message) => message,
+        Err(error) => {
+            tracing::warn!(
+                "could not decode message {}: {error}",
+                connection.connection_id
+            );
+            return;
+        }
+    };
+
+    match message {
+        NetworkMessage::HandoffRejected{entity_id,..} => {
+            let Some(topic) = state.get_ghost_entity_source(&entity_id) else {
+                tracing::warn!(
+                    "no source for HandoffRejected entity {}:",
+                    entity_id.0
+                );
+                return;
+            };
+
+            let Some(shard_connection) = state.get_connection_stream_by_shard(topic) else {
+                tracing::warn!(
+                "could not find source shard connection for entity: {}",
+                entity_id.0
+                );
+                return;
+            };
+
+            let packet = data.to_vec();
+
+            if let Err(error) = peer.send(&shard_connection.connection, &shard_connection.stream, packet.into()){
+                tracing::error!("failed to send HandoffRejected to source shard: {error:#}");
+                return;
+            }
+
+        }
+        _ => {
+            tracing::warn!(
+                "invalid message HandoffRejected sent by{}:",
+                connection.connection_id
+            );
+        }
+
+    };
+}
+
+pub fn relay_entity_id_block_allocated_to_shard(
+    peer: &GamePeer,
+    state: &mut PubSubState,
+    connection: &GameConnection,
+    stream: &GameStream,
+    data: &[u8],
+) {
+    let Some(shard_id) = state.pop_entity_id_block_request() else {
+        tracing::warn!("EntityIdBlockAllocated received but request queue is empty");
+        return;
+    };
+
+    let topic = shared::protocol::Topic::ShardInstance { id: shard_id };
+    let Some(shard_cs) = state.get_connection_stream_by_shard(topic) else {
+        tracing::warn!(
+            "EntityIdBlockAllocated: no connection for shard {}",
+            shard_id.0
+        );
+        return;
+    };
+
+    let packet = data.to_vec();
+    if let Err(e) = peer.send(&shard_cs.connection, &shard_cs.stream, packet.into()) {
+        tracing::error!(
+            "failed to relay EntityIdBlockAllocated to shard {}: {e:#}",
+            shard_id.0
+        );
+    }
+}
+
+pub fn relay_ghost_update(
+    peer: &GamePeer,
+    state: &mut PubSubState,
+    connection: &GameConnection,
+    stream: &GameStream,
+    data: &[u8],
+){
+    let message = match decode_message(data) {
+        Ok(message) => message,
+        Err(error) => {
+            tracing::warn!(
+                "could not decode message {}: {error}",
+                connection.connection_id
+            );
+            return;
+        }
+    };
+
+    match message {
+        NetworkMessage::GhostUpdate{entity_id,..} => {
+            let Some(topic) = state.get_ghost_entity_destination(&entity_id) else {
+                tracing::warn!(
+                    "no destination for {}:",
+                    entity_id.0
+                );
+                return;
+            };
+
+            let Some(shard_connection) = state.get_connection_stream_by_shard(topic)else{
+                tracing::warn!(
+                "could not find shard connection for topic: {}",
+                topic.to_string()
+                );
+                return;
+            };
+
+            let packet = data.to_vec();
+
+            if let Err(error) = peer.send(&shard_connection.connection, &shard_connection.stream, packet.into()){
+                tracing::error!("failed to send packet to shard: {error:#}");
+                return;
+            }
+
+        }
+        _ => {
+            tracing::warn!(
+                "invalid message Ghost update sent by{}:",
+                connection.connection_id
+            );
+        }
+
+    };
 
 }
+
+pub fn relay_handoff_start_to_shards(
+peer: &GamePeer,
+peer_roles: &mut PeerRoles,
+state: &mut PubSubState,
+connection: &GameConnection,
+stream: &GameStream,
+data: &[u8],
+){
+
+    if !peer_roles.ensure(*connection, PeerRole::SpatialService, "Subscribe") {
+        tracing::warn!(
+                "message not received from Spatial service {}:",
+                connection.connection_id
+            );
+        return;
+    }
+
+    let message = match decode_message(data) {
+        Ok(message) => message,
+        Err(error) => {
+            tracing::warn!(
+                "could not decode message {}: {error}",
+                connection.connection_id
+            );
+            return;
+        }
+    };
+
+    match message {
+        NetworkMessage::HandoffStart {
+            entity_id, source,destination
+        } => {
+            let ghost_route = GhostRoute{
+                source,
+                destination
+            };
+            state.add_ghost_entity(entity_id, ghost_route);
+
+            let Some(topic) =state.get_ghost_entity_source(&entity_id)else{
+                tracing::warn!(
+                "could not find source for ghost: {}",
+                entity_id.0
+                );
+                return;
+            };
+
+            let Some(shard_connection) = state.get_connection_stream_by_shard(topic)else{
+                tracing::warn!(
+                "could not find shard connection for topic: {}",
+                topic.to_string()
+                );
+                return;
+            };
+
+            let packet = data.to_vec();
+
+            if let Err(error) = peer.send(&shard_connection.connection, &shard_connection.stream, packet.into()){
+                tracing::error!("failed to send packet to shard: {error:#}");
+                return;
+            }
+
+        }
+        _ => {
+            tracing::warn!(
+                "invalid message HandoffStart sent by{}:",
+                connection.connection_id
+            );
+        }
+    };
+
+}
+
 

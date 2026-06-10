@@ -2,7 +2,6 @@ use crate::config::BrokerConfig;
 use crate::net::network_event::BrokerNetwork;
 use crate::pubsub::state::PubSubState;
 use std::time::Duration;
-use tokio::time::sleep;
 
 pub struct BrokerApp {
     config: BrokerConfig,

@@ -1,9 +1,9 @@
 /// Pure Quad Tree structure — no Bevy dependency, fully unit-testable.
 ///
 /// Each internal node subdivides its bounds into 4 equal quadrants (NW, NE, SW, SE).
-/// Leaf nodes carry a shard_id that maps to a broker topic ("shard:N").
+/// Leaf nodes carry a shard_id that maps to a utils topic ("shard:N").
 use bevy::prelude::Resource;
-use shared::protocol::broker::ShardId;
+use shared::protocol::ShardId;
 
 /// Axis-aligned bounding rectangle in world space.
 #[derive(Debug, Clone, Copy, PartialEq)]

@@ -10,9 +10,12 @@
       <sourceFolder url="file://$MODULE_DIR$/GameClient/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/Broker/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/SpatialService/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/GodotClient/rust/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/GodotClient/rust/xtask/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/GateKeeper/target" />
       <excludeFolder url="file://$MODULE_DIR$/Launcher/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
+      <excludeFolder url="file://$MODULE_DIR$/GodotClient/target" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

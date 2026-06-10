@@ -1,9 +1,9 @@
 use crate::net::broker_client::BrokerClient;
 use crate::world::state::LocalWorldState;
-use shared::protocol::broker::{
-    BrokerMessage, decode_message
+use shared::protocol::{
+    NetworkMessage, decode_message
 };
-use shared::protocol::transport::codec;
+use shared::protocol::utils::utils::BinaryDecode;
 use shared::protocol::WorldUpdate;
 
 pub fn decode_and_handle_broker_message(
@@ -20,18 +20,18 @@ pub fn decode_and_handle_broker_message(
     };
 
     match broker_message {
-        BrokerMessage::ClientAccepted { client_id } => {
+        NetworkMessage::ClientAccepted { client_id } => {
             broker_client.client_id = Some(client_id);
 
-            tracing::info!("broker assigned client_id={}", client_id.0);
+            tracing::info!("utils assigned client_id={}", client_id.0);
         }
 
-        BrokerMessage::Broadcast { payload_len, payload } => {
-            decode_and_handle_world_update(broker_client, world_state,&payload_len, &payload);
+        NetworkMessage::Broadcast { payload_len, payload } => {
+            decode_and_handle_world_update(broker_client, world_state, &payload_len, &mut &*payload);
         }
 
         other => {
-            tracing::warn!("unexpected broker message received by client: {:?}", other);
+            tracing::warn!("unexpected utils message received by client: {:?}", other);
         }
     }
 }
@@ -40,16 +40,16 @@ fn decode_and_handle_world_update(
     _broker_client: &mut BrokerClient,
     world_state: &mut LocalWorldState,
     payload_len: &u16,
-    payload: &[u8],
+    payload: &mut &[u8],
 ) {
 
     if payload.len() != payload_len.clone() as usize {
         tracing::warn!("received payload does not match it's expected length");
         return;
     }
-    
 
-    let update = match codec::decode::<WorldUpdate>(payload) {
+
+    let update = match WorldUpdate::decode_binary(payload) {
         Ok(update) => update,
         Err(error) => {
             tracing::warn!("failed to decode broadcast payload as WorldUpdate: {error:#}");

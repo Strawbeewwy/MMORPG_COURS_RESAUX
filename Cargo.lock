@@ -1777,6 +1777,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "bimap"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "230c5f1ca6a325a32553f8640d31ac9b49f2411e901e427570154868b46da4f7"
+
+[[package]]
 name = "bindgen"
 version = "0.72.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1881,6 +1887,7 @@ name = "broker"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bimap",
  "bytes",
  "game_sockets",
  "shared",
@@ -5871,11 +5878,9 @@ name = "shared"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "bevy",
  "game_sockets",
  "serde",
  "serde_json",
- "uuid",
 ]
 
 [[package]]
@@ -6017,7 +6022,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy",
- "game_sockets",
  "shared",
  "tokio",
  "tracing",

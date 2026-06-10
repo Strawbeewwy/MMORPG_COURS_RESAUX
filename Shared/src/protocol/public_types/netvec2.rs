@@ -1,38 +1,7 @@
-use std::sync::Arc;
 use serde::{Deserialize, Serialize};
-use crate::protocol::broker::{ClientId};
-use crate::protocol::{PlayerPublicInfo, PlayerSnapshot};
-
-/// Shared zone identifier — uses `Arc<str>` instead of `String` to avoid repeated
-/// heap allocations when the same zone name is cloned across many network messages.
-/// Serde serialises/deserialises `Arc<str>` as a plain JSON string transparently.
-
-pub type ZoneId = Arc<str>;
-pub type Username = Arc<str>;
-
-
-
-/// Spawn information sent by the broker to a shard when placing a new client.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PlayerSpawnInfo {
-    pub username: Username,
-    pub zone: ZoneId,
-    pub spawn_position: NetVec2,
-}
-
-/// World-state update broadcast by the broker to subscribed clients.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum WorldUpdate {
-    /// Full world snapshot for initial sync or re-sync.
-    Snapshot { snapshot: WorldSnapshot },
-    /// A new player appeared in the zone.
-    PlayerJoined { player: PlayerPublicInfo, client_id: ClientId },
-    /// A player left the zone.
-    PlayerLeft { player: PlayerPublicInfo , client_id: ClientId},
-}
 
 /**
-2D vector sent on the network, not used for math
+2D vector sent on the utils, not used for math
 just for values
 **/
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq,Eq)]
@@ -83,15 +52,3 @@ impl TryFrom <[u8; 10]> for NetVec2{
     }
 }
 
-
-
-
-/**
-snapshot of the world, sent to the client
-**/
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct WorldSnapshot {
-    pub zone: ZoneId,
-    pub players: Vec<PlayerSnapshot>,
-    pub server_tick: u64,
-}
