@@ -184,7 +184,7 @@ fn decode_world_update(update: shared::protocol::WorldUpdate) -> Option<Incoming
         }
         // Legacy variants — forward as raw broadcast.
         legacy => {
-            if let Ok(payload) = shared::protocol::transport::codec::encode(&legacy) {
+            if let Ok(payload) = shared::protocol::http::codec::encode(&legacy) {
                 Some(IncomingEvent::Broadcast { payload: payload.to_vec() })
             } else {
                 None

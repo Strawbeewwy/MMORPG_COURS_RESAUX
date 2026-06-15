@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use crate::messages::{CrossingAlertMsg, HandoffRequestMsg, PositionUpdateMsg};
 use crate::net::broker_client::{connect_to_broker, reconnect_broker_if_needed};
+use crate::net::orchestrator_client::connect_to_orchestrator;
 use crate::net::shard_listener::bind_shard_listener;
 use crate::resources::client_map::ClientMap;
 use crate::resources::crossing_cooldowns::CrossingCooldowns;
@@ -24,12 +25,11 @@ impl Plugin for SpatialPlugin {
             .init_resource::<EntityMap>()
             .init_resource::<CrossingCooldowns>()
             // Startup: open sockets
-            .add_systems(Startup, (bind_shard_listener, connect_to_broker))
+            .add_systems(Startup, (bind_shard_listener, connect_to_broker, connect_to_orchestrator))
             // Update: poll → reconnect → dispatch → react → handoff (chained for ordering)
             .add_systems(
                 Update,
                 (
-                    //poll_shard_events,           // decode PositionUpdate/ShardRegister/HandoffAck, clean ClientMap on disconnect
                     poll_broker_connection,       // advance utils handshake state
                     reconnect_broker_if_needed,   // retry on Disconnected state
                     handle_subscriptions,         // Subscribe/Unsubscribe + emit CrossingAlertMsg

@@ -5,9 +5,10 @@ use shared::game_sockets::{
 use shared::{NetVec2, ShardId};
 use shared::protocol::{ClientId, Topic, decode_message, encode_message, NetworkMessage};
 use crate::messages::PositionUpdateMsg;
+use crate::net::orchestrator_client::maybe_request_server_for_shard;
 use crate::resources::client_map::ClientMap;
 use crate::resources::entity_map::{EntityMap, EntityTransferState, SpatialEntityRecord};
-use crate::resources::net_handles::{BrokerClient, BrokerConnectionState, ShardListener};
+use crate::resources::net_handles::{BrokerClient, BrokerConnectionState, OrchestratorClient, ShardListener};
 use crate::resources::quad_tree::QuadTree;
 
 #[deprecated]/// The spatial should not communicate directly with a shard
@@ -124,10 +125,20 @@ pub fn poll_broker_connection(
     mut entity_map: ResMut<EntityMap>,
     mut ev_writer: MessageWriter<PositionUpdateMsg>,
     mut quad_tree: ResMut<QuadTree>,
+    mut orchestrator: ResMut<OrchestratorClient>,
 ) {
     loop {
         match broker.handle.peer.poll() {
-            Ok(Some(event)) => handle_broker_event(&mut broker, event, &mut ev_writer, &mut entity_map, &mut quad_tree),
+            Ok(Some(event)) => {
+                handle_broker_event(
+                    &mut broker,
+                    event,
+                    &mut ev_writer,
+                    &mut entity_map,
+                    &mut quad_tree,
+                    &mut orchestrator,
+                )
+            },
             Ok(None) => break,
             Err(e) => {
                 tracing::error!("utils client poll error: {e}");
@@ -143,6 +154,7 @@ fn handle_broker_event(
     ev_writer: &mut MessageWriter<PositionUpdateMsg>,
     entity_map: &mut EntityMap,
     quad_tree: &mut QuadTree,
+    orchestrator: &mut OrchestratorClient,
 ) {
     match event {
         GameNetworkEvent::Connected(conn) => {
@@ -174,7 +186,15 @@ fn handle_broker_event(
             broker.handle.state = BrokerConnectionState::Disconnected;
         }
         GameNetworkEvent::Message { connection, data, .. } => {
-            handle_broker_message(connection, &data, ev_writer, entity_map, quad_tree, broker);
+            handle_broker_message(
+                connection,
+                &data,
+                ev_writer,
+                entity_map,
+                quad_tree,
+                broker,
+                orchestrator,
+            );
         }
     }
 }
@@ -188,6 +208,7 @@ pub fn handle_broker_message(
     entity_map: &mut EntityMap,
     quad_tree: &mut QuadTree,
     broker: &mut BrokerClient,
+    orchestrator: &mut OrchestratorClient,
 ) {
     let message = match decode_message(data) {
         Ok(msg) => msg,
@@ -224,6 +245,13 @@ pub fn handle_broker_message(
                 current_shard: shard,
             };
             entity_map.insert(entity_id, record);
+
+            let shard_count = entity_map.shard_count(shard);
+            maybe_request_server_for_shard(
+                orchestrator,
+                shard,
+                shard_count,
+            );
         }
         NetworkMessage::UnregisterEntity {entity_id} => {
             entity_map.remove(entity_id);
@@ -260,6 +288,19 @@ pub fn handle_broker_message(
                     }
                     record.current_shard = dest_shard_id;
                 }
+
+
+
+                if let Some((_old_shard, new_shard, new_count)) =
+                    entity_map.move_entity_to_shard(entity_id, dest_shard_id)
+                {
+                    maybe_request_server_for_shard(
+                        orchestrator,
+                        new_shard,
+                        new_count,
+                    );
+                }
+
                 entity_map.clear_state(entity_id);
 
                 tracing::info!(

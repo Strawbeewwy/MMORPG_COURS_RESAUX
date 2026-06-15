@@ -26,13 +26,15 @@ fn main() {
     let quad_tree = QuadTree::new(world_bounds, config.quad_tree_max_depth);
 
     tracing::info!(
-        "spatial service starting — listen={}:{} utils={}:{} depth={} margin={}",
+        "spatial service starting — listen={}:{} utils={}:{} depth={} margin={} orchestrator={}:{}",
         config.listen_host,
         config.listen_port,
         config.broker_host,
         config.broker_port,
         config.quad_tree_max_depth,
         config.crossing_margin,
+        config.orchestrator_host,
+        config.orchestrator_port,
     );
 
     App::new()

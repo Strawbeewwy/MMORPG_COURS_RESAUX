@@ -55,8 +55,8 @@ impl SpatialEntityRecord {
 #[derive(Resource, Default)]
 pub struct EntityMap {
     pub entities: HashMap<EntityId,SpatialEntityRecord>,
-    client_states: HashMap<EntityId, EntityTransferState>,
-
+    pub transfer_states: HashMap<EntityId, EntityTransferState>,
+    pub shard_entity_counts: HashMap<ShardId, usize>,
 }
 
 impl EntityMap{
@@ -67,10 +67,12 @@ impl EntityMap{
 
     pub fn insert(&mut self, entity_id: EntityId, record: SpatialEntityRecord) {
         self.entities.insert(entity_id, record);
+        self.set_state(entity_id, EntityTransferState::Stable)
     }
 
     pub fn remove(&mut self, entity_id: EntityId) {
         self.entities.remove(&entity_id);
+        self.clear_state(entity_id);
     }
 
     pub fn contains(&self, entity_id: EntityId) -> bool {
@@ -82,26 +84,77 @@ impl EntityMap{
     /// Returns `true` if the entity is in `Stable` state (no handoff in progress).
     pub fn is_stable(&self, entity_id: EntityId) -> bool {
         !matches!(
-            self.client_states.get(&entity_id),
+            self.transfer_states.get(&entity_id),
             Some(EntityTransferState::PendingHandoff { .. })
         )
     }
 
     /// Mark an entity as pending handoff. Idempotent if called twice for the same destination.
     pub fn set_state(&mut self, entity_id: EntityId, state: EntityTransferState) {
-        self.client_states.insert(entity_id, state);
+        self.transfer_states.insert(entity_id, state);
     }
 
     /// Clear the transfer state (called on Handoff Completed or on client disconnect).
     pub fn clear_state(&mut self, entity_id: EntityId) {
-        self.client_states.remove(&entity_id);
+        self.transfer_states.remove(&entity_id);
     }
 
     /// Read the transfer state for an entity (absent = Stable).
     pub fn get_state(&self, entity_id: EntityId) -> EntityTransferState {
-        self.client_states
+        self.transfer_states
             .get(&entity_id)
             .cloned()
             .unwrap_or(EntityTransferState::Stable)
     }
+
+    //── Entity Count ─────────────────────────────────────────────────────
+    pub fn move_entity_to_shard(
+        &mut self,
+        entity_id: EntityId,
+        new_shard: ShardId,
+    ) -> Option<(ShardId, ShardId, usize)> {
+        let record = self.entities.get_mut(&entity_id)?;
+        let old_shard = record.current_shard;
+
+        if old_shard == new_shard {
+            let current_count = self.shard_count(new_shard);
+            return Some((old_shard, new_shard, current_count));
+        }
+
+        record.current_shard = new_shard;
+
+        self.decrement_shard_count(old_shard);
+        let new_count = self.increment_shard_count(new_shard);
+
+        Some((old_shard, new_shard, new_count))
+    }
+
+    pub fn shard_count(&self, shard_id: ShardId) -> usize {
+        self.shard_entity_counts
+            .get(&shard_id)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    fn increment_shard_count(&mut self, shard_id: ShardId) -> usize {
+        let count = self.shard_entity_counts.entry(shard_id).or_insert(0);
+        *count += 1;
+        *count
+    }
+
+    fn decrement_shard_count(&mut self, shard_id: ShardId) -> usize {
+        let Some(count) = self.shard_entity_counts.get_mut(&shard_id) else {
+            return 0;
+        };
+
+        *count = count.saturating_sub(1);
+        let new_count = *count;
+
+        if new_count == 0 {
+            self.shard_entity_counts.remove(&shard_id);
+        }
+
+        new_count
+    }
+
 }
