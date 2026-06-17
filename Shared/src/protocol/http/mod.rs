@@ -8,3 +8,4 @@ pub use orchestrator_command::*;
 pub use health::*;
 pub use login::*;
 pub use codec::*;
+pub use error::*;

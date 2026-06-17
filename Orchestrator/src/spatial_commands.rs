@@ -39,16 +39,49 @@ pub async fn spatial_command_listener(
         match command {
             OrchestratorCommand::SpawnServer { count, reason } => {
                 info!(
-                    "spatial requested {} new server(s), reason={}",
-                    count,
-                    reason
-                );
+                        "spatial requested {} new server(s), reason={}",
+                        count,
+                        reason
+                    );
 
                 for _ in 0..count {
                     match process_manager.spawn_server(&config).await {
                         Ok(port) => info!("spawned dedicated server from spatial request on port {}", port),
                         Err(err) => error!("failed to spawn dedicated server from spatial request: {err:#}"),
                     }
+                }
+            }
+            OrchestratorCommand::SpawnShardServers { shard_ids, reason } => {
+                info!(
+                        "spatial requested shard server(s) for {:?}, reason={}",
+                        shard_ids,
+                        reason
+                    );
+
+                for shard_id in shard_ids {
+                    match process_manager.spawn_server_for_shard(&config, Some(shard_id)).await {
+                        Ok(port) => info!(
+                                "spawned dedicated server for shard {} on port {}",
+                                shard_id,
+                                port
+                            ),
+                        Err(err) => error!(
+                                "failed to spawn dedicated server for shard {}: {err:#}",
+                                shard_id
+                            ),
+                    }
+                }
+            }
+            OrchestratorCommand::StopShardServers { shard_ids, reason } => {
+                info!(
+                    "spatial requested shard stop for {:?}, reason={}",
+                    shard_ids,
+                    reason
+                );
+
+                match process_manager.stop_shard_servers(&shard_ids).await {
+                    Ok(stopped) => info!("stopped {} shard server(s) from request", stopped),
+                    Err(err) => error!("failed to stop shard server(s): {err:#}"),
                 }
             }
             OrchestratorCommand::SpatialHello { spatial_info } => {

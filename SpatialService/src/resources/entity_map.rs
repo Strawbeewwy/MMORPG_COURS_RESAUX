@@ -1,7 +1,6 @@
 use bevy::platform::collections::HashMap;
 use bevy::prelude::{Resource, Vec2};
-use shared::protocol::{ClientId, EntityId, NetVec2, ShardId};
-use crate::resources::client_map::ClientTransferState;
+use shared::protocol::{ClientId, EntityId, ShardId};
 
 #[derive(Resource, Debug)]
 pub struct GlobalEntityIdAllocator {
@@ -66,19 +65,21 @@ impl EntityMap{
     }
 
     pub fn insert(&mut self, entity_id: EntityId, record: SpatialEntityRecord) {
+        self.increment_shard_count(record.current_shard);
         self.entities.insert(entity_id, record);
         self.set_state(entity_id, EntityTransferState::Stable)
     }
 
     pub fn remove(&mut self, entity_id: EntityId) {
-        self.entities.remove(&entity_id);
+        if let Some(record) = self.entities.remove(&entity_id) {
+            self.decrement_shard_count(record.current_shard);
+        }
         self.clear_state(entity_id);
     }
 
     pub fn contains(&self, entity_id: EntityId) -> bool {
         self.entities.contains_key(&entity_id)
     }
-
     // ── Transfer state ─────────────────────────────────────────────────────
 
     /// Returns `true` if the entity is in `Stable` state (no handoff in progress).
@@ -136,6 +137,18 @@ impl EntityMap{
             .unwrap_or(0)
     }
 
+    pub fn set_shard_count(&mut self, shard_id: ShardId, count: usize) {
+        if count == 0 {
+            self.shard_entity_counts.remove(&shard_id);
+        } else {
+            self.shard_entity_counts.insert(shard_id, count);
+        }
+    }
+
+    pub fn clear_shard_count(&mut self, shard_id: ShardId) {
+        self.shard_entity_counts.remove(&shard_id);
+    }
+
     fn increment_shard_count(&mut self, shard_id: ShardId) -> usize {
         let count = self.shard_entity_counts.entry(shard_id).or_insert(0);
         *count += 1;
@@ -156,5 +169,4 @@ impl EntityMap{
 
         new_count
     }
-
 }
