@@ -105,6 +105,47 @@ pub fn encode_client_input(client_id: u32, x: f32, y: f32) -> Vec<u8> {
     packet
 }
 
+/// Encode a full input packet with movement, actions, and look direction.
+/// action_flags bitmask: bit0=dash, bit1=melee, bit2=shoot.
+pub fn encode_full_input(
+    client_id: u32,
+    move_x: f32,
+    move_y: f32,
+    action_flags: u8,
+    look_x: f32,
+    look_y: f32,
+) -> Vec<u8> {
+    let mut input = [0_u8; CLIENT_INPUT_LEN];
+
+    // Movement direction (normalized)
+    input[0..4].copy_from_slice(&move_x.to_le_bytes());
+    input[4..8].copy_from_slice(&move_y.to_le_bytes());
+    
+    // Action flags
+    input[8] = action_flags;
+    
+    // Look direction (normalized)
+    input[9..13].copy_from_slice(&look_x.to_le_bytes());
+    input[13..17].copy_from_slice(&look_y.to_le_bytes());
+
+    let packet = match encode_message(&NetworkMessage::ClientInput {
+        client_id: ClientId(client_id),
+        input,
+    }) {
+        Ok(packet) => packet,
+        Err(error) => {
+            tracing::warn!(
+                "cannot encode full ClientInput for client {}: {}",
+                client_id,
+                error
+            );
+            return Vec::new();
+        }
+    };
+
+    packet
+}
+
 /// Decode a single Broker message from raw bytes.
 fn decode(data: &[u8]) -> Option<IncomingEvent> {
 
