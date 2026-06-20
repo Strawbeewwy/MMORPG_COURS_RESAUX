@@ -1,4 +1,4 @@
-use bevy::platform::collections::HashMap;
+use bevy::platform::collections::{HashMap, HashSet};
 use bevy::prelude::{Resource, Vec2};
 use shared::protocol::{ClientId, EntityId, ShardId};
 
@@ -43,6 +43,8 @@ pub struct SpatialEntityRecord {
     pub client_id: ClientId,
     pub position: Vec2,
     pub current_shard: ShardId,
+    /// Shards this entity is subscribed to (for AOI multi-shard visibility).
+    pub subscribed_shards: HashSet<ShardId>,
 }
 
 impl SpatialEntityRecord {

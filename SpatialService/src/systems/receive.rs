@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy::platform::collections::HashSet;
 use shared::game_sockets::{
     GameConnection, GameNetworkEvent, GameStreamReliability
 };
@@ -8,7 +9,7 @@ use crate::messages::{HandoffRequestMsg, PositionUpdateMsg};
 use crate::net::orchestrator_client::{maybe_request_stop_shard_if_drained, split_overloaded_shard_if_needed};
 use crate::resources::entity_map::{EntityMap, EntityTransferState, SpatialEntityRecord};
 use crate::resources::handoff_queue::PendingHandoffs;
-use crate::resources::net_handles::{BrokerClient, BrokerConnectionState, OrchestratorClient, ShardListener};
+use crate::resources::net_handles::{BrokerClient, BrokerConnectionState, OrchestratorClient};
 use crate::resources::quad_tree::QuadTree;
 
 /// Poll the broker peer to advance handshake state and maintain the connection.
@@ -172,11 +173,15 @@ pub fn handle_broker_message(
                 return;
             };
 
+            let mut subscribed_shards = HashSet::new();
+            subscribed_shards.insert(shard);
+
             let record = SpatialEntityRecord {
                 entity_id,
                 client_id,
                 position : f32_position,
                 current_shard: shard,
+                subscribed_shards,
             };
             entity_map.insert(entity_id, record);
 

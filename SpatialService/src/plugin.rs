@@ -6,6 +6,7 @@ use crate::resources::client_map::ClientMap;
 use crate::resources::crossing_cooldowns::CrossingCooldowns;
 use crate::resources::entity_map::EntityMap;
 use crate::resources::handoff_queue::PendingHandoffs;
+use crate::systems::aoi::manage_aoi_subscriptions;
 use crate::systems::crossing::handle_crossing_alerts;
 use crate::systems::handoff::handle_handoff_start;
 use crate::systems::receive::{poll_broker_connection};
@@ -34,6 +35,7 @@ impl Plugin for SpatialPlugin {
                     poll_broker_connection,       // advance utils handshake state
                     reconnect_broker_if_needed,   // retry on Disconnected state
                     handle_subscriptions,         // update positions, split overloaded shards, emit handoffs
+                    manage_aoi_subscriptions,     // manage multi-shard AOI subscriptions
                     handle_crossing_alerts,       // CrossingAlertMsg → HandoffRequestMsg
                     handle_handoff_start,      // HandoffRequestMsg → wire HandoffRequest to destination shard
                 )

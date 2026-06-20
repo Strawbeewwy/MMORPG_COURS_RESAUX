@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use std::env;
 use shared::config::{
-    DEFAULT_BROKER_HOST, DEFAULT_BROKER_PORT, DEFAULT_CROSSING_MARGIN,
+    DEFAULT_AOI_RADIUS, DEFAULT_BROKER_HOST, DEFAULT_BROKER_PORT, DEFAULT_CROSSING_MARGIN,
     DEFAULT_QUAD_TREE_MAX_DEPTH, DEFAULT_SPATIAL_HOST, DEFAULT_SPATIAL_LISTEN_PORT,
     DEFAULT_WORLD_HALF_SIZE,
 };
@@ -22,6 +22,8 @@ pub struct SpatialConfig {
     pub quad_tree_max_depth: u8,
     /// Radius (world units) that triggers a CrossingAlert.
     pub crossing_margin: f32,
+    /// Area of Interest radius (world units) for filtering subscriptions.
+    pub aoi_radius: f32,
     ///address of the orchestrator
     pub orchestrator_host: String,
     pub orchestrator_port: u16,
@@ -54,6 +56,10 @@ impl SpatialConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(DEFAULT_CROSSING_MARGIN),
+            aoi_radius: env::var("AOI_RADIUS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(DEFAULT_AOI_RADIUS),
             orchestrator_host: env::var("ORCH_HOST")
                 .unwrap_or_else(|_| DEFAULT_ORCHESTRATOR_HOST.to_string()),
             orchestrator_port: env::var("ORCH_PORT")
