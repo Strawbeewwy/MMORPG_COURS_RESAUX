@@ -3,6 +3,7 @@ mod heartbeat;
 mod process_manager;
 mod redis_registry;
 mod scaler;
+mod spatial_commands;
 
 use anyhow::{Context, Result};
 use config::OrchestratorConfig;
@@ -56,8 +57,14 @@ async fn main() -> Result<()> {
         process_manager.clone(),
     ));
 
+    let spatial_command_task = tokio::spawn(spatial_commands::spatial_command_listener(
+        config.clone(),
+        process_manager.clone(),
+    ));
+
+
     /*
-    since 2 tasks are running at the same time and forever,
+    since 3 tasks are running at the same time and forever,
     we don't want them to crash, so if any of them crashes,
     we will know and act accordingly
     */
@@ -67,6 +74,9 @@ async fn main() -> Result<()> {
         }
         result = scaler_task => {
             result.context("scaler task join error")??;
+        }
+        result = spatial_command_task => {
+            result.context("spatial command task join error")??;
         }
     }
 

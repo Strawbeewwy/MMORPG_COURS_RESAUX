@@ -15,6 +15,7 @@ pub fn decode_message(
         TAG_BROADCAST => decode_broadcast(&mut input)?,
         TAG_CLIENT_INPUT => decode_client_input(&mut input)?,
         TAG_REGISTER_SHARD => decode_register_shard(&mut input)?,
+        TAG_UNREGISTER_SHARD => decode_unregister_shard(&mut input)?,
         TAG_REGISTER_SPATIAL_SERVICE => decode_register_spatial_service(&mut input)?,
         TAG_CLIENT_HELLO => decode_client_hello(&mut input)?,
         TAG_CLIENT_REGISTER => decode_register_client(&mut input)?,
@@ -116,6 +117,20 @@ fn decode_register_shard(
     };
 
     Ok(NetworkMessage::RegisterShard {
+        shard_id,
+    })
+}
+
+fn decode_unregister_shard(
+    input: &mut &[u8]
+) -> anyhow::Result<NetworkMessage> {
+    let topic = Topic::decode_binary(input)?;
+
+    let Topic::ShardInstance { id: shard_id } = topic else {
+        anyhow::bail!("UnregisterShard topic is not a ShardInstance");
+    };
+
+    Ok(NetworkMessage::UnregisterShard {
         shard_id,
     })
 }

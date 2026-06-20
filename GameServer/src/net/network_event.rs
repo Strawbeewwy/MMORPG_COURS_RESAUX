@@ -26,7 +26,7 @@ use crate::net::handoff::{
     handle_handoff_accepted_on_source,
     handle_handoff_rejected_on_source,
 };
-use crate::world::{EntityIdAllocator, SpawnPlayerEntityEvent, Velocity};
+use crate::world::{EntityIdAllocator, Position, SpawnPlayerEntityEvent, Velocity};
 use crate::world::entity::PromoteGhostEvent;
 use crate::world::spawn_entity::SpawnGhostEntityEvent;
 
@@ -390,8 +390,8 @@ fn handle_broker_message(
             if let Some((_, ent_reg)) = registry.try_lock() {
                 if let Some(bevy_entity) = ent_reg.get_bevy_entity(&entity_id) {
                     commands.entity(bevy_entity).insert((
-                        crate::world::Position(Vec2::new(position.x as f32, position.y as f32)),
-                        crate::world::Velocity(Vec2::new(velocity.x as f32, velocity.y as f32)),
+                        Position(Vec2::new(position.x as f32, position.y as f32)),
+                        Velocity(Vec2::new(velocity.x as f32, velocity.y as f32)),
                     ));
                 }
             }

@@ -29,7 +29,7 @@ pub fn handle_message(
         TAG_UNSUBSCRIBE => handle_unsubscribe_client(peer,peer_roles,state,&connection,&stream,&mut input),
         TAG_PUBLISH => relay_to_client(peer, state, &connection, &stream, data),
         TAG_CLIENT_INPUT => relay_client_input_to_shard(peer,state,&connection,&stream,data),
-        TAG_REGISTER_SHARD => handle_register_shard(peer_roles,state,&connection,&stream,&mut input),
+        TAG_REGISTER_SHARD => handle_register_shard(peer,peer_roles,state,&connection,&stream,&mut input),
         TAG_REGISTER_SPATIAL_SERVICE => handle_register_spatial_service(peer,peer_roles,state,&connection,&stream),
         TAG_CLIENT_HELLO => handle_client_hello(peer,peer_roles,state,&connection,&stream,&mut input),
         TAG_REQUEST_ENTITY_ID_BLOCK => handle_request_entity_id_block(peer, peer_roles, state, &connection, &stream, data),
@@ -53,6 +53,7 @@ pub fn handle_message(
 }
 
 fn handle_register_shard(
+    peer: &GamePeer,
     peer_roles: &mut PeerRoles,
     state: &mut PubSubState,
     connection: &GameConnection,
@@ -84,9 +85,24 @@ fn handle_register_shard(
             state.register_shard_topic(shard_id, *connection, stream.clone());
 
             tracing::info!(
-                "registered shard connection={}",
-                connection.connection_id
+                "registered shard connection={} shard_id={}",
+                connection.connection_id,
+                shard_id.0,
             );
+
+            let packet = match encode_message(&NetworkMessage::RegisterShard { shard_id }) {
+                Ok(packet) => packet,
+                Err(error) => {
+                    tracing::warn!(
+                        "failed to encode RegisterShard notification for shard {}: {}",
+                        shard_id.0,
+                        error
+                    );
+                    return;
+                }
+            };
+
+            relay_to_spatial_services(peer, state, &packet);
         }
         _ => {
             tracing::warn!(
@@ -95,8 +111,6 @@ fn handle_register_shard(
             );
         }
     }
-
-
 }
 
 fn handle_request_entity_id_block(

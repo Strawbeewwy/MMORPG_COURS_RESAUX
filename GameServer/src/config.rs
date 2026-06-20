@@ -1,7 +1,7 @@
 use bevy::prelude::Resource;
 use shared::config::{
-    DEFAULT_DS_IP, DEFAULT_FIRST_DS_PORT, DEFAULT_MAX_ENTITIES, DEFAULT_ORCHESTRATOR_HOST,
-    DEFAULT_ORCHESTRATOR_PORT, DEFAULT_ZONE,
+    DEFAULT_AOI_RADIUS, DEFAULT_DS_IP, DEFAULT_FIRST_DS_PORT, DEFAULT_MAX_ENTITIES,
+    DEFAULT_ORCHESTRATOR_HOST, DEFAULT_ORCHESTRATOR_PORT, DEFAULT_ZONE,
 };
 use shared::protocol::{ShardId, Topic};
 use std::env;
@@ -23,6 +23,7 @@ pub struct ServerConfig {
     pub broker_port: u16,
     pub shard_topic: Topic,
     pub server_tick: u64,
+    pub aoi_radius: f32,
 }
 
 impl ServerConfig {
@@ -66,6 +67,11 @@ impl ServerConfig {
             id: ShardId(shard_id?)
         };
 
+        let aoi_radius = env::var("AOI_RADIUS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(DEFAULT_AOI_RADIUS);
+
         Ok(Self {
             ip,
             port,
@@ -76,6 +82,7 @@ impl ServerConfig {
             broker_port,
             shard_topic,
             server_tick: 0,
+            aoi_radius,
         })
     }
 

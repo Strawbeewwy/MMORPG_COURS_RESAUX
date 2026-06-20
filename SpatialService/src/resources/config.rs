@@ -1,10 +1,11 @@
 use bevy::prelude::*;
 use std::env;
 use shared::config::{
-    DEFAULT_BROKER_HOST, DEFAULT_BROKER_PORT, DEFAULT_CROSSING_MARGIN,
+    DEFAULT_AOI_RADIUS, DEFAULT_BROKER_HOST, DEFAULT_BROKER_PORT, DEFAULT_CROSSING_MARGIN,
     DEFAULT_QUAD_TREE_MAX_DEPTH, DEFAULT_SPATIAL_HOST, DEFAULT_SPATIAL_LISTEN_PORT,
     DEFAULT_WORLD_HALF_SIZE,
 };
+use shared::{DEFAULT_ORCHESTRATOR_HOST, DEFAULT_ORCHESTRATOR_PORT};
 
 /// Runtime configuration loaded from environment variables.
 #[derive(Debug, Clone, Resource)]
@@ -12,7 +13,7 @@ pub struct SpatialConfig {
     /// Address the spatial service listens on for incoming shard connections.
     pub listen_host: String,
     pub listen_port: u16,
-    /// Address of the utils the spatial service connects to.
+    /// Address of the broker the spatial service connects to.
     pub broker_host: String,
     pub broker_port: u16,
     /// World half-extent used to build the QuadTree root bounds.
@@ -21,6 +22,11 @@ pub struct SpatialConfig {
     pub quad_tree_max_depth: u8,
     /// Radius (world units) that triggers a CrossingAlert.
     pub crossing_margin: f32,
+    /// Area of Interest radius (world units) for filtering subscriptions.
+    pub aoi_radius: f32,
+    ///address of the orchestrator
+    pub orchestrator_host: String,
+    pub orchestrator_port: u16,
 }
 
 impl SpatialConfig {
@@ -50,6 +56,16 @@ impl SpatialConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(DEFAULT_CROSSING_MARGIN),
+            aoi_radius: env::var("AOI_RADIUS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(DEFAULT_AOI_RADIUS),
+            orchestrator_host: env::var("ORCH_HOST")
+                .unwrap_or_else(|_| DEFAULT_ORCHESTRATOR_HOST.to_string()),
+            orchestrator_port: env::var("ORCH_PORT")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(DEFAULT_ORCHESTRATOR_PORT + 1),
         }
     }
 }
