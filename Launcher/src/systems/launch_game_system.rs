@@ -1,9 +1,12 @@
-use std::path::PathBuf;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy::winit::WinitWindows;
 use std::process::{Child, Command, Stdio};
-use crate::config::DEFAULT_GC_BINARY;
+use crate::config::{
+    DEFAULT_GC_BINARY,
+    GODOT_CLIENT_EXECUTABLE,
+    GODOT_PROJECT_FILE,
+};
 
 #[derive(Message, Debug, Clone)]
 pub struct LaunchGameClientMessage {
@@ -12,6 +15,16 @@ pub struct LaunchGameClientMessage {
     pub server_ip: String,
     pub server_port: u16,
     pub zone: String,
+}
+
+/// Message to launch the Godot client with Broker connection parameters
+#[derive(Message, Debug, Clone)]
+pub struct LaunchGodotClientMessage {
+    pub client_id: u32,
+    pub username: String,
+    pub session_token: String,
+    pub broker_host: String,
+    pub broker_port: u16,
 }
 
 #[derive(Resource, Default)]
@@ -26,10 +39,12 @@ impl Plugin for LaunchGameSystemPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<GameLaunchState>()
             .add_message::<LaunchGameClientMessage>()
+            .add_message::<LaunchGodotClientMessage>()
             .add_systems(
                 Update,
                 (
                     launch_game_client_on_message,
+                    launch_godot_client_on_message,
                     restore_launcher_when_game_client_exits,
                 ),
             );
@@ -196,4 +211,96 @@ fn restore_launcher_window(
     window.focus_window();
 
     tracing::info!("launcher window restored");
+}
+
+// ── Godot Client Launch ─────────────────────────────────────────────────────
+
+/// Launch Godot client when LaunchGodotClientMessage is received
+fn launch_godot_client_on_message(
+    mut messages: MessageReader<LaunchGodotClientMessage>,
+    mut launch_state: ResMut<GameLaunchState>,
+    primary_window_query: Query<Entity, With<PrimaryWindow>>,
+    winit_windows: Option<NonSend<WinitWindows>>,
+) {
+    if launch_state.launched {
+        return;
+    }
+
+    for message in messages.read() {
+        let Some(child) = launch_godot_client(message) else {
+            break;
+        };
+
+        launch_state.launched = true;
+        launch_state.child = Some(child);
+
+        minimize_launcher_window(primary_window_query, winit_windows);
+
+        break;
+    }
+}
+
+/// Spawn Godot editor with the MMO client project
+fn launch_godot_client(message: &LaunchGodotClientMessage) -> Option<Child> {
+    tracing::info!(
+        "launching Godot client for username={} client_id={} broker={}:{}",
+        message.username,
+        message.client_id,
+        message.broker_host,
+        message.broker_port
+    );
+
+    let workspace_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .map(|p| p.to_path_buf());
+
+    let Some(workspace_root) = workspace_root else {
+        tracing::error!("failed to resolve workspace root from CARGO_MANIFEST_DIR");
+        return None;
+    };
+
+    let godot_exe = workspace_root.join(GODOT_CLIENT_EXECUTABLE);
+    let project_file = workspace_root.join(GODOT_PROJECT_FILE);
+
+    if !godot_exe.exists() {
+        tracing::error!(
+            "Godot executable not found at {}. Download Godot 4.x and place it in GodotClient/game/.godot_bin/",
+            godot_exe.display()
+        );
+        return None;
+    }
+
+    if !project_file.exists() {
+        tracing::error!(
+            "Godot project file not found at {}",
+            project_file.display()
+        );
+        return None;
+    }
+
+    tracing::info!("resolved Godot executable: {}", godot_exe.display());
+    tracing::info!("resolved project file: {}", project_file.display());
+
+    let spawn_result = Command::new(&godot_exe)
+        .arg("--path")
+        .arg(project_file.parent().unwrap())
+        .env("BROKER_HOST", &message.broker_host)
+        .env("BROKER_PORT", message.broker_port.to_string())
+        .env("SESSION_TOKEN", &message.session_token)
+        .env("CLIENT_ID", message.client_id.to_string())
+        .env("USERNAME", &message.username)
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn();
+
+    match spawn_result {
+        Ok(child) => {
+            tracing::info!("Godot client launched successfully");
+            Some(child)
+        }
+        Err(error) => {
+            tracing::error!("failed to launch Godot client: {}", error);
+            None
+        }
+    }
 }
