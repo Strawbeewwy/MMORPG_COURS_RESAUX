@@ -43,6 +43,7 @@ pub fn handle_message(
         TAG_HANDOFF_START => relay_handoff_start_to_shards(peer,peer_roles, state, &connection, &stream, data),
         TAG_REGISTER_ENTITY => relay_to_spatial_services(peer, state, data),
         TAG_UNREGISTER_ENTITY => relay_to_spatial_services(peer, state, data),
+        TAG_CLIENT_REGISTER => handle_client_register(peer, state, &connection, &stream, data),
         _ => {
             tracing::warn!(
                 "unknown tag or unexpected tag for message sent by : {}",
@@ -50,6 +51,72 @@ pub fn handle_message(
             );
         }
     };
+}
+
+fn handle_client_register(
+    peer: &GamePeer,
+    state: &mut PubSubState,
+    connection: &GameConnection,
+    stream: &GameStream,
+    input: &[u8]) {
+
+
+    let message = match decode_message(input) {
+        Ok(message) => message,
+        Err(error) => {
+            tracing::warn!(
+                "could not decode message {}: {error}",
+                connection.connection_id
+            );
+            return;
+        }
+    };
+
+
+    match message {
+        NetworkMessage::RegisterClient { client_id, username } => {
+            state.register_client_connection(&client_id, &username, &connection, &stream);
+
+            let packet = match encode_message(&NetworkMessage::ClientAccepted {
+                client_id,
+            }) {
+                Ok(packet) => packet,
+                Err(error) => {
+                    tracing::warn!(
+                            "failed to encode ClientAccepted for connection {}: {}",
+                            connection.connection_id,
+                            error
+                        );
+                    return;
+                }
+            };
+
+            if let Err(error) = peer.send(
+                connection,
+                stream,
+                Bytes::from(packet)
+            ) {
+                tracing::warn!(
+                        "failed to send ClientAccepted to connection {}: {}",
+                        connection.connection_id,
+                        error
+                    );
+                return;
+            }
+
+            tracing::info!(
+                    "accepted client connection={} client_id={}",
+                    connection.connection_id,
+                    client_id.0
+                );
+        }
+        _ => {
+            tracing::warn!(
+                "invalid tag for message Client Hello sent by : {}",
+                connection.connection_id
+            );
+        }
+    }
 }
 
 fn handle_register_shard(
@@ -304,13 +371,6 @@ fn handle_client_hello(
     stream: &GameStream,
     input: &mut &[u8],
 ) {
-    if !peer_roles.register_role(*connection, PeerRole::Client, "ClientHello") {
-        tracing::warn!(
-                "message not received from client {}:",
-                connection.connection_id
-            );
-        return;
-    }
 
     let message = match decode_message(input) {
         Ok(message) => message,

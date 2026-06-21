@@ -1,5 +1,6 @@
 mod handlers;
 mod redis_pool;
+pub mod broker_client;
 
 use anyhow::Result;
 use axum::{
