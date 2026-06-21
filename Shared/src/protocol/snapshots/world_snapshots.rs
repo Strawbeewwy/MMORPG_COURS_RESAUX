@@ -1,4 +1,8 @@
 use std::sync::Arc;
+use serde::{Deserialize, Serialize};
+use crate::combat::ColorTeam;
+use crate::enemy::EnemySnapshot;
+use crate::projectile::ProjectileSnapshot;
 use crate::protocol::{PlayerPublicInfo, PlayerSnapshot, ClientId};
 use crate::protocol::snapshots::entity_snapshot::EntitySnapshot;
 use crate::protocol::utils::utils::{read_arc_str, read_client_id, read_u16, read_u64, read_u8, write_arc_str, write_client_id, write_len_u16, write_u64, write_u8, BinaryDecode, BinaryEncode};
@@ -16,16 +20,33 @@ const WORLD_UPDATE_PLAYER_LEFT: u8 = 0x03;
 
 
 /// World-state update broadcast by the utils to subscribed clients.
-#[derive(Debug, Clone,)]
+
+/// World-state update broadcast by the broker to subscribed clients.
+#[derive(Debug, Clone)]
 pub enum WorldUpdate {
     /// Full world snapshot for initial sync or re-sync.
     Snapshot { snapshot: WorldSnapshot },
     /// A new player appeared in the zone.
     PlayerJoined { player: PlayerPublicInfo, client_id: ClientId },
     /// A player left the zone.
-    PlayerLeft { player: PlayerPublicInfo , client_id: ClientId},
-}
+    PlayerLeft { player: PlayerPublicInfo, client_id: ClientId },
 
+    // ── 5SecsSwap gameplay events ────────────────────────────────────────────
+
+    /// The global 5-second colour swap fired.
+    /// `swap_index` increments each swap — even = Red active, odd = Blue active.
+    ColorSwap { swap_index: u64 },
+    /// Server assigned this client a starting colour team.
+    PlayerColorAssigned { client_id: ClientId, color: ColorTeam },
+    /// Batch enemy state sent every tick.
+    EnemiesUpdate { enemies: Vec<EnemySnapshot> },
+    /// An enemy was killed; killer may be None (e.g. fell into a pit).
+    EnemyDied { enemy_id: u32, killer_client_id: Option<ClientId> },
+    /// Batch projectile state sent every tick.
+    ProjectilesUpdate { projectiles: Vec<ProjectileSnapshot> },
+    /// Score delta for a player (cumulative on the client side).
+    PlayerScoreUpdate { client_id: ClientId, score: u32 },
+}
 
 
 /**
@@ -57,6 +78,12 @@ impl BinaryEncode for WorldUpdate {
                 write_client_id(output, *client_id);
                 player.encode_binary(output)?;
             }
+            WorldUpdate::ColorSwap { .. } => {}
+            WorldUpdate::PlayerColorAssigned { .. } => {}
+            WorldUpdate::EnemiesUpdate { .. } => {}
+            WorldUpdate::EnemyDied { .. } => {}
+            WorldUpdate::ProjectilesUpdate { .. } => {}
+            WorldUpdate::PlayerScoreUpdate { .. } => {}
         }
 
         Ok(())

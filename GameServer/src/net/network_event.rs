@@ -1,6 +1,13 @@
 use std::time::{Duration, Instant};
 use crate::config::ServerConfig;
 
+use crate::world::combat::{
+    PendingActions, PendingSwapEvents, PlayerCombatRegistry,
+};
+use crate::world::enemy::EnemyRegistry;
+use crate::world::projectile::ProjectileRegistry;
+
+
 use crate::world::state::{SharedEntityRegistry};
 use bevy::prelude::*;
 use shared::game_sockets::protocols::QuicBackend;
@@ -12,14 +19,14 @@ use shared::protocol::{
     NetVec2, WorldSnapshot, WorldUpdate, ShardId
 };
 use tokio::sync::{MutexGuard};
-use crate::net::apply_client_input;
+use crate::net::{apply_client_input, publish_world_update};
 use crate::net::handoff::{
     handle_handoff_start_on_source,
     handle_handoff_request_on_dest,
     handle_handoff_accepted_on_source,
     handle_handoff_rejected_on_source,
 };
-use crate::world::{EntityIdAllocator, SpawnPlayerEntityEvent, Velocity};
+use crate::world::{EntityIdAllocator, Position, SpawnPlayerEntityEvent, Velocity};
 use crate::world::entity::PromoteGhostEvent;
 use crate::world::spawn_entity::SpawnGhostEntityEvent;
 
@@ -129,6 +136,7 @@ pub fn poll_broker_events(
     mut spawn_players: MessageWriter<SpawnPlayerEntityEvent>,
     mut spawn_ghosts: MessageWriter<SpawnGhostEntityEvent>,
     mut promote_ghosts: MessageWriter<PromoteGhostEvent>,
+    mut pending: ResMut<PendingActions>,
 ) {
 
     loop {
@@ -143,6 +151,7 @@ pub fn poll_broker_events(
 
         handle_broker_event(
             &config,
+            &mut pending,
             &mut commands,
             &mut broker,
             &mut registry,
@@ -158,6 +167,7 @@ pub fn poll_broker_events(
 
 fn handle_broker_event(
     config: &ServerConfig,
+    pending: &mut PendingActions,
     commands: &mut Commands,
     broker: &mut BrokerShardPeer,
     registry: &mut SharedEntityRegistry,
@@ -263,6 +273,7 @@ fn handle_broker_event(
                 broker,
                 registry,
                 allocator,
+                pending,
                 &data,
                 velocities,
                 spawn_players,
@@ -327,6 +338,7 @@ fn handle_broker_message(
     broker: &mut BrokerShardPeer,
     registry: &mut SharedEntityRegistry,
     allocator: &mut EntityIdAllocator,
+    pending: &mut PendingActions,
     data: &[u8],
     velocities: &mut Query<&mut Velocity>,
     spawn_players: &mut MessageWriter<SpawnPlayerEntityEvent>,
@@ -378,8 +390,8 @@ fn handle_broker_message(
             if let Some((_, ent_reg)) = registry.try_lock() {
                 if let Some(bevy_entity) = ent_reg.get_bevy_entity(&entity_id) {
                     commands.entity(bevy_entity).insert((
-                        crate::world::Position(Vec2::new(position.x as f32, position.y as f32)),
-                        crate::world::Velocity(Vec2::new(velocity.x as f32, velocity.y as f32)),
+                        Position(Vec2::new(position.x as f32, position.y as f32)),
+                        Velocity(Vec2::new(velocity.x as f32, velocity.y as f32)),
                     ));
                 }
             }
@@ -421,6 +433,63 @@ fn handle_broker_message(
 
         other => {
             warn!("unexpected broker message received by shard: {:?}", other);
+        }
+    }
+}
+
+
+/// Publish 5SecsSwap gameplay updates (enemies, projectiles, colour swaps, scores).
+pub fn publish_gameplay_updates(
+    config: Res<ServerConfig>,
+    broker_peer: Res<BrokerShardPeer>,
+    enemy_reg: Res<EnemyRegistry>,
+    proj_reg: Res<ProjectileRegistry>,
+    mut swap_events: ResMut<PendingSwapEvents>,
+    mut combat_reg: ResMut<PlayerCombatRegistry>,
+) {
+    if !broker_peer.is_ready() { return; }
+
+    // 1. Enemy batch update.
+    let enemies = enemy_reg.snapshots();
+    if !enemies.is_empty() {
+        // publish_world_update(
+        //     broker_peer,
+        //     config.shard_topic,
+        //     WorldUpdate::EnemiesUpdate { enemies },
+        // );
+    }
+
+    // 2. Projectile batch update.
+    let projectiles = proj_reg.snapshots();
+    if !projectiles.is_empty() {
+        // publish_world_update(
+        //     &broker_peer,
+        //     config.shard_topic,
+        //     WorldUpdate::ProjectilesUpdate { projectiles },
+        // );
+    }
+
+    // 3. Colour swap events.
+    for swap_index in swap_events.0.drain(..) {
+        // publish_world_update(
+        //     &broker_peer,
+        //     config.shard_topic,
+        //     WorldUpdate::ColorSwap { swap_index },
+        // );
+    }
+
+    // 4. Score updates (delta only).
+    for (client_id, state) in combat_reg.states.iter_mut() {
+        if state.score > state.score_sent {
+            // publish_world_update(
+            //     &broker_peer,
+            //     config.shard_topic,
+            //     WorldUpdate::PlayerScoreUpdate {
+            //         client_id: *client_id,
+            //         score: state.score,
+            //     },
+            // );
+            state.score_sent = state.score;
         }
     }
 }

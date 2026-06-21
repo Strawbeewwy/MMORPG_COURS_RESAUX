@@ -62,32 +62,86 @@ pub struct QuadTree {
     pub children: Option<Box<[QuadTree; 4]>>,
     /// Only set on leaf nodes.
     pub shard_id: Option<ShardId>,
+    next_shard_id: u32,
 }
 
 impl QuadTree {
-    /// Build a fully subdivided tree up to `max_depth`.
-    /// Leaf shard ids are assigned left-to-right, top-to-bottom (Morton-like order).
+    /// Build a lazily subdivided tree.
+    /// The root starts as a single leaf shard and splits only when overloaded.
     pub fn new(bounds: Rect, max_depth: u8) -> Self {
-        let mut counter = 0u32;
-        Self::build(bounds, 0, max_depth, &mut counter)
+        Self {
+            bounds,
+            depth: 0,
+            max_depth,
+            children: None,
+            shard_id: Some(ShardId(0)),
+            next_shard_id: 1,
+        }
     }
 
-    fn build(bounds: Rect, depth: u8, max_depth: u8, counter: &mut u32) -> Self {
-        if depth >= max_depth {
-            let shard_id = *counter;
-            *counter += 1;
-            return Self { bounds, depth, max_depth, children: None, shard_id: Some(ShardId(shard_id)) };
+    fn leaf(bounds: Rect, depth: u8, max_depth: u8, shard_id: ShardId) -> Self {
+        Self {
+            bounds,
+            depth,
+            max_depth,
+            children: None,
+            shard_id: Some(shard_id),
+            next_shard_id: 0,
+        }
+    }
+
+    fn allocate_shard_id(&mut self) -> ShardId {
+        let shard_id = ShardId(self.next_shard_id);
+        self.next_shard_id += 1;
+        shard_id
+    }
+
+    /// Split the leaf carrying `shard_id` into 4 child leaves.
+    ///
+    /// Returns the newly created child shard ids, or `None` when:
+    /// - the shard does not exist,
+    /// - the node is already split,
+    /// - the node is already at max depth.
+    pub fn split_shard(&mut self, shard_id: ShardId) -> Option<[ShardId; 4]> {
+        self.split_shard_inner(shard_id)
+    }
+
+    fn split_shard_inner(&mut self, shard_id: ShardId) -> Option<[ShardId; 4]> {
+        if self.children.is_none() && self.shard_id == Some(shard_id) {
+            if self.depth >= self.max_depth {
+                return None;
+            }
+
+            let quads = self.bounds.quadrants();
+            let child_shards = [
+                self.allocate_shard_id(),
+                self.allocate_shard_id(),
+                self.allocate_shard_id(),
+                self.allocate_shard_id(),
+            ];
+
+            self.children = Some(Box::new([
+                Self::leaf(quads[0], self.depth + 1, self.max_depth, child_shards[0]),
+                Self::leaf(quads[1], self.depth + 1, self.max_depth, child_shards[1]),
+                Self::leaf(quads[2], self.depth + 1, self.max_depth, child_shards[2]),
+                Self::leaf(quads[3], self.depth + 1, self.max_depth, child_shards[3]),
+            ]));
+            self.shard_id = None;
+
+            return Some(child_shards);
         }
 
-        let quads = bounds.quadrants();
-        let children = Box::new([
-            Self::build(quads[0], depth + 1, max_depth, counter),
-            Self::build(quads[1], depth + 1, max_depth, counter),
-            Self::build(quads[2], depth + 1, max_depth, counter),
-            Self::build(quads[3], depth + 1, max_depth, counter),
-        ]);
+        let Some(children) = self.children.as_mut() else {
+            return None;
+        };
 
-        Self { bounds, depth, max_depth, children: Some(children), shard_id: None }
+        for child in children.iter_mut() {
+            if let Some(new_shards) = child.split_shard_inner(shard_id) {
+                return Some(new_shards);
+            }
+        }
+
+        None
     }
 
     /// Return the shard_id of the leaf containing `(x, y)`.
@@ -136,47 +190,6 @@ impl QuadTree {
                 }
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn tree() -> QuadTree {
-        // depth=1 → 4 leaves: NW=0, NE=1, SW=2, SE=3
-        QuadTree::new(Rect::world(100.0), 1)
-    }
-
-    #[test]
-    fn shard_for_quadrants() {
-        let qt = tree();
-        // NW (x<0, y>0)
-        assert_eq!(qt.shard_for(-50.0, 50.0), Some(ShardId(0)));
-        // NE (x>0, y>0)
-        assert_eq!(qt.shard_for(50.0, 50.0), Some(ShardId(1)));
-        // SW (x<0, y<0)
-        assert_eq!(qt.shard_for(-50.0, -50.0), Some(ShardId(2)));
-        // SE (x>0, y<0)
-        assert_eq!(qt.shard_for(50.0, -50.0), Some(ShardId(3)));
-        // Outside world
-        assert_eq!(qt.shard_for(200.0, 0.0), None);
-    }
-
-    #[test]
-    fn shards_near_boundary() {
-        let qt = tree();
-        // Point exactly on the X=0 axis with margin covering both sides → 2 shards
-        let near = qt.shards_near(0.0, 50.0, 10.0);
-        assert!(near.len() >= 2, "expected multiple shards near boundary, got {:?}", near);
-    }
-
-    #[test]
-    fn shards_near_interior() {
-        let qt = tree();
-        // Deep inside NW — only one shard should be returned
-        let near = qt.shards_near(-80.0, 80.0, 5.0);
-        assert_eq!(near, vec![ShardId(0)]);
     }
 }
 

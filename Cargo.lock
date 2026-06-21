@@ -3015,17 +3015,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gameclient"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bevy",
- "bytes",
- "shared",
- "tracing",
-]
-
-[[package]]
 name = "gameserver"
 version = "0.1.0"
 dependencies = [

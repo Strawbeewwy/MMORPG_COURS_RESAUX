@@ -1,12 +1,12 @@
 
 use bevy::prelude::*;
 use tokio::sync::oneshot;
-
+use shared::{DEFAULT_BROKER_HOST, DEFAULT_BROKER_PORT};
 use crate::net::gatekeeper::login_to_gatekeeper;
 use crate::resources::network_resources::{
     LoginRequestMessage, LoginStatus, LoginTask, TokioRuntimeResource,
 };
-use crate::systems::launch_game_system::LaunchGameClientMessage;
+use crate::systems::launch_game_system::{LaunchGameClientMessage, LaunchGodotClientMessage};
 
 /*
 This plugin adds the systems as update so that they are run
@@ -90,7 +90,7 @@ pub fn start_login(
 fn poll_login_task(
     mut login_task: ResMut<LoginTask>,
     mut login_status: ResMut<LoginStatus>,
-    mut launch_messages: MessageWriter<LaunchGameClientMessage>,
+    mut launch_messages: MessageWriter<LaunchGodotClientMessage>,
 ) {
     //check if we have a task to poll
     let Some(receiver) = login_task.receiver.as_mut() else {
@@ -104,20 +104,19 @@ fn poll_login_task(
             match result {
                 Ok(response) => {
                     let username = login_task.username.clone().unwrap_or_default();
+                    let client_id = response.client_id;
 
-                    launch_messages.write(LaunchGameClientMessage {
-                        player_id: response.player_id.clone(),
+
+                    launch_messages.write(LaunchGodotClientMessage {
+                        client_id,
                         username: username.clone(),
-                        server_ip: response.server.ip.clone(),
-                        server_port: response.server.port,
-                        zone: response.server.zone.clone(),
+                        session_token: client_id.to_string(),
+                        broker_host: DEFAULT_BROKER_HOST.to_string(),
+                        broker_port: DEFAULT_BROKER_PORT,
                     });
 
                     *login_status = LoginStatus::Success {
-                        player_id: response.player_id,
-                        server_ip: response.server.ip,
-                        server_port: response.server.port,
-                        zone: response.server.zone,
+                        client_id: client_id.to_string(),
                         username,
                     };
                 }

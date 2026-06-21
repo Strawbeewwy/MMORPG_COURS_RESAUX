@@ -44,6 +44,18 @@ pub enum IncomingEvent {
     ClientAccepted { client_id: u32 },
     /// GameServer broadcast — contains a serialised WorldUpdate payload.
     Broadcast { payload: Vec<u8> },
+    /// Global colour swap fired.  `swap_index` even = Red, odd = Blue.
+    ColorSwap { swap_index: u64 },
+    /// Server assigned this client a colour team.
+    PlayerColorAssigned { client_id: u32, color_team: u8 },
+    /// Batch enemy state for this tick (flat interleaved array: id, x, y, color, hp).
+    EnemiesUpdate { data: Vec<f32> },
+    /// An enemy was killed.
+    EnemyDied { enemy_id: u32 },
+    /// Batch projectile state (flat: id, x, y, dx, dy, color, alive).
+    ProjectilesUpdate { data: Vec<f32> },
+    /// Cumulative score for a player.
+    PlayerScoreUpdate { client_id: u32, score: u32 },
 }
 
 // ── Wire helpers ───────────────────────────────────────────────────────────────
@@ -66,6 +78,31 @@ pub fn encode_client_hello(username: &str) -> Vec<u8> {
     };
     packet
 }
+
+
+
+pub fn encode_register_client(client_id: u32, username: &str) -> Vec<u8> {
+    let username: Username = Arc::from(username.to_string());
+
+    let packet = match encode_message(&NetworkMessage::RegisterClient {
+        client_id: ClientId(client_id),
+        username: username.clone(),
+    }) {
+        Ok(packet) => packet,
+        Err(error) => {
+            tracing::warn!(
+                "failed to encode RegisterClient for client_id={} username={}: {}",
+                client_id,
+                username,
+                error
+            );
+            return Vec::new();
+        }
+    };
+
+    packet
+}
+
 
 /// Encode a ClientInput packet (TAG_CLIENT_INPUT) with movement x/y.
 /// Matches `encode_movement_input` in GameClient/src/net/input.rs.
@@ -93,8 +130,48 @@ pub fn encode_client_input(client_id: u32, x: f32, y: f32) -> Vec<u8> {
     packet
 }
 
+/// Encode a full input packet with movement, actions, and look direction.
+/// action_flags bitmask: bit0=dash, bit1=melee, bit2=shoot.
+pub fn encode_full_input(
+    client_id: u32,
+    move_x: f32,
+    move_y: f32,
+    action_flags: u8,
+    look_x: f32,
+    look_y: f32,
+) -> Vec<u8> {
+    let mut input = [0_u8; CLIENT_INPUT_LEN];
+
+    // Movement direction (normalized)
+    input[0..4].copy_from_slice(&move_x.to_le_bytes());
+    input[4..8].copy_from_slice(&move_y.to_le_bytes());
+    
+    // Action flags
+    input[8] = action_flags;
+    
+    // Look direction (normalized)
+    input[9..13].copy_from_slice(&look_x.to_le_bytes());
+    input[13..17].copy_from_slice(&look_y.to_le_bytes());
+
+    let packet = match encode_message(&NetworkMessage::ClientInput {
+        client_id: ClientId(client_id),
+        input,
+    }) {
+        Ok(packet) => packet,
+        Err(error) => {
+            tracing::warn!(
+                "cannot encode full ClientInput for client {}: {}",
+                client_id,
+                error
+            );
+            return Vec::new();
+        }
+    };
+
+    packet
+}
+
 /// Decode a single Broker message from raw bytes.
-/// Returns None for unknown / malformed messages (logged as warnings).
 fn decode(data: &[u8]) -> Option<IncomingEvent> {
 
     let message = match decode_message(data) {
@@ -111,8 +188,8 @@ fn decode(data: &[u8]) -> Option<IncomingEvent> {
         NetworkMessage::ClientAccepted { client_id } => {
             Some(IncomingEvent::ClientAccepted { client_id: client_id.0 })
         }
-        NetworkMessage::Broadcast {payload,payload_len} =>{
-            Some(IncomingEvent::Broadcast {payload})
+        NetworkMessage::Broadcast { payload, payload_len: _ } => {
+            Some(IncomingEvent::Broadcast { payload })
         }
         _ => {
             tracing::debug!("mmo_client: ignoring message {:?}", message);
@@ -121,6 +198,65 @@ fn decode(data: &[u8]) -> Option<IncomingEvent> {
     }
 }
 
+
+fn decode_world_update(update: shared::protocol::WorldUpdate) -> Option<IncomingEvent> {
+    use shared::protocol::WorldUpdate;
+    match update {
+        WorldUpdate::ColorSwap { swap_index } => {
+            Some(IncomingEvent::ColorSwap { swap_index })
+        }
+        WorldUpdate::PlayerColorAssigned { client_id, color } => {
+            Some(IncomingEvent::PlayerColorAssigned {
+                client_id: client_id.0,
+                color_team: color as u8,
+            })
+        }
+        WorldUpdate::EnemiesUpdate { enemies } => {
+            // Pack into flat f32 array: [id, x, y, color, hp] × n
+            let mut data = Vec::with_capacity(enemies.len() * 5);
+            for e in &enemies {
+                let (x, y) = e.position.to_f32();
+                data.push(e.id as f32);
+                data.push(x);
+                data.push(y);
+                data.push(e.color as u8 as f32);
+                data.push(e.hp as f32);
+            }
+            Some(IncomingEvent::EnemiesUpdate { data })
+        }
+        WorldUpdate::EnemyDied { enemy_id, .. } => {
+            Some(IncomingEvent::EnemyDied { enemy_id })
+        }
+        WorldUpdate::ProjectilesUpdate { projectiles } => {
+            let mut data = Vec::with_capacity(projectiles.len() * 7);
+            for p in &projectiles {
+                let (px, py) = p.position.to_f32();
+                let (dx, dy) = p.direction.to_f32();
+                data.push(p.id as f32);
+                data.push(px);
+                data.push(py);
+                data.push(dx);
+                data.push(dy);
+                data.push(p.color as u8 as f32);
+                data.push(if p.alive { 1.0 } else { 0.0 });
+            }
+            Some(IncomingEvent::ProjectilesUpdate { data })
+        }
+        WorldUpdate::PlayerScoreUpdate { client_id, score } => {
+            Some(IncomingEvent::PlayerScoreUpdate {
+                client_id: client_id.0,
+                score,
+            })
+        }
+        // Unimplemented variants — ignored for now
+        WorldUpdate::Snapshot { .. }
+        | WorldUpdate::PlayerJoined { .. }
+        | WorldUpdate::PlayerLeft { .. } => {
+            tracing::debug!("mmo_client: ignoring WorldUpdate variant");
+            None
+        }
+    }
+}
 
 // ── NetworkClient Godot node ───────────────────────────────────────────────────
 
@@ -134,18 +270,34 @@ pub struct NetworkClient {
     inbox:     Inbox,
     outbox:    Outbox,
     client_id: u32,
+    username: String,
     server_addr: String,
 }
 
 #[godot_api]
 impl INode for NetworkClient {
     fn init(base: Base<Node>) -> Self {
+        let broker_host = std::env::var("BROKER_HOST")
+            .unwrap_or_else(|_| "127.0.0.1".to_string());
+
+        let broker_port = std::env::var("BROKER_PORT")
+            .unwrap_or_else(|_| "9600".to_string());
+
+        let client_id = std::env::var("CLIENT_ID")
+            .ok()
+            .and_then(|value| value.parse::<u32>().ok())
+            .unwrap_or(0);
+
+        let username = std::env::var("USERNAME")
+            .unwrap_or_else(|_| "GodotPlayer".to_string());
+
         Self {
             base,
             inbox:  Arc::new(Mutex::new(Vec::new())),
             outbox: Arc::new(Mutex::new(Vec::new())),
-            client_id: 0,
-            server_addr: "127.0.0.1:9600".to_string(),
+            client_id,
+            username,
+            server_addr: format!("{broker_host}:{broker_port}"),
         }
     }
 
@@ -153,6 +305,8 @@ impl INode for NetworkClient {
         let inbox  = self.inbox.clone();
         let outbox = self.outbox.clone();
         let addr   = self.server_addr.clone();
+        let client_id = self.client_id;
+        let username = self.username.clone();
 
         std::thread::Builder::new()
             .name("mmo_quic".into())
@@ -163,12 +317,17 @@ impl INode for NetworkClient {
                     .build()
                     .expect("tokio rt")
                     .block_on(async {
-                        poll_loop(addr, inbox, outbox).await;
+                        poll_loop(addr, client_id, username, inbox, outbox).await;
                     });
             })
             .expect("spawn mmo_quic thread");
 
-        tracing::info!("NetworkClient ready — broker {}", self.server_addr);
+        tracing::info!(
+            "NetworkClient ready — broker {} client_id={} username={}",
+            self.server_addr,
+            self.client_id,
+            self.username
+        );
     }
 
     /// Pump inbox into Godot signals each frame.
@@ -188,9 +347,42 @@ impl INode for NetworkClient {
                     );
                 }
                 IncomingEvent::Broadcast { payload } => {
-                    // Forward the raw WorldUpdate payload to GDScript.
                     let bytes: PackedByteArray = payload.iter().copied().collect();
                     self.base_mut().emit_signal("broadcast_received", &[bytes.to_variant()]);
+                }
+                IncomingEvent::ColorSwap { swap_index } => {
+                    // Even swap_index → Red (0), odd → Blue (1).
+                    let team: i64 = (swap_index % 2) as i64;
+                    self.base_mut().emit_signal(
+                        "color_swapped",
+                        &[(swap_index as i64).to_variant(), team.to_variant()],
+                    );
+                }
+                IncomingEvent::PlayerColorAssigned { client_id, color_team } => {
+                    self.base_mut().emit_signal(
+                        "player_color_assigned",
+                        &[(client_id as i64).to_variant(), (color_team as i64).to_variant()],
+                    );
+                }
+                IncomingEvent::EnemiesUpdate { data } => {
+                    let arr: PackedFloat32Array = data.into_iter().collect();
+                    self.base_mut().emit_signal("enemies_updated", &[arr.to_variant()]);
+                }
+                IncomingEvent::EnemyDied { enemy_id } => {
+                    self.base_mut().emit_signal(
+                        "enemy_died",
+                        &[(enemy_id as i64).to_variant()],
+                    );
+                }
+                IncomingEvent::ProjectilesUpdate { data } => {
+                    let arr: PackedFloat32Array = data.into_iter().collect();
+                    self.base_mut().emit_signal("projectiles_updated", &[arr.to_variant()]);
+                }
+                IncomingEvent::PlayerScoreUpdate { client_id, score } => {
+                    self.base_mut().emit_signal(
+                        "score_updated",
+                        &[(client_id as i64).to_variant(), (score as i64).to_variant()],
+                    );
                 }
             }
         }
@@ -209,6 +401,32 @@ impl NetworkClient {
     #[signal]
     fn broadcast_received(payload: PackedByteArray);
 
+    /// Global colour swap — swap_index (i64), color_team (0=Red, 1=Blue).
+    #[signal]
+    fn color_swapped(swap_index: i64, color_team: i64);
+
+    /// Server assigned a colour team to a player.
+    #[signal]
+    fn player_color_assigned(client_id: i64, color_team: i64);
+
+    /// Batch enemy positions/state as PackedFloat32Array.
+    /// Layout per enemy: [id_f32, x, y, color_f32, hp_f32]  (5 floats/enemy).
+    #[signal]
+    fn enemies_updated(data: PackedFloat32Array);
+
+    /// An enemy was killed (removed from simulation).
+    #[signal]
+    fn enemy_died(enemy_id: i64);
+
+    /// Batch projectile state as PackedFloat32Array.
+    /// Layout: [id, x, y, dx, dy, color, alive]  (7 floats/projectile).
+    #[signal]
+    fn projectiles_updated(data: PackedFloat32Array);
+
+    /// Cumulative score update for a player.
+    #[signal]
+    fn score_updated(client_id: i64, score: i64);
+
     // ── GDScript-callable functions ────────────────────────────────────────────
 
     /// Send the local player's movement direction to the Broker.
@@ -216,6 +434,26 @@ impl NetworkClient {
     #[func]
     fn send_movement(&self, x: f32, y: f32) {
         let pkt = encode_client_input(self.client_id, x, y);
+        self.outbox.lock().unwrap().push(pkt);
+    }
+
+    /// Send movement + action flags + look direction in one packet.
+    /// action_flags bitmask: bit0=dash, bit1=melee, bit2=shoot.
+    #[func]
+    fn send_action_input(
+        &self,
+        move_x: f32,
+        move_y: f32,
+        action_flags: i32,
+        look_x: f32,
+        look_y: f32,
+    ) {
+        let pkt = encode_full_input(
+            self.client_id,
+            move_x, move_y,
+            action_flags as u8,
+            look_x, look_y,
+        );
         self.outbox.lock().unwrap().push(pkt);
     }
 
@@ -234,7 +472,13 @@ impl NetworkClient {
 
 // ── Background QUIC poll loop ──────────────────────────────────────────────────
 
-async fn poll_loop(addr: String, inbox: Inbox, outbox: Outbox) {
+async fn poll_loop(
+    addr: String,
+    client_id: u32,
+    username: String,
+    inbox: Inbox,
+    outbox: Outbox,
+) {
     let host_port: Vec<&str> = addr.rsplitn(2, ':').collect();
     let (port, host) = match host_port.as_slice() {
         [p, h] => (p.parse::<u16>().unwrap_or(9600), *h),
@@ -246,7 +490,7 @@ async fn poll_loop(addr: String, inbox: Inbox, outbox: Outbox) {
 
     let mut backoff = Duration::from_secs(1);
     loop {
-        match try_connect_and_run(host, port, &inbox, &outbox).await {
+        match try_connect_and_run(host, port, client_id, &username, &inbox, &outbox).await {
             Ok(()) => tracing::warn!("mmo_quic: disconnected from broker — reconnecting"),
             Err(e) => tracing::error!("mmo_quic: connection error: {e} — retry in {backoff:?}"),
         }
@@ -258,6 +502,8 @@ async fn poll_loop(addr: String, inbox: Inbox, outbox: Outbox) {
 async fn try_connect_and_run(
     host:   &str,
     port:   u16,
+    client_id: u32,
+    username: &str,
     inbox:  &Inbox,
     outbox: &Outbox,
 ) -> anyhow::Result<()> {
@@ -268,14 +514,15 @@ async fn try_connect_and_run(
     let mut peer = peer;
     let mut connection: Option<GameConnection> = None;
     let mut stream:     Option<GameStream> = None;
-    let mut hello_sent = false;
+    let mut register_sent = false;
 
     loop {
         loop {
             match peer.poll() {
                 Ok(Some(event)) => handle_event(
                     &mut peer, event,
-                    &mut connection, &mut stream, &mut hello_sent,
+                    client_id, username,
+                    &mut connection, &mut stream, &mut register_sent,
                     inbox,
                 ),
                 Ok(None) => break,
@@ -305,9 +552,11 @@ async fn try_connect_and_run(
 fn handle_event(
     peer:        &mut GamePeer,
     event:       GameNetworkEvent,
+    client_id:   u32,
+    username:    &str,
     connection:  &mut Option<GameConnection>,
     stream:      &mut Option<GameStream>,
-    hello_sent:  &mut bool,
+    register_sent: &mut bool,
     inbox:       &Inbox,
 ) {
     match event {
@@ -322,16 +571,28 @@ fn handle_event(
 
         GameNetworkEvent::StreamCreated(conn, st) if st.is_reliable() => {
             tracing::info!("mmo_quic: reliable stream ready (stream={})", st.stream_id);
-            // Send ClientHello before storing — borrow st before the move.
-            if !*hello_sent {
-                let hello = encode_client_hello("GodotPlayer");
-                if let Err(e) = peer.send(&conn, &st, Bytes::from(hello)) {
-                    tracing::error!("mmo_quic: failed to send ClientHello: {e}");
+
+            if !*register_sent {
+                let packet = encode_register_client(client_id, username);
+
+                if packet.is_empty() {
+                    tracing::error!(
+                        "mmo_quic: RegisterClient packet was empty for client_id={} username={}",
+                        client_id,
+                        username
+                    );
+                } else if let Err(e) = peer.send(&conn, &st, Bytes::from(packet)) {
+                    tracing::error!("mmo_quic: failed to send RegisterClient: {e}");
                 } else {
-                    *hello_sent = true;
-                    tracing::info!("mmo_quic: ClientHello sent");
+                    *register_sent = true;
+                    tracing::info!(
+                        "mmo_quic: RegisterClient sent client_id={} username={}",
+                        client_id,
+                        username
+                    );
                 }
             }
+
             *stream = Some(st);
         }
 
@@ -345,12 +606,12 @@ fn handle_event(
             tracing::warn!("mmo_quic: disconnected");
             *connection = None;
             *stream     = None;
-            *hello_sent = false;
+            *register_sent = false;
         }
 
         GameNetworkEvent::StreamClosed(_, _) => {
             *stream     = None;
-            *hello_sent = false;
+            *register_sent = false;
         }
 
         GameNetworkEvent::Error { inner, .. } => {

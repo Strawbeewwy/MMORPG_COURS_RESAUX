@@ -1,72 +1,80 @@
 [gd_scene load_steps=2 format=3 uid="uid://debug_hud"]
-
 [ext_resource type="Script" path="res://scenes/ui/debug_hud.gd" id="1"]
-
 [node name="DebugHUD" type="CanvasLayer"]
 layer = 10
 script = ExtResource("1")
-
 [node name="Panel" type="PanelContainer" parent="."]
 offset_left = 8.0
 offset_top = 8.0
 offset_right = 280.0
-offset_bottom = 160.0
+offset_bottom = 260.0
 modulate = Color(1, 1, 1, 0.85)
-
 [node name="VBox" type="VBoxContainer" parent="Panel"]
 theme_override_constants/separation = 4
-
 [node name="Title" type="Label" parent="Panel/VBox"]
 text = "Network Debug"
 theme_override_font_sizes/font_size = 11
 horizontal_alignment = 1
-
 [node name="StatusRow" type="HBoxContainer" parent="Panel/VBox"]
-
 [node name="StatusKey" type="Label" parent="Panel/VBox/StatusRow"]
 text = "Status   "
 theme_override_font_sizes/font_size = 11
-
 [node name="StatusValue" type="Label" parent="Panel/VBox/StatusRow"]
 text = "..."
 theme_override_font_sizes/font_size = 11
-
 [node name="PosRow" type="HBoxContainer" parent="Panel/VBox"]
-
 [node name="PosKey" type="Label" parent="Panel/VBox/PosRow"]
 text = "Position "
 theme_override_font_sizes/font_size = 11
-
 [node name="PosValue" type="Label" parent="Panel/VBox/PosRow"]
 text = "0 , 0"
 theme_override_font_sizes/font_size = 11
-
 [node name="ShardRow" type="HBoxContainer" parent="Panel/VBox"]
-
 [node name="ShardKey" type="Label" parent="Panel/VBox/ShardRow"]
 text = "Shard    "
 theme_override_font_sizes/font_size = 11
-
 [node name="ShardValue" type="Label" parent="Panel/VBox/ShardRow"]
 text = "-"
 theme_override_font_sizes/font_size = 11
-
 [node name="EntitiesRow" type="HBoxContainer" parent="Panel/VBox"]
-
 [node name="EntitiesKey" type="Label" parent="Panel/VBox/EntitiesRow"]
 text = "Entities "
 theme_override_font_sizes/font_size = 11
-
 [node name="EntitiesValue" type="Label" parent="Panel/VBox/EntitiesRow"]
 text = "0"
 theme_override_font_sizes/font_size = 11
-
 [node name="RateRow" type="HBoxContainer" parent="Panel/VBox"]
-
 [node name="RateKey" type="Label" parent="Panel/VBox/RateRow"]
 text = "Outbound "
 theme_override_font_sizes/font_size = 11
-
 [node name="RateValue" type="Label" parent="Panel/VBox/RateRow"]
 text = "0 pkt/s"
+theme_override_font_sizes/font_size = 11
+[node name="EnemiesRow" type="HBoxContainer" parent="Panel/VBox"]
+[node name="EnemiesKey" type="Label" parent="Panel/VBox/EnemiesRow"]
+text = "Enemies  "
+theme_override_font_sizes/font_size = 11
+[node name="EnemiesValue" type="Label" parent="Panel/VBox/EnemiesRow"]
+text = "0"
+theme_override_font_sizes/font_size = 11
+[node name="ProjRow" type="HBoxContainer" parent="Panel/VBox"]
+[node name="ProjKey" type="Label" parent="Panel/VBox/ProjRow"]
+text = "Projectil"
+theme_override_font_sizes/font_size = 11
+[node name="ProjValue" type="Label" parent="Panel/VBox/ProjRow"]
+text = "0"
+theme_override_font_sizes/font_size = 11
+[node name="TeamRow" type="HBoxContainer" parent="Panel/VBox"]
+[node name="TeamKey" type="Label" parent="Panel/VBox/TeamRow"]
+text = "Team     "
+theme_override_font_sizes/font_size = 11
+[node name="TeamValue" type="Label" parent="Panel/VBox/TeamRow"]
+text = "-"
+theme_override_font_sizes/font_size = 11
+[node name="ScoreRow" type="HBoxContainer" parent="Panel/VBox"]
+[node name="ScoreKey" type="Label" parent="Panel/VBox/ScoreRow"]
+text = "Score    "
+theme_override_font_sizes/font_size = 11
+[node name="ScoreValue" type="Label" parent="Panel/VBox/ScoreRow"]
+text = "0"
 theme_override_font_sizes/font_size = 11

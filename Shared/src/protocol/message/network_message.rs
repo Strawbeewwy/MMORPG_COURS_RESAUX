@@ -28,6 +28,9 @@ pub enum NetworkMessage {
     RegisterShard {// a shard registers itself with the broker
         shard_id: ShardId,
     },
+    UnregisterShard {// broker notifies that a shard disconnected
+        shard_id: ShardId,
+    },
     RegisterClient {
         client_id: ClientId,
         username: Username,

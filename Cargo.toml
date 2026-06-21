@@ -5,7 +5,6 @@ members = [
     "Launcher",
     "GameServer",
     "Orchestrator",
-    "GameClient",
     "SpatialService",
     "Broker",
     # GodotClient/ has its own workspace — build it from GodotClient/ with `cargo xtask <cmd>`

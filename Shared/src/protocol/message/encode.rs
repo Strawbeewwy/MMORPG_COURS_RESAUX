@@ -22,6 +22,9 @@ pub fn encode_message(
         NetworkMessage::RegisterShard { shard_id } => {
             encode_register_shard(Topic::ShardInstance{id:*shard_id})
         }
+        NetworkMessage::UnregisterShard { shard_id } => {
+            encode_unregister_shard(Topic::ShardInstance{id:*shard_id})
+        }
         NetworkMessage::RegisterSpatialService => {
             encode_register_spatial_service()
         }
@@ -212,6 +215,17 @@ fn encode_register_shard(
     let mut packet = Vec::with_capacity(TAG_LEN + TOPIC_LEN);
 
     write_u8(&mut packet, TAG_REGISTER_SHARD);
+    topic.encode_binary(&mut packet)?;
+
+    Ok(packet)
+}
+
+fn encode_unregister_shard(
+    topic: Topic
+) -> anyhow::Result<Vec<u8>> {
+    let mut packet = Vec::with_capacity(TAG_LEN + TOPIC_LEN);
+
+    write_u8(&mut packet, TAG_UNREGISTER_SHARD);
     topic.encode_binary(&mut packet)?;
 
     Ok(packet)

@@ -17,6 +17,5 @@ response to the login request
 */
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LoginHttpResponse {
-    pub player_id: String,
-    pub server: ServerInfo,
+    pub client_id: u32,
 }

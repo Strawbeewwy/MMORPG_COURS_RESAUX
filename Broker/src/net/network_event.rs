@@ -1,11 +1,13 @@
 use crate::net::message_handler::handle_message;
-use crate::net::peer_roles::{PeerRoles};
-use crate::pubsub::state::PubSubState;
+use crate::net::peer_roles::{PeerRole, PeerRoles};
+use crate::pubsub::state::{ConnectionStream, PubSubState};
 use shared::game_sockets::protocols::QuicBackend;
 use shared::game_sockets::{
     GameConnection, GameNetworkEvent, GamePeer, GameStream, GameStreamReliability,
 };
 use std::collections::HashMap;
+use shared::{encode_message, NetworkMessage, Topic};
+use crate::net::relay::relay_to_spatial_services;
 
 pub struct BrokerNetwork {
     peer: GamePeer,
@@ -50,7 +52,7 @@ impl BrokerNetwork {
     ) {
         match event {
             GameNetworkEvent::Connected(connection) => {
-                tracing::info!("peer connected to utils: {}", connection.connection_id);
+                tracing::info!("peer connected to broker: {}", connection.connection_id);
 
                 if let Err(error) = self
                     .peer
@@ -67,14 +69,47 @@ impl BrokerNetwork {
             GameNetworkEvent::Disconnected(connection) => {
                 tracing::info!("peer disconnected from utils: {}", connection.connection_id);
 
-                let stream  = self.reliable_streams.remove(&connection);
+                let stream = self.reliable_streams.remove(&connection);
                 let peer_role = self.peer_roles.remove(connection);
-                state.remove_connection(peer_role.unwrap(),connection, stream.unwrap());
+
+                if let (Some(PeerRole::Shard), Some(stream)) = (peer_role, stream.clone()) {
+                    let connection_stream = ConnectionStream {
+                        connection,
+                        stream: stream.clone(),
+                    };
+
+                    if let Some(topic) = state.get_shard_by_connection_stream(&connection_stream).copied() {
+                        if let Topic::ShardInstance { id: shard_id } = topic {
+                            if let Ok(packet) =
+                                encode_message(&NetworkMessage::UnregisterShard { shard_id })
+                            {
+                                relay_to_spatial_services(&self.peer, state, &packet);
+                            }
+                        }
+                    }
+                }
+
+                match (peer_role, stream) {
+                    (Some(role), Some(s)) => state.remove_connection(role, connection, s),
+                    (None, _) => {
+                        tracing::warn!(
+                                "disconnected connection {} had no registered role",
+                                connection.connection_id
+                            );
+                    }
+                    (Some(role), None) => {
+                        tracing::warn!(
+                                "disconnected connection {} role {:?} had no reliable stream",
+                                connection.connection_id,
+                                role
+                            );
+                    }
+                }
             }
 
             GameNetworkEvent::StreamCreated(connection, stream) => {
                 tracing::info!(
-                    "utils stream created: connection={} stream={}",
+                    "broker stream created: connection={} stream={}",
                     connection.connection_id,
                     stream.stream_id
                 );
@@ -86,7 +121,7 @@ impl BrokerNetwork {
 
             GameNetworkEvent::StreamClosed(connection, stream) => {
                 tracing::info!(
-                    "utils stream closed: connection={} stream={}",
+                    "broker stream closed: connection={} stream={}",
                     connection.connection_id,
                     stream.stream_id
                 );
@@ -111,7 +146,7 @@ impl BrokerNetwork {
 
             GameNetworkEvent::Error { connection, inner } => {
                 tracing::warn!(
-                    "utils socket error on connection {}: {}",
+                    "broker socket error on connection {}: {}",
                     connection.connection_id,
                     inner
                 );

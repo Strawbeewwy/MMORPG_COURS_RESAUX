@@ -40,5 +40,7 @@ pub const DEFAULT_CROSSING_MARGIN: f32 = 50.0;
 pub const DEFAULT_WORLD_HALF_SIZE: f32 = 1000.0;
 /// Maximum Quad Tree subdivision depth.
 pub const DEFAULT_QUAD_TREE_MAX_DEPTH: u8 = 4;
+/// Area of Interest radius (world units) for filtering entity updates.
+pub const DEFAULT_AOI_RADIUS: f32 = 250.0;
 
 pub const DEFAULT_DEBUG_PASSWORD: &str = "1234";

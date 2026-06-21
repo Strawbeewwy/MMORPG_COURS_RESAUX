@@ -905,6 +905,7 @@ dependencies = [
  "anyhow",
  "bytes",
  "godot",
+ "serde",
  "shared",
  "tokio",
  "tracing",
