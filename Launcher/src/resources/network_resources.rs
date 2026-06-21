@@ -31,10 +31,7 @@ pub enum LoginStatus {
     Idle,
     LoggingIn,
     Success {
-        player_id: String,
-        server_ip: String,
-        server_port: u16,
-        zone: String,
+        client_id: String,
         username: String,
     },
     Error {
