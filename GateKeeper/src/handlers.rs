@@ -7,7 +7,8 @@ use shared::protocol::{ErrorResponse, HealthResponse, LoginHttpRequest, LoginHtt
 use shared::config::DEFAULT_DEBUG_PASSWORD;
 use anyhow::Result;
 use std::sync::Arc;
-use uuid::Uuid;
+use shared::{DEFAULT_BROKER_HOST, DEFAULT_BROKER_PORT};
+use crate::broker_client::register_client_with_broker;
 
 pub async fn health_handler() -> Json<HealthResponse> {
     Json(HealthResponse {
@@ -49,8 +50,42 @@ pub async fn login_handler(
             )
         })?;
 
+    let username = request.username.clone();
+
+    let client_id = tokio::task::spawn_blocking(move || {
+        let broker_host =
+            std::env::var("BROKER_HOST").unwrap_or_else(|_| DEFAULT_BROKER_HOST.to_string());
+
+        let broker_port = std::env::var("BROKER_PORT")
+            .ok()
+            .and_then(|port| port.parse::<u16>().ok())
+            .unwrap_or(DEFAULT_BROKER_PORT);
+
+        register_client_with_broker(&broker_host, broker_port, &username)
+    })
+        .await
+        .map_err(|error| {
+            tracing::error!("failed to join Broker registration task: {error}");
+
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "Internal server error".to_string(),
+                }),
+            )
+        })?
+        .map_err(|error| {
+            tracing::error!("failed to register client with Broker: {error:?}");
+
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse {
+                    error: "Broker unavailable".to_string(),
+                }),
+            )
+        })?;
+
     Ok(Json(LoginHttpResponse {
-        player_id: Uuid::new_v4().to_string(),
-        server,
+        client_id: client_id.0,
     }))
 }

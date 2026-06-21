@@ -79,6 +79,31 @@ pub fn encode_client_hello(username: &str) -> Vec<u8> {
     packet
 }
 
+
+
+pub fn encode_register_client(client_id: u32, username: &str) -> Vec<u8> {
+    let username: Username = Arc::from(username.to_string());
+
+    let packet = match encode_message(&NetworkMessage::RegisterClient {
+        client_id: ClientId(client_id),
+        username: username.clone(),
+    }) {
+        Ok(packet) => packet,
+        Err(error) => {
+            tracing::warn!(
+                "failed to encode RegisterClient for client_id={} username={}: {}",
+                client_id,
+                username,
+                error
+            );
+            return Vec::new();
+        }
+    };
+
+    packet
+}
+
+
 /// Encode a ClientInput packet (TAG_CLIENT_INPUT) with movement x/y.
 /// Matches `encode_movement_input` in GameClient/src/net/input.rs.
 pub fn encode_client_input(client_id: u32, x: f32, y: f32) -> Vec<u8> {
@@ -245,18 +270,34 @@ pub struct NetworkClient {
     inbox:     Inbox,
     outbox:    Outbox,
     client_id: u32,
+    username: String,
     server_addr: String,
 }
 
 #[godot_api]
 impl INode for NetworkClient {
     fn init(base: Base<Node>) -> Self {
+        let broker_host = std::env::var("BROKER_HOST")
+            .unwrap_or_else(|_| "127.0.0.1".to_string());
+
+        let broker_port = std::env::var("BROKER_PORT")
+            .unwrap_or_else(|_| "9600".to_string());
+
+        let client_id = std::env::var("CLIENT_ID")
+            .ok()
+            .and_then(|value| value.parse::<u32>().ok())
+            .unwrap_or(0);
+
+        let username = std::env::var("USERNAME")
+            .unwrap_or_else(|_| "GodotPlayer".to_string());
+
         Self {
             base,
             inbox:  Arc::new(Mutex::new(Vec::new())),
             outbox: Arc::new(Mutex::new(Vec::new())),
-            client_id: 0,
-            server_addr: "127.0.0.1:9600".to_string(),
+            client_id,
+            username,
+            server_addr: format!("{broker_host}:{broker_port}"),
         }
     }
 
@@ -264,6 +305,8 @@ impl INode for NetworkClient {
         let inbox  = self.inbox.clone();
         let outbox = self.outbox.clone();
         let addr   = self.server_addr.clone();
+        let client_id = self.client_id;
+        let username = self.username.clone();
 
         std::thread::Builder::new()
             .name("mmo_quic".into())
@@ -274,12 +317,17 @@ impl INode for NetworkClient {
                     .build()
                     .expect("tokio rt")
                     .block_on(async {
-                        poll_loop(addr, inbox, outbox).await;
+                        poll_loop(addr, client_id, username, inbox, outbox).await;
                     });
             })
             .expect("spawn mmo_quic thread");
 
-        tracing::info!("NetworkClient ready — broker {}", self.server_addr);
+        tracing::info!(
+            "NetworkClient ready — broker {} client_id={} username={}",
+            self.server_addr,
+            self.client_id,
+            self.username
+        );
     }
 
     /// Pump inbox into Godot signals each frame.
@@ -424,7 +472,13 @@ impl NetworkClient {
 
 // ── Background QUIC poll loop ──────────────────────────────────────────────────
 
-async fn poll_loop(addr: String, inbox: Inbox, outbox: Outbox) {
+async fn poll_loop(
+    addr: String,
+    client_id: u32,
+    username: String,
+    inbox: Inbox,
+    outbox: Outbox,
+) {
     let host_port: Vec<&str> = addr.rsplitn(2, ':').collect();
     let (port, host) = match host_port.as_slice() {
         [p, h] => (p.parse::<u16>().unwrap_or(9600), *h),
@@ -436,7 +490,7 @@ async fn poll_loop(addr: String, inbox: Inbox, outbox: Outbox) {
 
     let mut backoff = Duration::from_secs(1);
     loop {
-        match try_connect_and_run(host, port, &inbox, &outbox).await {
+        match try_connect_and_run(host, port, client_id, &username, &inbox, &outbox).await {
             Ok(()) => tracing::warn!("mmo_quic: disconnected from broker — reconnecting"),
             Err(e) => tracing::error!("mmo_quic: connection error: {e} — retry in {backoff:?}"),
         }
@@ -448,6 +502,8 @@ async fn poll_loop(addr: String, inbox: Inbox, outbox: Outbox) {
 async fn try_connect_and_run(
     host:   &str,
     port:   u16,
+    client_id: u32,
+    username: &str,
     inbox:  &Inbox,
     outbox: &Outbox,
 ) -> anyhow::Result<()> {
@@ -458,14 +514,15 @@ async fn try_connect_and_run(
     let mut peer = peer;
     let mut connection: Option<GameConnection> = None;
     let mut stream:     Option<GameStream> = None;
-    let mut hello_sent = false;
+    let mut register_sent = false;
 
     loop {
         loop {
             match peer.poll() {
                 Ok(Some(event)) => handle_event(
                     &mut peer, event,
-                    &mut connection, &mut stream, &mut hello_sent,
+                    client_id, username,
+                    &mut connection, &mut stream, &mut register_sent,
                     inbox,
                 ),
                 Ok(None) => break,
@@ -495,9 +552,11 @@ async fn try_connect_and_run(
 fn handle_event(
     peer:        &mut GamePeer,
     event:       GameNetworkEvent,
+    client_id:   u32,
+    username:    &str,
     connection:  &mut Option<GameConnection>,
     stream:      &mut Option<GameStream>,
-    hello_sent:  &mut bool,
+    register_sent: &mut bool,
     inbox:       &Inbox,
 ) {
     match event {
@@ -512,16 +571,28 @@ fn handle_event(
 
         GameNetworkEvent::StreamCreated(conn, st) if st.is_reliable() => {
             tracing::info!("mmo_quic: reliable stream ready (stream={})", st.stream_id);
-            // Send ClientHello before storing — borrow st before the move.
-            if !*hello_sent {
-                let hello = encode_client_hello("GodotPlayer");
-                if let Err(e) = peer.send(&conn, &st, Bytes::from(hello)) {
-                    tracing::error!("mmo_quic: failed to send ClientHello: {e}");
+
+            if !*register_sent {
+                let packet = encode_register_client(client_id, username);
+
+                if packet.is_empty() {
+                    tracing::error!(
+                        "mmo_quic: RegisterClient packet was empty for client_id={} username={}",
+                        client_id,
+                        username
+                    );
+                } else if let Err(e) = peer.send(&conn, &st, Bytes::from(packet)) {
+                    tracing::error!("mmo_quic: failed to send RegisterClient: {e}");
                 } else {
-                    *hello_sent = true;
-                    tracing::info!("mmo_quic: ClientHello sent");
+                    *register_sent = true;
+                    tracing::info!(
+                        "mmo_quic: RegisterClient sent client_id={} username={}",
+                        client_id,
+                        username
+                    );
                 }
             }
+
             *stream = Some(st);
         }
 
@@ -535,12 +606,12 @@ fn handle_event(
             tracing::warn!("mmo_quic: disconnected");
             *connection = None;
             *stream     = None;
-            *hello_sent = false;
+            *register_sent = false;
         }
 
         GameNetworkEvent::StreamClosed(_, _) => {
             *stream     = None;
-            *hello_sent = false;
+            *register_sent = false;
         }
 
         GameNetworkEvent::Error { inner, .. } => {
