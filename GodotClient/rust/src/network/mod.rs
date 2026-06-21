@@ -163,8 +163,8 @@ fn decode(data: &[u8]) -> Option<IncomingEvent> {
         NetworkMessage::ClientAccepted { client_id } => {
             Some(IncomingEvent::ClientAccepted { client_id: client_id.0 })
         }
-        NetworkMessage::Broadcast {payload,payload_len} =>{
-            Some(IncomingEvent::Broadcast {payload})
+        NetworkMessage::Broadcast { payload, payload_len: _ } => {
+            Some(IncomingEvent::Broadcast { payload })
         }
         _ => {
             tracing::debug!("mmo_client: ignoring message {:?}", message);
@@ -223,13 +223,12 @@ fn decode_world_update(update: shared::protocol::WorldUpdate) -> Option<Incoming
                 score,
             })
         }
-        // Legacy variants — forward as raw broadcast.
-        legacy => {
-            if let Ok(payload) = shared::protocol::http::codec::encode(&legacy) {
-                Some(IncomingEvent::Broadcast { payload: payload.to_vec() })
-            } else {
-                None
-            }
+        // Unimplemented variants — ignored for now
+        WorldUpdate::Snapshot { .. }
+        | WorldUpdate::PlayerJoined { .. }
+        | WorldUpdate::PlayerLeft { .. } => {
+            tracing::debug!("mmo_client: ignoring WorldUpdate variant");
+            None
         }
     }
 }
