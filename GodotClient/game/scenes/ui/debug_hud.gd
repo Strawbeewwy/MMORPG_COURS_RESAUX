@@ -25,7 +25,21 @@ func _ready() -> void:
 	_set_status(false)
 
 func _process(delta: float) -> void:
+	# Check network connection status
+	var net = get_node_or_null("/root/NetworkClient")
+	if net:
+		var client_id = net.get_client_id()
+		if client_id > 0:
+			_set_status(true)
+		else:
+			_set_status(false)
+	
+	# Get local player (network_player instead of local_player)
 	var player = get_tree().get_first_node_in_group("local_player")
+	if not player:
+		# Try to find NetworkPlayer
+		player = get_node_or_null("../NetworkPlayer")
+	
 	if player:
 		_last_pos = player.global_position
 		_pos_label.text = "%.0f , %.0f" % [_last_pos.x, _last_pos.y]
@@ -36,19 +50,23 @@ func _process(delta: float) -> void:
 			_team_label.modulate = Color(1, 0.3, 0.3) if t_team == 0 else Color(0.3, 0.6, 1)
 		if player.has_method("get_score"):
 			_score_label.text = str(player.get_score())
+	
 	_rate_timer += delta
 	if _rate_timer >= 1.0:
 		_send_rate = _sends_this_second
 		_sends_this_second = 0
 		_rate_timer = 0.0
 	_rate_label.text = "%d pkt/s" % _send_rate
+	
 	var registry = get_tree().get_first_node_in_group("entity_registry")
 	if registry and registry.has_method("get_entity_count"):
 		_remote_count = registry.get_entity_count()
 	_entities_label.text = str(_remote_count)
+	
 	var enemy_renderer = get_tree().get_first_node_in_group("enemy_renderer")
 	if enemy_renderer and enemy_renderer.has_method("get_enemy_count"):
 		_enemies_label.text = str(enemy_renderer.get_enemy_count())
+	
 	var proj_mgr = get_tree().get_first_node_in_group("projectile_manager")
 	if proj_mgr and proj_mgr.has_method("get_projectile_count"):
 		_proj_label.text = str(proj_mgr.get_projectile_count())

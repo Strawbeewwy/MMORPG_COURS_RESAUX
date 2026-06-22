@@ -7,6 +7,7 @@ use shared::{NetVec2, ShardId};
 use shared::protocol::{Topic, decode_message, encode_message, NetworkMessage};
 use crate::messages::{HandoffRequestMsg, PositionUpdateMsg};
 use crate::net::orchestrator_client::{maybe_request_stop_shard_if_drained, split_overloaded_shard_if_needed};
+use crate::resources::client_map::ClientMap;
 use crate::resources::entity_map::{EntityMap, EntityTransferState, SpatialEntityRecord};
 use crate::resources::handoff_queue::PendingHandoffs;
 use crate::resources::net_handles::{BrokerClient, BrokerConnectionState, OrchestratorClient};
@@ -16,6 +17,7 @@ use crate::resources::quad_tree::QuadTree;
 pub fn poll_broker_connection(
     mut broker: ResMut<BrokerClient>,
     mut entity_map: ResMut<EntityMap>,
+    mut client_map: ResMut<ClientMap>,
     mut ev_writer: MessageWriter<PositionUpdateMsg>,
     mut ev_handoffs: MessageWriter<HandoffRequestMsg>,
     mut quad_tree: ResMut<QuadTree>,
@@ -31,6 +33,7 @@ pub fn poll_broker_connection(
                     &mut ev_writer,
                     &mut ev_handoffs,
                     &mut entity_map,
+                    &mut client_map,
                     &mut quad_tree,
                     &mut orchestrator,
                     &mut pending_handoffs,
@@ -51,6 +54,7 @@ fn handle_broker_event(
     ev_writer: &mut MessageWriter<PositionUpdateMsg>,
     ev_handoffs: &mut MessageWriter<HandoffRequestMsg>,
     entity_map: &mut EntityMap,
+    client_map: &mut ClientMap,
     quad_tree: &mut QuadTree,
     orchestrator: &mut OrchestratorClient,
     pending_handoffs: &mut PendingHandoffs,
@@ -117,6 +121,7 @@ fn handle_broker_event(
                 ev_writer,
                 ev_handoffs,
                 entity_map,
+                client_map,
                 quad_tree,
                 broker,
                 orchestrator,
@@ -134,6 +139,7 @@ pub fn handle_broker_message(
     ev_writer: &mut MessageWriter<PositionUpdateMsg>,
     ev_handoffs: &mut MessageWriter<HandoffRequestMsg>,
     entity_map: &mut EntityMap,
+    client_map: &mut ClientMap,
     quad_tree: &mut QuadTree,
     broker: &mut BrokerClient,
     orchestrator: &mut OrchestratorClient,
@@ -183,6 +189,38 @@ pub fn handle_broker_message(
                 x: f64::from(position.x),
                 y: f64::from(position.y),
             });
+
+            // Relay PositionUpdate to subscribed clients
+            if let Some(entity_record) = entity_map.get(entity_id) {
+                let shard_id = entity_record.current_shard;
+                let subscribed_clients = client_map.get_clients_subscribed_to_shard(shard_id);
+                
+                for subscriber_client_id in subscribed_clients {
+                    let notify_msg = NetworkMessage::Publish {
+                        topic: Topic::Client { id: subscriber_client_id },
+                        payload_len: 0,
+                        payload: {
+                            let pos_msg = NetworkMessage::PositionUpdate {
+                                entity_id,
+                                position,
+                            };
+                            match encode_message(&pos_msg) {
+                                Ok(encoded) => encoded,
+                                Err(e) => {
+                                    tracing::error!("Failed to encode PositionUpdate for client {}: {}", subscriber_client_id.0, e);
+                                    continue;
+                                }
+                            }
+                        },
+                    };
+                    
+                    if let Ok(packet) = encode_message(&notify_msg) {
+                        if let Err(e) = broker.handle.send(packet) {
+                            tracing::debug!("Failed to relay PositionUpdate to client {}: {}", subscriber_client_id.0, e);
+                        }
+                    }
+                }
+            }
         }
         NetworkMessage::RegisterEntity {entity_id, client_id, position} => {
 
@@ -207,6 +245,43 @@ pub fn handle_broker_message(
                 subscribed_shards,
             };
             entity_map.insert(entity_id, record);
+
+            // Notify all clients subscribed to this shard about the new entity
+            let subscribed_clients = client_map.get_clients_subscribed_to_shard(shard);
+            for subscriber_client_id in subscribed_clients {
+                let notify_msg = NetworkMessage::Publish {
+                    topic: Topic::Client { id: subscriber_client_id },
+                    payload_len: 0, // Will be calculated during encoding
+                    payload: {
+                        // Create a RegisterEntity message to send to the client
+                        let entity_msg = NetworkMessage::RegisterEntity {
+                            entity_id,
+                            client_id,
+                            position,
+                        };
+                        match encode_message(&entity_msg) {
+                            Ok(encoded) => encoded,
+                            Err(e) => {
+                                tracing::error!("Failed to encode RegisterEntity for client {}: {}", subscriber_client_id.0, e);
+                                continue;
+                            }
+                        }
+                    },
+                };
+                
+                if let Ok(packet) = encode_message(&notify_msg) {
+                    if let Err(e) = broker.handle.send(packet) {
+                        tracing::warn!("Failed to notify client {} of entity spawn: {}", subscriber_client_id.0, e);
+                    }
+                } else {
+                    tracing::error!("Failed to encode Publish message for client {}", subscriber_client_id.0);
+                }
+            }
+
+            tracing::info!(
+                "RegisterEntity: entity {} (client {}) spawned at shard {}, notified {} clients",
+                entity_id.0, client_id.0, shard.0, subscribed_clients.len()
+            );
 
             let shard_count = entity_map.shard_count(shard);
 
@@ -320,6 +395,9 @@ pub fn handle_broker_message(
                 return;
             };
 
+            // Register client in ClientMap for tracking
+            client_map.register_client_shard(client_id, shard_id);
+
             let packet = match encode_message(&NetworkMessage::Subscribe {
                 client_id,
                 topic: Topic::ShardInstance { id: shard_id },
@@ -345,6 +423,9 @@ pub fn handle_broker_message(
                         );
                 return;
             }
+            
+            tracing::info!("RegisterClient: client {} (username: {}) subscribed to shard {}",
+                client_id.0, username, shard_id.0);
         }
         _ => {}
     }

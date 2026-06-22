@@ -4,14 +4,11 @@
 [ext_resource type="PackedScene" path="res://scenes/levels/test_level.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://scenes/ui/debug_hud.tscn" id="3"]
 [ext_resource type="Script" uid="uid://b4eseavoq8alp" path="res://scenes/ui/shard_boundary_debug.gd" id="4"]
-[ext_resource type="PackedScene" path="res://scenes/gameplay/player_local.tscn" id="5"]
+[ext_resource type="PackedScene" path="res://scenes/gameplay/network_player.tscn" id="5"]
 [ext_resource type="Script" uid="uid://dqi3fo1nwovl8" path="res://scenes/gameplay/enemy_renderer.gd" id="6"]
 [ext_resource type="Script" uid="uid://dpvhhyxc8763o" path="res://scenes/gameplay/projectile_manager.gd" id="7"]
 [ext_resource type="Script" uid="uid://csfe67u0jjq7w" path="res://scenes/ui/color_swap_hud.gd" id="8"]
-[ext_resource type="PackedScene" path="res://scenes/gameplay/enemy.tscn" id="8_q5onr"]
 [ext_resource type="Script" uid="uid://bp4742re333q" path="res://scenes/gameplay/color_swap.gd" id="9"]
-[ext_resource type="Script" uid="uid://crsy2t5odbbb6" path="res://scenes/gameplay/local_enemy_spawner.gd" id="10"]
-[ext_resource type="PackedScene" path="res://scenes/gameplay/projectile.tscn" id="10_jhx03"]
 
 [node name="World" type="Node2D" unique_id=1217310598]
 
@@ -23,6 +20,9 @@ script = ExtResource("4")
 [node name="EntityRegistry" type="Node2D" parent="." unique_id=709867117]
 script = ExtResource("1")
 
+[node name="NetworkPlayer" parent="." unique_id=1369306630 instance=ExtResource("5")]
+position = Vector2(640, 360)
+
 [node name="EnemyRenderer" type="Node2D" parent="." unique_id=234224152]
 script = ExtResource("6")
 
@@ -31,14 +31,6 @@ script = ExtResource("7")
 
 [node name="ColorSwap" type="Node" parent="." unique_id=879248730]
 script = ExtResource("9")
-
-[node name="LocalEnemySpawner" type="Node" parent="." unique_id=729102377]
-script = ExtResource("10")
-enemy_scene = ExtResource("8_q5onr")
-
-[node name="LocalPlayer" parent="." unique_id=1369306630 instance=ExtResource("5")]
-position = Vector2(640, 360)
-projectile_scene = ExtResource("10_jhx03")
 
 [node name="DebugHUD" parent="." unique_id=1087859414 instance=ExtResource("3")]
 

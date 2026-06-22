@@ -3,10 +3,68 @@ use bytes::Bytes;
 use game_sockets::{
     GameConnection, GameStream, GamePeer
 };
-use shared::{decode_message, NetworkMessage};
+use shared::{decode_message, encode_message, NetworkMessage, Topic};
 use crate::net::peer_roles::{PeerRole, PeerRoles};
 
 pub fn relay_to_client(
+    peer: &GamePeer,
+    state: &mut PubSubState,
+    connection: &GameConnection,
+    stream: &GameStream,
+    data: &[u8],
+) {
+    // First, check if this is a Publish message with Topic::Client
+    let message = match decode_message(data) {
+        Ok(msg) => msg,
+        Err(e) => {
+            tracing::warn!("Failed to decode message in relay_to_client: {}", e);
+            // Fallback to old behavior
+            relay_shard_to_subscribers(peer, state, connection, stream, data);
+            return;
+        }
+    };
+
+    if let NetworkMessage::Publish { topic, payload, .. } = message {
+        match topic {
+            Topic::Client { id: target_client_id } => {
+                // Direct message to a specific client
+                if let Some(client_connection_stream) = state.get_connection_stream_by_client_id(&target_client_id) {
+                    // Wrap payload in Broadcast message for client
+                    let broadcast_msg = NetworkMessage::Broadcast {
+                        payload_len: payload.len() as u16,
+                        payload,
+                    };
+                    
+                    if let Ok(packet) = encode_message(&broadcast_msg) {
+                        if let Err(e) = peer.send(
+                            &client_connection_stream.connection,
+                            &client_connection_stream.stream,
+                            Bytes::from(packet)
+                        ) {
+                            tracing::warn!(
+                                "Failed to relay message to client {}: {}",
+                                target_client_id.0, e
+                            );
+                        } else {
+                            tracing::debug!("Relayed message to client {}", target_client_id.0);
+                        }
+                    }
+                } else {
+                    tracing::debug!("Cannot relay to client {}: not connected", target_client_id.0);
+                }
+            }
+            _ => {
+                // ShardInstance or other topics - use old behavior
+                relay_shard_to_subscribers(peer, state, connection, stream, data);
+            }
+        }
+    } else {
+        // Not a Publish message - use old behavior
+        relay_shard_to_subscribers(peer, state, connection, stream, data);
+    }
+}
+
+fn relay_shard_to_subscribers(
     peer: &GamePeer,
     state: &mut PubSubState,
     connection: &GameConnection,

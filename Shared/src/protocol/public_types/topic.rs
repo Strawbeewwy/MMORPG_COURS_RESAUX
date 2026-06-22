@@ -1,5 +1,5 @@
 use std::hash::{Hash, Hasher};
-use crate::protocol::{EntityId};
+use crate::protocol::{EntityId, ClientId};
 use crate::protocol::utils::utils::{
     BinaryDecode,
     BinaryEncode,
@@ -16,6 +16,7 @@ const TOPIC_CHAT: u8 = 0x02;
 const TOPIC_ZONE: u8 = 0x03;
 const TOPIC_SHARD_INSTANCE: u8 = 0x04;
 const TOPIC_ENTITY: u8 = 0x05;
+const TOPIC_CLIENT: u8 = 0x06;
 pub const TOPIC_ID_LEN: usize = size_of::<u32>();
 const TOPIC_HEADER_LEN: usize = size_of::<u8>() + TOPIC_ID_LEN;
 const TOPIC_PADDING_LEN: usize = TOPIC_LEN - TOPIC_HEADER_LEN;
@@ -42,6 +43,9 @@ pub enum Topic {
     Entity{
         id: EntityId,
     },
+    Client{
+        id: ClientId,
+    },
 }
 
 impl PartialEq for Topic{
@@ -52,6 +56,7 @@ impl PartialEq for Topic{
             (Topic::Chat { id: id1 }, Topic::Chat { id: id2 }) => id1 == id2,
             (Topic::Zone { id: id1 }, Topic::Zone { id: id2 }) => id1 == id2,
             (Topic::ShardInstance { id: id1 }, Topic::ShardInstance { id: id2 }) => id1 == id2,
+            (Topic::Client { id: id1 }, Topic::Client { id: id2 }) => id1 == id2,
             _ => false,
         }
     }
@@ -75,6 +80,9 @@ impl Hash for Topic {
             Topic::ShardInstance { id } => {
                 id.hash(id_to_h);
             }
+            Topic::Client { id } => {
+                id.hash(id_to_h);
+            }
         }
 
     }
@@ -88,6 +96,7 @@ impl Topic {
             Topic::Zone { id } => *id,
             Topic::ShardInstance { id } => id.0,
             Topic::Global { id } => *id,
+            Topic::Client { id } => id.0,
         }
     }
     pub fn to_string(&self) -> String {
@@ -97,6 +106,7 @@ impl Topic {
             Topic::Zone{id} => format!("sector_{}", id),
             Topic::ShardInstance{id} => format!("shard_{}", id.0),
             Topic::Entity { id } => {format!("entity_:{}", id.0)},
+            Topic::Client { id } => {format!("client_{}", id.0)},
         }
     }
 }
@@ -121,6 +131,10 @@ impl BinaryEncode for Topic {
             }
             Topic::Entity { id } => {
                 write_u8(output, TOPIC_ENTITY);
+                write_u32(output, id.0);
+            }
+            Topic::Client { id } => {
+                write_u8(output, TOPIC_CLIENT);
                 write_u32(output, id.0);
             }
         }
@@ -155,6 +169,9 @@ impl BinaryDecode for Topic {
             }),
             TOPIC_ENTITY => Ok(Topic::Entity{
                 id: EntityId(r_id)
+            }),
+            TOPIC_CLIENT => Ok(Topic::Client{
+                id: ClientId(r_id)
             }),
             unknown => anyhow::bail!("unknown topic kind: 0x{unknown:02x}"),
         }
