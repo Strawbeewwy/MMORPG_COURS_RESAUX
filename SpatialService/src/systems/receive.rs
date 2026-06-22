@@ -57,25 +57,48 @@ fn handle_broker_event(
 ) {
     match event {
         GameNetworkEvent::Connected(conn) => {
-            tracing::info!("connected to utils: {}", conn.connection_id);
+            tracing::info!("connected to broker: {}", conn.connection_id);
             broker.handle.connection = Some(conn);
             broker.handle.state = BrokerConnectionState::Connected;
             if let Err(e) = broker.handle.peer.create_stream(conn, GameStreamReliability::Reliable) {
-                tracing::error!("failed to create stream towards utils: {e}");
+                tracing::error!("failed to create stream towards broker: {e}");
             }
         }
         GameNetworkEvent::Disconnected(_conn) => {
-            tracing::warn!("utils connection lost — will reconnect next tick");
+            tracing::warn!("broker connection lost — will reconnect next tick");
             broker.handle.connection = None;
             broker.handle.stream = None;
             broker.handle.state = BrokerConnectionState::Disconnected;
             pending_handoffs.mark_all_disconnected();
         }
         GameNetworkEvent::StreamCreated(_conn, stream) => {
-            tracing::info!("utils stream ready");
+            tracing::info!("broker stream ready");
             broker.handle.stream = Some(stream);
             broker.handle.state = BrokerConnectionState::Ready;
             broker.handle.reset_backoff();
+
+
+            let packet = match encode_message(&NetworkMessage::RegisterSpatialService {
+            }) {
+                Ok(packet) => packet,
+                Err(error) => {
+                    tracing::warn!(
+                                "failed to encode register spatial: {}",
+                                error
+                            );
+                    return;
+                }
+            };
+
+            if let Err(error) = broker.handle.send(
+                packet
+            ) {
+                tracing::warn!(
+                            "failed to send subscribe to broker: {}",
+                            error
+                        );
+                return;
+            }
         }
         GameNetworkEvent::StreamClosed(_conn, _stream) => {
             broker.handle.stream = None;
@@ -83,7 +106,7 @@ fn handle_broker_event(
             pending_handoffs.mark_all_disconnected();
         }
         GameNetworkEvent::Error { connection, inner } => {
-            tracing::warn!("utils error on {}: {inner}", connection.connection_id);
+            tracing::warn!("broker error on {}: {inner}", connection.connection_id);
             broker.handle.state = BrokerConnectionState::Disconnected;
             pending_handoffs.mark_all_disconnected();
         }
@@ -287,6 +310,40 @@ pub fn handle_broker_message(
                     "HandoffCompleted: entity {} moved to shard {}",
                     entity_id.0, destination_shard
                 );
+            }
+        }
+        NetworkMessage::RegisterClient { client_id, username } => {
+            let spawn_position = Vec2::ZERO;
+
+            let Some(shard_id) = quad_tree.shard_for(spawn_position.x, spawn_position.y) else {
+                tracing::warn!("no shard found for spawn position {:?}", spawn_position);
+                return;
+            };
+
+            let packet = match encode_message(&NetworkMessage::Subscribe {
+                client_id,
+                topic: Topic::ShardInstance { id: shard_id },
+            }) {
+                Ok(packet) => packet,
+                Err(error) => {
+                    tracing::warn!(
+                                "failed to encode Subscribe for connection {}: {}",
+                                connection.connection_id,
+                                error
+                            );
+                    return;
+                }
+            };
+
+            if let Err(error) = broker.handle.send(
+                packet
+            ) {
+                tracing::warn!(
+                            "failed to send subscribe to connection {}: {}",
+                            connection.connection_id,
+                            error
+                        );
+                return;
             }
         }
         _ => {}

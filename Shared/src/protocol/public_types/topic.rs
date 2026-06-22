@@ -94,8 +94,8 @@ impl Topic {
         match self {
             Topic::Global {..}=> "global".to_string(),
             Topic::Chat{..} => "chat".to_string(),
-            Topic::Zone{id} => format!("sector_{:04}", id),
-            Topic::ShardInstance{id} => format!("shard_{:02}", id.0),
+            Topic::Zone{id} => format!("sector_{}", id),
+            Topic::ShardInstance{id} => format!("shard_{}", id.0),
             Topic::Entity { id } => {format!("entity_:{}", id.0)},
         }
     }

@@ -263,7 +263,7 @@ impl PubSubState {
                     .collect();
 
                 self.shard_streams_by_topic
-                    .retain(|_, connection_stream| connection_stream.connection == connection);
+                    .retain(|_, connection_stream| connection_stream.connection != connection);
 
                 for topic in removed_shard_topics {
                     self.remove_dead_shard_topic(topic);

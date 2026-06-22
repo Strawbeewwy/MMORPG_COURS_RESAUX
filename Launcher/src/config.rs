@@ -9,7 +9,7 @@ pub const DEFAULT_GC_BINARY: &str = "gameclient";
 // Godot Client Configuration
 // Path to the Godot executable relative to workspace root
 #[cfg(windows)]
-pub const GODOT_CLIENT_EXECUTABLE: &str = "GodotClient/game/.godot_bin/godot.exe";
+pub const GODOT_CLIENT_EXECUTABLE: &str = "GodotClient/.godot_bin/Godot_v4.6-stable_win64.exe";
 
 #[cfg(not(windows))]
 pub const GODOT_CLIENT_EXECUTABLE: &str = "GodotClient/game/.godot_bin/godot";

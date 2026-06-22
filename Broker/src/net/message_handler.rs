@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use crate::net::peer_roles::{
     PeerRole, PeerRoles
 };
@@ -12,6 +13,7 @@ use shared::protocol::*;
 pub fn handle_message(
     peer: &GamePeer,
     peer_roles: &mut PeerRoles,
+    reliable_streams: &HashMap<GameConnection, GameStream>,
     state: &mut PubSubState,
     connection: GameConnection,
     stream: GameStream,
@@ -29,9 +31,9 @@ pub fn handle_message(
         TAG_UNSUBSCRIBE => handle_unsubscribe_client(peer,peer_roles,state,&connection,&stream,&mut input),
         TAG_PUBLISH => relay_to_client(peer, state, &connection, &stream, data),
         TAG_CLIENT_INPUT => relay_client_input_to_shard(peer,state,&connection,&stream,data),
-        TAG_REGISTER_SHARD => handle_register_shard(peer,peer_roles,state,&connection,&stream,&mut input),
-        TAG_REGISTER_SPATIAL_SERVICE => handle_register_spatial_service(peer,peer_roles,state,&connection,&stream),
-        TAG_CLIENT_HELLO => handle_client_hello(peer,peer_roles,state,&connection,&stream,&mut input),
+        TAG_REGISTER_SHARD => handle_register_shard(peer,peer_roles,reliable_streams,state,&connection,&stream,&mut input),
+        TAG_REGISTER_SPATIAL_SERVICE => handle_register_spatial_service(peer,peer_roles,reliable_streams,state,&connection,&stream),
+        TAG_CLIENT_HELLO => handle_client_hello(peer,peer_roles,reliable_streams,state,&connection,&stream,&mut input),
         TAG_REQUEST_ENTITY_ID_BLOCK => handle_request_entity_id_block(peer, peer_roles, state, &connection, &stream, data),
         TAG_ENTITY_ID_BLOCK_ALLOCATED => relay_entity_id_block_allocated_to_shard(peer, state, &connection, &stream, data.clone()),
         TAG_POSITION_UPDATE => relay_to_spatial_services(peer,state,data),
@@ -43,18 +45,19 @@ pub fn handle_message(
         TAG_HANDOFF_START => relay_handoff_start_to_shards(peer,peer_roles, state, &connection, &stream, data),
         TAG_REGISTER_ENTITY => relay_to_spatial_services(peer, state, data),
         TAG_UNREGISTER_ENTITY => relay_to_spatial_services(peer, state, data),
-        TAG_CLIENT_REGISTER => handle_client_register(peer, state, &connection, &stream, data),
+        TAG_CLIENT_REGISTER => handle_client_register(peer,reliable_streams,state,&connection,&stream,data),
         _ => {
             tracing::warn!(
-                "unknown tag or unexpected tag for message sent by : {}",
-                connection.connection_id
-            );
+                    "unknown tag or unexpected tag for message sent by : {}",
+                    connection.connection_id
+                );
         }
     };
 }
 
 fn handle_client_register(
     peer: &GamePeer,
+    reliable_streams: &HashMap<GameConnection, GameStream>,
     state: &mut PubSubState,
     connection: &GameConnection,
     stream: &GameStream,
@@ -65,9 +68,9 @@ fn handle_client_register(
         Ok(message) => message,
         Err(error) => {
             tracing::warn!(
-                "could not decode message {}: {error}",
-                connection.connection_id
-            );
+                    "could not decode message {}: {error}",
+                    connection.connection_id
+                );
             return;
         }
     };
@@ -75,7 +78,38 @@ fn handle_client_register(
 
     match message {
         NetworkMessage::RegisterClient { client_id, username } => {
-            state.register_client_connection(&client_id, &username, &connection, &stream);
+            tracing::info!(
+                    "received RegisterClient from gameplay client client_id={} username={} connection={} incoming_stream={}",
+                    client_id.0,
+                    username,
+                    connection.connection_id,
+                    stream.stream_id
+                );
+
+            state.register_client_connection(&client_id, &username, connection, stream);
+
+            let spatial_packet = match encode_message(&NetworkMessage::RegisterClient {
+                client_id,
+                username: username.clone(),
+            }) {
+                Ok(packet) => packet,
+                Err(error) => {
+                    tracing::warn!(
+                                "failed to encode RegisterClient for spatial client_id={}: {}",
+                                client_id.0,
+                                error
+                            );
+                    return;
+                }
+            };
+
+            if let Err(error) = state.spatial_handle.send_to_spatial(peer, spatial_packet) {
+                tracing::warn!(
+                            "failed to notify spatial about registered client {}: {}",
+                            client_id.0,
+                            error
+                        );
+            }
 
             let packet = match encode_message(&NetworkMessage::ClientAccepted {
                 client_id,
@@ -83,10 +117,10 @@ fn handle_client_register(
                 Ok(packet) => packet,
                 Err(error) => {
                     tracing::warn!(
-                            "failed to encode ClientAccepted for connection {}: {}",
-                            connection.connection_id,
-                            error
-                        );
+                                    "failed to encode ClientAccepted for connection {}: {}",
+                                    connection.connection_id,
+                                    error
+                                );
                     return;
                 }
             };
@@ -97,24 +131,26 @@ fn handle_client_register(
                 Bytes::from(packet)
             ) {
                 tracing::warn!(
-                        "failed to send ClientAccepted to connection {}: {}",
-                        connection.connection_id,
-                        error
-                    );
+                                "failed to send ClientAccepted to gameplay client connection {} incoming_stream {}: {}",
+                                connection.connection_id,
+                                stream.stream_id,
+                                error
+                            );
                 return;
             }
 
             tracing::info!(
-                    "accepted client connection={} client_id={}",
-                    connection.connection_id,
-                    client_id.0
-                );
+                            "accepted gameplay client connection={} stream={} client_id={}",
+                            connection.connection_id,
+                            stream.stream_id,
+                            client_id.0
+                        );
         }
         _ => {
             tracing::warn!(
-                "invalid tag for message Client Hello sent by : {}",
-                connection.connection_id
-            );
+                        "invalid tag for message Client Hello sent by : {}",
+                        connection.connection_id
+                    );
         }
     }
 }
@@ -122,6 +158,7 @@ fn handle_client_register(
 fn handle_register_shard(
     peer: &GamePeer,
     peer_roles: &mut PeerRoles,
+    reliable_streams: &HashMap<GameConnection, GameStream>,
     state: &mut PubSubState,
     connection: &GameConnection,
     stream: &GameStream,
@@ -139,9 +176,9 @@ fn handle_register_shard(
         Ok(message) => message,
         Err(error) => {
             tracing::warn!(
-                "could not decode message {}: {error}",
-                connection.connection_id
-            );
+                    "could not decode message {}: {error}",
+                    connection.connection_id
+                );
             return;
         }
     };
@@ -149,22 +186,28 @@ fn handle_register_shard(
     match message {
 
         NetworkMessage::RegisterShard { shard_id } => {
-            state.register_shard_topic(shard_id, *connection, stream.clone());
+            let broker_stream = reliable_streams
+                .get(connection)
+                .unwrap_or(stream);
+
+            state.register_shard_topic(shard_id, *connection, broker_stream.clone());
 
             tracing::info!(
-                "registered shard connection={} shard_id={}",
-                connection.connection_id,
-                shard_id.0,
-            );
+                    "registered shard connection={} shard_id={} incoming_stream={} broker_stream={}",
+                    connection.connection_id,
+                    shard_id.0,
+                    stream.stream_id,
+                    broker_stream.stream_id,
+                );
 
             let packet = match encode_message(&NetworkMessage::RegisterShard { shard_id }) {
                 Ok(packet) => packet,
                 Err(error) => {
                     tracing::warn!(
-                        "failed to encode RegisterShard notification for shard {}: {}",
-                        shard_id.0,
-                        error
-                    );
+                            "failed to encode RegisterShard notification for shard {}: {}",
+                            shard_id.0,
+                            error
+                        );
                     return;
                 }
             };
@@ -173,9 +216,9 @@ fn handle_register_shard(
         }
         _ => {
             tracing::warn!(
-                "invalid message Register Shard sent by : {}",
-                connection.connection_id
-            );
+                    "invalid message Register Shard sent by : {}",
+                    connection.connection_id
+                );
         }
     }
 }
@@ -213,6 +256,7 @@ fn handle_request_entity_id_block(
 fn handle_register_spatial_service(
     peer: &GamePeer,
     peer_roles: &mut PeerRoles,
+    reliable_streams: &HashMap<GameConnection, GameStream>,
     state: &mut PubSubState,
     connection: &GameConnection,
     stream: &GameStream,
@@ -225,11 +269,17 @@ fn handle_register_spatial_service(
         return;
     }
 
-    state.register_spatial_service(connection, stream);
+    let broker_stream = reliable_streams
+        .get(connection)
+        .unwrap_or(stream);
+
+    state.register_spatial_service(connection, broker_stream);
 
     tracing::info!(
-        "registered spatial service connection={}",
-        connection.connection_id
+        "registered spatial service connection={} incoming_stream={} broker_stream={}",
+        connection.connection_id,
+        stream.stream_id,
+        broker_stream.stream_id,
     );
 }
 
@@ -366,6 +416,7 @@ fn handle_unsubscribe_client(
 fn handle_client_hello(
     peer: &GamePeer,
     peer_roles: &mut PeerRoles,
+    reliable_streams: &HashMap<GameConnection, GameStream>,
     state: &mut PubSubState,
     connection: &GameConnection,
     stream: &GameStream,
@@ -376,9 +427,9 @@ fn handle_client_hello(
         Ok(message) => message,
         Err(error) => {
             tracing::warn!(
-                "could not decode message {}: {error}",
-                connection.connection_id
-            );
+                    "could not decode message {}: {error}",
+                    connection.connection_id
+                );
             return;
         }
     };
@@ -386,10 +437,11 @@ fn handle_client_hello(
 
     match message {
         NetworkMessage::ClientHello { username } => {
-
+            let broker_stream = reliable_streams
+                .get(connection)
+                .unwrap_or(stream);
 
             let client_id = state.allocate_client_id();
-            state.register_client_connection(&client_id, &username, &connection, &stream);
 
             let packet = match encode_message(&NetworkMessage::ClientAccepted {
                 client_id,
@@ -397,38 +449,41 @@ fn handle_client_hello(
                 Ok(packet) => packet,
                 Err(error) => {
                     tracing::warn!(
-                            "failed to encode ClientAccepted for connection {}: {}",
-                            connection.connection_id,
-                            error
-                        );
+                                "failed to encode ClientAccepted for connection {}: {}",
+                                connection.connection_id,
+                                error
+                            );
                     return;
                 }
             };
 
             if let Err(error) = peer.send(
                 connection,
-                stream,
+                broker_stream,
                 Bytes::from(packet)
             ) {
                 tracing::warn!(
-                        "failed to send ClientAccepted to connection {}: {}",
-                        connection.connection_id,
-                        error
-                    );
+                            "failed to send ClientAccepted to connection {} stream {}: {}",
+                            connection.connection_id,
+                            broker_stream.stream_id,
+                            error
+                        );
                 return;
             }
 
             tracing::info!(
-                    "accepted client connection={} client_id={}",
-                    connection.connection_id,
-                    client_id.0
-                );
+                        "accepted client connection={} incoming_stream={} broker_stream={} client_id={}",
+                        connection.connection_id,
+                        stream.stream_id,
+                        broker_stream.stream_id,
+                        client_id.0
+                    );
         }
         _ => {
             tracing::warn!(
-                "invalid tag for message Client Hello sent by : {}",
-                connection.connection_id
-            );
+                    "invalid tag for message Client Hello sent by : {}",
+                    connection.connection_id
+                );
         }
     }
 }

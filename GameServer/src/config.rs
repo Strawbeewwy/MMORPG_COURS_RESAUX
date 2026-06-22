@@ -10,7 +10,7 @@ use anyhow::Context;
 use shared::protocol::ZoneId;
 
 pub const DEFAULT_BROKER_IP: &str = "127.0.0.1";
-pub const DEFAULT_BROKER_PORT: u16 = 7000;
+pub const DEFAULT_BROKER_PORT: u16 = 5000;
 
 #[derive(Debug, Clone, Resource)]
 pub struct ServerConfig {

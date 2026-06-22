@@ -16,14 +16,14 @@ pub fn connect_to_broker(mut commands: Commands, config: Res<SpatialConfig>) {
     let state = match peer.connect(&config.broker_host, config.broker_port) {
         Ok(_) => {
             tracing::info!(
-                "spatial: connecting to utils at {}:{}",
+                "spatial: connecting to broker at {}:{}",
                 config.broker_host, config.broker_port
             );
             BrokerConnectionState::Connecting
         }
         Err(e) => {
             tracing::error!(
-                "spatial: failed to start connection to utils {}:{}: {e}",
+                "spatial: failed to start connection to broker {}:{}: {e}",
                 config.broker_host, config.broker_port
             );
             BrokerConnectionState::Disconnected
@@ -53,7 +53,7 @@ pub fn reconnect_broker_if_needed(
     }
 
     tracing::info!(
-        "utils disconnected — reconnect attempt #{} to {}:{}",
+        "broker disconnected — reconnect attempt #{} to {}:{}",
         broker.handle.reconnect_attempt + 1,
         config.broker_host,
         config.broker_port
@@ -62,7 +62,7 @@ pub fn reconnect_broker_if_needed(
     broker.handle.reset_for_reconnect();
 
     if let Err(e) = broker.handle.peer.connect(&config.broker_host, config.broker_port) {
-        tracing::error!("reconnect to utils failed: {e}");
+        tracing::error!("reconnect to broker failed: {e}");
         // Exponential backoff: 1s, 2s, 4s, 8s, 16s, capped at 30s.
         let delay_secs = (1u64 << broker.handle.reconnect_attempt.min(5)).min(30);
         broker.handle.reconnect_after = (Some(Instant::now() + Duration::from_secs(delay_secs)));

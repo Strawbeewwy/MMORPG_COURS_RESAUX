@@ -5,8 +5,8 @@ param(
     [int]$OrchestratorPort = 9000,
     [int]$FirstDedicatedServerPort = 7001,
     [int]$HotServersMin = 1,
-    [string]$Zone = "zone_A",
-    [int]$DirectGameClients = 3
+    [int]$Launchers = 3,
+    [int]$BrokerPort = 5000
 )
 
 $ErrorActionPreference = "Stop"
@@ -88,12 +88,9 @@ function Start-BinaryProcess {
     Write-Host "$Title started in a new PowerShell window."
 }
 
-function Start-DirectGameClients {
+function Start-Launchers {
     param(
-        [int]$Count,
-        [int]$ServerPort,
-        [string]$ServerIp = "127.0.0.1",
-        [string]$ServerZone
+        [int]$Count
     )
 
     if ($Count -le 0) {
@@ -101,18 +98,11 @@ function Start-DirectGameClients {
     }
 
     for ($i = 1; $i -le $Count; $i++) {
-        $playerId = "direct-player-$i"
-        $username = "DirectClient$i"
-
         Start-BinaryProcess `
-            -Title "GameClient (Direct #$i)" `
-            -BinaryName "gameclient" `
+            -Title "Launcher" `
+            -BinaryName "launcher" `
             -Environment @{
-            "PLAYER_ID" = $playerId
-            "USERNAME" = $username
-            "GAME_SERVER_IP" = $ServerIp
-            "GAME_SERVER_PORT" = "$ServerPort"
-            "GAME_SERVER_ZONE" = $ServerZone
+            "GATEKEEPER_URL" = "http://127.0.0.1:$GateKeeperPort"
         }
     }
 }
@@ -146,6 +136,17 @@ if (-not (Test-CommandExists "cargo")) {
 
 Build-Workspace
 
+Start-BinaryProcess `
+    -Title "Broker" `
+    -BinaryName "broker" `
+    -Environment @{
+    "BROKER_PORT" = $BrokerPort
+}
+
+
+Wait-Seconds -Seconds 5 -Reason "allow broker to start"
+
+
 Start-Redis
 
 Wait-Seconds -Seconds 2 -Reason "allow Redis to accept connections"
@@ -163,7 +164,20 @@ Start-BinaryProcess `
     "SCALER_INTERVAL_SECONDS" = "10"
 }
 
-Wait-Seconds -Seconds 8 -Reason "allow Orchestrator to spawn Dedicated Server and publish heartbeat"
+Wait-Seconds -Seconds 8 -Reason "allow Orchestrator to load up"
+
+Start-BinaryProcess `
+    -Title "Spatial Service" `
+    -BinaryName "spatial_service" `
+    -Environment @{
+    "QUAD_TREE_MAX_DEPTH" = 4
+    "BROKER_HOST" = "127.0.0.1"
+    "BROKER_PORT" = $BrokerPort
+    "ORCH_HOST" = "127.0.0.1"
+    "ORCH_PORT" = $OrchestratorPort + 1
+}
+Wait-Seconds -Seconds 3 -Reason "allow spatial service to start"
+
 
 Start-BinaryProcess `
     -Title "GateKeeper" `
@@ -173,30 +187,23 @@ Start-BinaryProcess `
     "GATEKEEPER_ADDR" = "127.0.0.1:$GateKeeperPort"
     "GATEKEEPER_HTTP_ADDRESS" = "127.0.0.1:$GateKeeperPort"
     "RUST_LOG" = "info"
+    "BROKER_HOST" = "127.0.0.1"
+    "BROKER_PORT" = $BrokerPort
 }
 
 Wait-Seconds -Seconds 3 -Reason "allow GateKeeper to start"
 
-Start-BinaryProcess `
-    -Title "Launcher" `
-    -BinaryName "launcher" `
-    -Environment @{
-    "GATEKEEPER_URL" = "http://127.0.0.1:$GateKeeperPort"
-}
+Start-Launchers -Count $Launchers
+
 
 Wait-Seconds -Seconds 2 -Reason "allow Launcher window initialization"
 
-Start-DirectGameClients `
-    -Count $DirectGameClients `
-    -ServerPort $FirstDedicatedServerPort `
-    -ServerZone $Zone
 
 Write-Step "All services launched"
 
 Write-Host "Redis:              localhost:$RedisPort"
 Write-Host "Orchestrator:       127.0.0.1:$OrchestratorPort"
 Write-Host "GateKeeper:         http://127.0.0.1:$GateKeeperPort"
-Write-Host "Launcher:           started"
-Write-Host "Direct GameClients: $DirectGameClients started"
+Write-Host "Launchers started: $Launchers"
 Write-Host ""
-Write-Host "Launcher flow + direct clients are running for replication testing." -ForegroundColor Green
+Write-Host "Launcher flow for replication testing." -ForegroundColor Green

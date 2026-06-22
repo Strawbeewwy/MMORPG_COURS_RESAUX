@@ -21,7 +21,7 @@ impl BrokerNetwork {
 
         peer.listen("0.0.0.0", port)?;
 
-        tracing::info!("utils listening on 0.0.0.0:{port}");
+        tracing::info!("broker listening on 0.0.0.0:{port}");
 
         Ok(Self {
             peer,
@@ -137,6 +137,7 @@ impl BrokerNetwork {
                 handle_message(
                     &self.peer,
                     &mut self.peer_roles,
+                    &self.reliable_streams,
                     state,
                     connection,
                     stream,
