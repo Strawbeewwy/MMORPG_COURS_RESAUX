@@ -7,7 +7,7 @@ extends Node2D
 
 const REMOTE_PLAYER_SCENE := preload("res://scenes/entities/remote_player.tscn")
 
-## client_id (int) → Node2D instance
+## entity_id (int) → Node2D instance
 var _entities: Dictionary = {}
 
 func _ready() -> void:
@@ -20,22 +20,31 @@ func _ready() -> void:
 
 # ── Signal handlers ───────────────────────────────────────────────────────────
 
-func _on_position_received(client_id: int, x: float, y: float) -> void:
-	if _entities.has(client_id):
-		_entities[client_id].position = Vector2(x, y)
+func _on_position_received(entity_id: int, x: float, y: float) -> void:
+	if _entities.has(entity_id):
+		var entity = _entities[entity_id]
+		# Use smooth interpolation if available
+		if entity.has_method("update_server_position"):
+			entity.update_server_position(Vector2(x, y))
+		else:
+			entity.position = Vector2(x, y)
 
-func _on_player_joined(client_id: int) -> void:
-	if _entities.has(client_id):
+func _on_player_joined(client_id: int, entity_id: int, x: float, y: float) -> void:
+	if _entities.has(entity_id):
 		return
 	var node: Node2D = REMOTE_PLAYER_SCENE.instantiate()
+	node.entity_id = entity_id
 	node.client_id = client_id
+	node.position = Vector2(x, y)
 	add_child(node)
-	_entities[client_id] = node
+	_entities[entity_id] = node
+	print("Entity spawned: entity_id=%d, client_id=%d at (%.1f, %.1f)" % [entity_id, client_id, x, y])
 
-func _on_player_left(client_id: int) -> void:
-	if _entities.has(client_id):
-		_entities[client_id].queue_free()
-		_entities.erase(client_id)
+func _on_player_left(entity_id: int) -> void:
+	if _entities.has(entity_id):
+		_entities[entity_id].queue_free()
+		_entities.erase(entity_id)
+		print("Entity despawned: entity_id=%d" % entity_id)
 
 # ── Called by DebugHUD ────────────────────────────────────────────────────────
 

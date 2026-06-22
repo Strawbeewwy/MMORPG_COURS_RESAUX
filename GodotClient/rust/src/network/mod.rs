@@ -56,6 +56,12 @@ pub enum IncomingEvent {
     ProjectilesUpdate { data: Vec<f32> },
     /// Cumulative score for a player.
     PlayerScoreUpdate { client_id: u32, score: u32 },
+    /// Entity position update (for interpolation/dead reckoning).
+    PositionUpdate { entity_id: u32, x: f32, y: f32 },
+    /// A new player/entity joined the game.
+    PlayerJoined { client_id: u32, entity_id: u32, x: f32, y: f32 },
+    /// A player/entity left the game.
+    PlayerLeft { entity_id: u32 },
 }
 
 // ── Wire helpers ───────────────────────────────────────────────────────────────
@@ -190,6 +196,28 @@ fn decode(data: &[u8]) -> Option<IncomingEvent> {
         }
         NetworkMessage::Broadcast { payload, payload_len: _ } => {
             Some(IncomingEvent::Broadcast { payload })
+        }
+        NetworkMessage::RegisterEntity { entity_id, client_id, position } => {
+            let (x, y) = position.to_f32();
+            Some(IncomingEvent::PlayerJoined {
+                client_id: client_id.0,
+                entity_id: entity_id.0,
+                x,
+                y,
+            })
+        }
+        NetworkMessage::PositionUpdate { entity_id, position } => {
+            let (x, y) = position.to_f32();
+            Some(IncomingEvent::PositionUpdate {
+                entity_id: entity_id.0,
+                x,
+                y,
+            })
+        }
+        NetworkMessage::UnregisterEntity { entity_id } => {
+            Some(IncomingEvent::PlayerLeft {
+                entity_id: entity_id.0,
+            })
         }
         _ => {
             tracing::debug!("mmo_client: ignoring message {:?}", message);
@@ -384,6 +412,29 @@ impl INode for NetworkClient {
                         &[(client_id as i64).to_variant(), (score as i64).to_variant()],
                     );
                 }
+                IncomingEvent::PositionUpdate { entity_id, x, y } => {
+                    self.base_mut().emit_signal(
+                        "position_received",
+                        &[(entity_id as i64).to_variant(), x.to_variant(), y.to_variant()],
+                    );
+                }
+                IncomingEvent::PlayerJoined { client_id, entity_id, x, y } => {
+                    self.base_mut().emit_signal(
+                        "player_joined",
+                        &[
+                            (client_id as i64).to_variant(),
+                            (entity_id as i64).to_variant(),
+                            x.to_variant(),
+                            y.to_variant(),
+                        ],
+                    );
+                }
+                IncomingEvent::PlayerLeft { entity_id } => {
+                    self.base_mut().emit_signal(
+                        "player_left",
+                        &[(entity_id as i64).to_variant()],
+                    );
+                }
             }
         }
     }
@@ -426,6 +477,18 @@ impl NetworkClient {
     /// Cumulative score update for a player.
     #[signal]
     fn score_updated(client_id: i64, score: i64);
+
+    /// Entity position update received.
+    #[signal]
+    fn position_received(entity_id: i64, x: f32, y: f32);
+
+    /// A player/entity joined the game.
+    #[signal]
+    fn player_joined(client_id: i64, entity_id: i64, x: f32, y: f32);
+
+    /// A player/entity left the game.
+    #[signal]
+    fn player_left(entity_id: i64);
 
     // ── GDScript-callable functions ────────────────────────────────────────────
 

@@ -42,6 +42,12 @@ impl ClientMap {
             .insert(client_id);
     }
 
+    /// Register a client's shard subscription without connection tracking (for Spatial).
+    pub fn register_client_shard(&mut self, client_id: ClientId, shard_id: ShardId) {
+        self.shard_by_client.insert(client_id, shard_id);
+        tracing::debug!("Registered client {} to shard {}", client_id.0, shard_id.0);
+    }
+
     /// Get the current shard for a client.
     pub fn get(&self, client_id: ClientId) -> Option<ShardId> {
         self.shard_by_client.get(&client_id).copied()
@@ -98,5 +104,20 @@ impl ClientMap {
             .get(&client_id)
             .cloned()
             .unwrap_or(ClientTransferState::Stable)
+    }
+
+    /// Get all clients subscribed to a specific shard.
+    /// Used by Spatial to broadcast entity spawn/updates to relevant clients.
+    pub fn get_clients_subscribed_to_shard(&self, shard_id: ShardId) -> Vec<ClientId> {
+        self.shard_by_client
+            .iter()
+            .filter_map(|(client_id, &sid)| {
+                if sid == shard_id {
+                    Some(*client_id)
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }
