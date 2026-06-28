@@ -195,9 +195,9 @@ pub fn handle_broker_message(
                 let shard_id = entity_record.current_shard;
                 let subscribed_clients = client_map.get_clients_subscribed_to_shard(shard_id);
                 
-                for subscriber_client_id in subscribed_clients {
+                for subscriber_client_id in &subscribed_clients {
                     let notify_msg = NetworkMessage::Publish {
-                        topic: Topic::Client { id: subscriber_client_id },
+                        topic: Topic::Client { id: *subscriber_client_id },
                         payload_len: 0,
                         payload: {
                             let pos_msg = NetworkMessage::PositionUpdate {
@@ -248,9 +248,10 @@ pub fn handle_broker_message(
 
             // Notify all clients subscribed to this shard about the new entity
             let subscribed_clients = client_map.get_clients_subscribed_to_shard(shard);
-            for subscriber_client_id in subscribed_clients {
+            let client_count = subscribed_clients.len();
+            for subscriber_client_id in &subscribed_clients {
                 let notify_msg = NetworkMessage::Publish {
-                    topic: Topic::Client { id: subscriber_client_id },
+                    topic: Topic::Client { id: *subscriber_client_id },
                     payload_len: 0, // Will be calculated during encoding
                     payload: {
                         // Create a RegisterEntity message to send to the client
@@ -280,7 +281,7 @@ pub fn handle_broker_message(
 
             tracing::info!(
                 "RegisterEntity: entity {} (client {}) spawned at shard {}, notified {} clients",
-                entity_id.0, client_id.0, shard.0, subscribed_clients.len()
+                entity_id.0, client_id.0, shard.0, client_count
             );
 
             let shard_count = entity_map.shard_count(shard);
