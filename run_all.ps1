@@ -6,7 +6,7 @@ param(
     [int]$FirstDedicatedServerPort = 7001,
     [int]$HotServersMin = 1,
     [int]$Launchers = 3,
-    [int]$BrokerPort = 5000
+    [int]$BrokerPort = 9600
 )
 
 $ErrorActionPreference = "Stop"
